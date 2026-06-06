@@ -17,6 +17,8 @@ export function AdminFooter({
   onRevert,
   onPreview,
   onPublish,
+  onSchedule,
+  scheduledPublishAt,
   dropError,
 }) {
   return (
@@ -47,6 +49,8 @@ export function AdminFooter({
           onRevert={onRevert}
           onPreview={onPreview}
           onPublish={onPublish}
+          onSchedule={onSchedule}
+          scheduledPublishAt={scheduledPublishAt}
         />
       </div>
     </div>

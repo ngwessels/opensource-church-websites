@@ -111,6 +111,16 @@ export async function removeModuleAdmin(pageId, moduleId) {
   return updatePageAdmin(pageId, { regions });
 }
 
+function buildPublishedSnapshot(data) {
+  return {
+    regions: data.regions,
+    layout: data.layout,
+    contentMarginX: data.contentMarginX,
+    title: data.title,
+    seo: data.seo,
+  };
+}
+
 export async function publishPageAdmin(pageId) {
   const db = getDb();
   const ref = db.collection(COLLECTIONS.pages).doc(pageId);
@@ -121,18 +131,62 @@ export async function publishPageAdmin(pageId) {
   const ts = now();
   await ref.update({
     status: "published",
-    publishedSnapshot: {
-      regions: data.regions,
-      layout: data.layout,
-      contentMarginX: data.contentMarginX,
-      title: data.title,
-      seo: data.seo,
-    },
+    publishedSnapshot: buildPublishedSnapshot(data),
     publishedAt: ts,
+    scheduledPublishAt: null,
     updatedAt: ts,
   });
   const updated = await ref.get();
   return { id: updated.id, ...updated.data() };
+}
+
+export async function schedulePagePublishAdmin(pageId, publishAt) {
+  const publishDate = new Date(publishAt);
+  if (Number.isNaN(publishDate.getTime())) throw new Error("Invalid publish date");
+  if (publishDate.getTime() <= Date.now()) throw new Error("Publish date must be in the future");
+
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.pages).doc(pageId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Page not found");
+
+  const ts = publishDate.toISOString();
+  await ref.update({
+    scheduledPublishAt: ts,
+    updatedAt: now(),
+  });
+  const updated = await ref.get();
+  return { id: updated.id, ...updated.data() };
+}
+
+export async function cancelScheduledPublishAdmin(pageId) {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.pages).doc(pageId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Page not found");
+
+  await ref.update({
+    scheduledPublishAt: null,
+    updatedAt: now(),
+  });
+  const updated = await ref.get();
+  return { id: updated.id, ...updated.data() };
+}
+
+export async function processScheduledPublishesAdmin() {
+  const db = getDb();
+  const ts = now();
+  const snap = await db.collection(COLLECTIONS.pages).where("scheduledPublishAt", "<=", ts).get();
+
+  const published = [];
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data();
+    if (!data.scheduledPublishAt) continue;
+    await publishPageAdmin(docSnap.id);
+    published.push({ pageId: docSnap.id, title: data.title, slug: data.slug });
+  }
+
+  return { published, checkedAt: ts };
 }
 
 export async function revertPageAdmin(pageId) {

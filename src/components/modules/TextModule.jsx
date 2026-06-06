@@ -13,7 +13,15 @@ export function TextModule({ module, editing = false, onSave }) {
   const saveTimeoutRef = useRef(null);
   const lastSavedRef = useRef({ title: configTitle || "", html: configHtml || "" });
   const titleRef = useRef(title);
+  const titleInputRef = useRef(null);
   const onSaveRef = useRef(onSave);
+
+  const adjustTitleHeight = useCallback(() => {
+    const el = titleInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
 
   useEffect(() => {
     titleRef.current = title;
@@ -75,11 +83,21 @@ export function TextModule({ module, editing = false, onSave }) {
 
   useEffect(() => () => clearTimeout(saveTimeoutRef.current), []);
 
+  useEffect(() => {
+    adjustTitleHeight();
+  }, [title, adjustTitleHeight]);
+
   const handleTitleChange = (e) => {
     const newTitle = e.target.value;
     setTitle(newTitle);
     if (editing && onSaveRef.current) {
       scheduleSave(newTitle, editor?.getHTML() || "");
+    }
+  };
+
+  const handleTitleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
     }
   };
 
@@ -107,7 +125,7 @@ export function TextModule({ module, editing = false, onSave }) {
     return (
       <section>
         {configTitle && (
-          <h2 className="mb-4 border-b-2 border-[var(--site-primary)] pb-2 text-xl font-semibold text-zinc-900">
+          <h2 className="mb-4 break-words border-b-2 border-[var(--site-primary)] pb-2 text-xl font-semibold text-zinc-900">
             {configTitle}
           </h2>
         )}
@@ -120,13 +138,15 @@ export function TextModule({ module, editing = false, onSave }) {
 
   return (
     <section>
-      <input
-        type="text"
+      <textarea
+        ref={titleInputRef}
+        rows={1}
         value={title}
         onChange={handleTitleChange}
         onBlur={handleTitleBlur}
+        onKeyDown={handleTitleKeyDown}
         placeholder="Section title"
-        className="mb-4 w-full border-b-2 border-[var(--site-primary)] bg-transparent pb-2 text-xl font-semibold text-zinc-900 outline-none placeholder:text-zinc-400"
+        className="mb-4 w-full resize-none overflow-hidden break-words border-b-2 border-[var(--site-primary)] bg-transparent pb-2 text-xl font-semibold leading-snug text-zinc-900 outline-none placeholder:text-zinc-400"
       />
       <EditorContent editor={editor} />
     </section>

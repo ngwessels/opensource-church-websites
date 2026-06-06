@@ -199,6 +199,27 @@ export function registerMcpTools(server) {
   );
 
   server.registerTool(
+    "schedule_page_publish",
+    {
+      description: "Schedule a page draft to publish at a future ISO timestamp",
+      inputSchema: {
+        pageId: z.string(),
+        publishAt: z.string().describe("ISO 8601 datetime in the future"),
+      },
+    },
+    async ({ pageId, publishAt }) => run(() => pages.schedulePagePublishAdmin(pageId, publishAt)),
+  );
+
+  server.registerTool(
+    "cancel_scheduled_page_publish",
+    {
+      description: "Cancel a scheduled page publish",
+      inputSchema: { pageId: z.string() },
+    },
+    async ({ pageId }) => run(() => pages.cancelScheduledPublishAdmin(pageId)),
+  );
+
+  server.registerTool(
     "revert_page",
     {
       description: "Revert a page draft to the last published snapshot",

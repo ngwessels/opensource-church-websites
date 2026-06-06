@@ -21,7 +21,13 @@ import { useBulletins } from "@/hooks/useBulletins";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { getDefaultConfig } from "@/lib/modules/defaults";
-import { publishPage, revertPageDraft } from "@/lib/pages/publish";
+import {
+  cancelScheduledPublish,
+  publishPage,
+  revertPageDraft,
+  schedulePagePublish,
+} from "@/lib/pages/publish";
+import { formatScheduledPublishAt } from "@/lib/pages/scheduled-publish";
 import {
   clearFeaturesRegion,
   FEATURES_REGION_ID,
@@ -44,6 +50,7 @@ import { ModuleEditor } from "./ModuleEditor";
 import { ModuleTile } from "./ModuleTile";
 import { PageSettingsSheet } from "./PageSettingsSheet";
 import { RemoveModuleDialog } from "./RemoveModuleDialog";
+import { SchedulePublishDialog } from "./SchedulePublishDialog";
 
 export function EditWebsite({ slug = "" }) {
   const router = useRouter();
@@ -61,6 +68,7 @@ export function EditWebsite({ slug = "" }) {
   const [toast, setToast] = useState(null);
   const [moduleToRemove, setModuleToRemove] = useState(null);
   const [removingModule, setRemovingModule] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -169,10 +177,28 @@ export function EditWebsite({ slug = "" }) {
   };
 
   const handlePublish = async () => {
-    if (pageId) {
+    if (!pageId) return;
+    try {
       await publishPage(getFirebaseFirestore(), pageId);
       await loadPage();
+      showToast("Page published.");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Failed to publish page.");
     }
+  };
+
+  const handleSchedulePublish = async (publishAt) => {
+    if (!pageId) return;
+    await schedulePagePublish(getFirebaseFirestore(), pageId, publishAt);
+    await loadPage();
+    showToast(`Publish scheduled for ${formatScheduledPublishAt(publishAt)}.`);
+  };
+
+  const handleCancelScheduledPublish = async () => {
+    if (!pageId) return;
+    await cancelScheduledPublish(getFirebaseFirestore(), pageId);
+    await loadPage();
+    showToast("Scheduled publish canceled.");
   };
 
   const handleRevert = async () => {
@@ -407,6 +433,8 @@ export function EditWebsite({ slug = "" }) {
         onRevert={handleRevert}
         onPreview={() => window.open(slug ? `/${slug}` : "/", "_blank")}
         onPublish={handlePublish}
+        onSchedule={() => setScheduleDialogOpen(true)}
+        scheduledPublishAt={page?.scheduledPublishAt}
         dropError={dropError}
       />
 
@@ -447,6 +475,14 @@ export function EditWebsite({ slug = "" }) {
         }}
         onConfirm={confirmRemoveModule}
         removing={removingModule}
+      />
+
+      <SchedulePublishDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        scheduledPublishAt={page?.scheduledPublishAt}
+        onSchedule={handleSchedulePublish}
+        onCancelSchedule={handleCancelScheduledPublish}
       />
     </DndContext>
   );

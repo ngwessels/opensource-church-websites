@@ -19,6 +19,13 @@
 
 /** @typedef {'draft' | 'published'} PageStatus */
 
+/**
+ * @typedef {object} PageRecord
+ * @property {PageStatus} status
+ * @property {string} [scheduledPublishAt] - ISO timestamp when draft should auto-publish
+ * @property {string} [publishedAt]
+ */
+
 /** @typedef {'content' | 'bulletins'} PageType */
 
 /** @typedef {'default' | 'full-width' | 'sidebar-left' | 'sidebar-right'} PageLayout */
