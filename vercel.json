@@ -1,9 +1,9 @@
 {
   "crons": [
-    // {
-    //   "path": "/api/cron/publish-scheduled",
-    //   "schedule": "*/5 * * * *"
-    // }
+    {
+      "path": "/api/cron/publish-scheduled",
+      "schedule": "*/5 * * * *"
+    }
   ],
   "functions": {
     "src/app/api/mcp/**": {
