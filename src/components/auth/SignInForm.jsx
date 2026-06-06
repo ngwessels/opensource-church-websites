@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { getMfaResolver, isMfaError } from "@/lib/firebase/mfa";
 
-export function SignInForm({ mode = "login" }) {
+export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
   const router = useRouter();
   const { configured, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
@@ -34,7 +34,7 @@ export function SignInForm({ mode = "login" }) {
       } else {
         await signInWithEmail(email, password);
       }
-      router.push("/builder/edit");
+      router.push(redirectTo);
     } catch (err) {
       if (!isSignup && isMfaError(err)) {
         setMfaResolver(getMfaResolver(err));
@@ -52,7 +52,7 @@ export function SignInForm({ mode = "login" }) {
 
     try {
       await signInWithGoogle();
-      router.push("/builder/edit");
+      router.push(redirectTo);
     } catch (err) {
       if (isMfaError(err)) {
         setMfaResolver(getMfaResolver(err));
@@ -65,7 +65,7 @@ export function SignInForm({ mode = "login" }) {
   }
 
   function handleMfaSuccess() {
-    router.push("/builder/edit");
+    router.push(redirectTo);
   }
 
   function handleMfaCancel() {

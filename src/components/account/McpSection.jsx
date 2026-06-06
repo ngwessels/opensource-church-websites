@@ -6,20 +6,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
-import { COLLECTIONS, MAX_MCP_CONNECTIONS, MCP_SUBCOLLECTION } from "@/lib/firestore/paths";
-import { buildCursorMcpConfig } from "@/lib/mcp/tokens";
+import { COLLECTIONS, MCP_SUBCOLLECTION } from "@/lib/firestore/paths";
+import { buildCursorMcpOAuthConfig } from "@/lib/mcp/tokens";
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -31,14 +21,16 @@ export function McpSection() {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adminReady, setAdminReady] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
-  const [created, setCreated] = useState(null);
   const [revokingId, setRevokingId] = useState(null);
 
   const activeConnections = connections.filter((c) => !c.revokedAt);
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+
+  const cursorConfig = buildCursorMcpOAuthConfig({ appUrl });
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -76,34 +68,11 @@ export function McpSection() {
     return {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      "x-app-url": typeof window !== "undefined" ? window.location.origin : "",
     };
   }, [user]);
 
-  async function handleCreate(event) {
-    event.preventDefault();
-    setError(null);
-    setCreating(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch("/api/mcp-tokens", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create connection");
-      setCreated(data.connection);
-      setName("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create connection");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   async function handleRevoke(connectionId) {
-    if (!confirm("Revoke this MCP connection? The token will stop working immediately.")) return;
+    if (!confirm("Revoke this MCP connection? The client will need to authorize again.")) return;
     setRevokingId(connectionId);
     setError(null);
     try {
@@ -125,25 +94,6 @@ export function McpSection() {
     navigator.clipboard.writeText(text);
   }
 
-  function copyConfigSnippet(conn) {
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      (typeof window !== "undefined" ? window.location.origin : "");
-    const config = buildCursorMcpConfig({
-      configKey: conn.configKey,
-      appUrl,
-      token: "YOUR_SAVED_TOKEN_HERE",
-    });
-    copyText(JSON.stringify(config, null, 2));
-  }
-
-  function closeDialog() {
-    setDialogOpen(false);
-    setCreated(null);
-    setError(null);
-    setName("");
-  }
-
   if (loading) {
     return (
       <Card>
@@ -156,181 +106,95 @@ export function McpSection() {
   }
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>MCP Connections</CardTitle>
-          <CardDescription>
-            Connect Cursor or other MCP clients to edit your site. Each connection gets its own
-            token.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!adminReady && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              MCP requires Firebase Admin credentials on the server. Set{" "}
-              <code className="text-xs">FIREBASE_ADMIN_*</code> in your environment (e.g. Vercel
-              project settings).
-            </p>
-          )}
+    <Card>
+      <CardHeader>
+        <CardTitle>MCP Connections</CardTitle>
+        <CardDescription>
+          Connect Cursor or other MCP clients via OAuth. You sign in and approve access in your
+          browser — no API keys to copy.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!adminReady && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            MCP requires Firebase Admin credentials on the server. Set{" "}
+            <code className="text-xs">FIREBASE_ADMIN_*</code> and{" "}
+            <code className="text-xs">MCP_OAUTH_COOKIE_SECRET</code> in your environment.
+          </p>
+        )}
 
-          {error && (
-            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              {error}
-            </p>
-          )}
+        {error && (
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            {error}
+          </p>
+        )}
 
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">
-              {activeConnections.length} of {MAX_MCP_CONNECTIONS} active connections
-            </p>
-            <Button
-              type="button"
-              disabled={!adminReady || activeConnections.length >= MAX_MCP_CONNECTIONS}
-              onClick={() => setDialogOpen(true)}
-            >
-              Add MCP connection
-            </Button>
-          </div>
+        <div className="space-y-2 rounded-md border border-border bg-muted/30 p-4">
+          <p className="text-sm font-medium text-foreground">Connect in Cursor</p>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>Open Cursor Settings → MCP</li>
+            <li>Add the configuration below (URL only — no token)</li>
+            <li>When prompted, sign in and accept access in your browser</li>
+          </ol>
+          <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-muted p-3 text-xs">
+            {JSON.stringify(cursorConfig, null, 2)}
+          </pre>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => copyText(JSON.stringify(cursorConfig, null, 2))}
+          >
+            Copy Cursor config
+          </Button>
+        </div>
 
-          {connections.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No MCP connections yet.</p>
-          ) : (
-            <ul className="divide-y rounded-md border border-border">
-              {connections.map((conn) => (
-                <li key={conn.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">{conn.name}</span>
-                      <Badge variant={conn.revokedAt ? "secondary" : "default"}>
-                        {conn.revokedAt ? "Revoked" : "Active"}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {conn.tokenPrefix}… · Created {formatDate(conn.createdAt)}
-                      {conn.lastUsedAt ? ` · Last used ${formatDate(conn.lastUsedAt)}` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Config key: {conn.configKey}</p>
-                  </div>
-                  {!conn.revokedAt && (
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyConfigSnippet(conn)}
-                      >
-                        Copy config
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={revokingId === conn.id}
-                        onClick={() => handleRevoke(conn.id)}
-                      >
-                        {revokingId === conn.id ? "Revoking…" : "Revoke"}
-                      </Button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="sm:max-w-lg">
-          {created ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Connection created</DialogTitle>
-                <DialogDescription>
-                  Copy your token and Cursor config now. You will not be able to see the token
-                  again.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
+        {connections.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No authorized connections yet. Add the server in Cursor and complete the OAuth flow to
+            see connections here.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-md border border-border">
+            {connections.map((conn) => (
+              <li
+                key={conn.id}
+                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div>
-                  <Label>Token</Label>
-                  <div className="mt-1 flex gap-2">
-                    <Input readOnly value={created.token} className="font-mono text-xs" />
-                    <Button type="button" variant="outline" onClick={() => copyText(created.token)}>
-                      Copy
-                    </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {conn.clientName || conn.name || "MCP Client"}
+                    </span>
+                    <Badge variant={conn.revokedAt ? "secondary" : "default"}>
+                      {conn.revokedAt ? "Revoked" : "Active"}
+                    </Badge>
+                    {conn.authMethod === "oauth" && (
+                      <Badge variant="outline">OAuth</Badge>
+                    )}
                   </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Authorized {formatDate(conn.createdAt)}
+                    {conn.lastUsedAt ? ` · Last used ${formatDate(conn.lastUsedAt)}` : ""}
+                    {conn.expiresAt ? ` · Expires ${formatDate(conn.expiresAt)}` : ""}
+                  </p>
                 </div>
-                <div>
-                  <Label>Cursor config</Label>
-                  <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs">
-                    {JSON.stringify(created.cursorConfig, null, 2)}
-                  </pre>
+                {!conn.revokedAt && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="mt-2"
-                    onClick={() => copyText(JSON.stringify(created.cursorConfig, null, 2))}
+                    disabled={revokingId === conn.id}
+                    onClick={() => handleRevoke(conn.id)}
                   >
-                    Copy config
+                    {revokingId === conn.id ? "Revoking…" : "Revoke"}
                   </Button>
-                </div>
-                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                  <li>Open Cursor Settings → MCP</li>
-                  <li>Paste the config into your MCP settings file</li>
-                  <li>Restart Cursor if the server does not appear</li>
-                </ol>
-              </div>
-              <DialogFooter>
-                <Button type="button" onClick={closeDialog}>
-                  Done
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setCreated(null);
-                    setName("");
-                  }}
-                >
-                  Add another
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>Add MCP connection</DialogTitle>
-                <DialogDescription>
-                  Give this connection a name so you can tell your devices apart.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="mcp-name">Connection name</Label>
-                  <Input
-                    id="mcp-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Work MacBook"
-                    required
-                  />
-                </div>
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={closeDialog}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={creating || !name.trim()}>
-                    {creating ? "Creating…" : "Create connection"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

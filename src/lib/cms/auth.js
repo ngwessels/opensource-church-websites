@@ -25,7 +25,7 @@ export async function requireAdmin(uid) {
 }
 
 export async function validateMcpToken(bearerToken) {
-  if (!bearerToken?.startsWith("mcp_")) return undefined;
+  if (!bearerToken?.startsWith("mcp_oat_")) return undefined;
 
   const db = getFirebaseAdminFirestore();
   if (!db) return undefined;
@@ -36,6 +36,10 @@ export async function validateMcpToken(bearerToken) {
 
   const lookup = lookupSnap.data();
   if (lookup.revokedAt) return undefined;
+
+  if (lookup.expiresAt && new Date(lookup.expiresAt).getTime() < Date.now()) {
+    return undefined;
+  }
 
   const { uid, connectionId } = lookup;
   await requireAdmin(uid);
@@ -49,11 +53,16 @@ export async function validateMcpToken(bearerToken) {
 
   if (!connSnap.exists || connSnap.data()?.revokedAt) return undefined;
 
+  const expiresAt = lookup.expiresAt
+    ? Math.floor(new Date(lookup.expiresAt).getTime() / 1000)
+    : undefined;
+
   return {
     token: bearerToken,
     clientId: uid,
-    scopes: ["admin"],
-    extra: { uid, connectionId, tokenHash },
+    scopes: connSnap.data()?.scopes || ["site:admin"],
+    expiresAt,
+    extra: { uid, connectionId, tokenHash, authMethod: "oauth" },
   };
 }
 

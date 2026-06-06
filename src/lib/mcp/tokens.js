@@ -7,15 +7,12 @@ export function slugifyConfigKey(name) {
   return `parish-site-${slug || "connection"}`;
 }
 
-export function buildCursorMcpConfig({ configKey, appUrl, token }) {
+export function buildCursorMcpOAuthConfig({ configKey = "parish-site", appUrl }) {
   const baseUrl = appUrl.replace(/\/$/, "");
   return {
     mcpServers: {
       [configKey]: {
         url: `${baseUrl}/api/mcp`,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       },
     },
   };
