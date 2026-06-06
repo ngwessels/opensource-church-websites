@@ -42,7 +42,7 @@ export function PublicSite({
 
   return (
     <div
-      className="site-root min-h-screen bg-white"
+      className="site-root flex min-h-screen flex-col bg-white"
       style={{
         "--site-primary": colors.primary || "#7f1d1d",
         "--site-secondary": colors.secondary || "#1e3a5f",
@@ -63,36 +63,38 @@ export function PublicSite({
         onHeaderSettings={onHeaderSettings}
       />
 
-      {isBulletinsPage ? (
-        <Suspense
-          fallback={
-            <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-zinc-500">Loading bulletins…</div>
-          }
-        >
-          <BulletinsPageView
+      <main className="flex-1">
+        {isBulletinsPage ? (
+          <Suspense
+            fallback={
+              <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-zinc-500">Loading bulletins…</div>
+            }
+          >
+            <BulletinsPageView
+              page={page}
+              bulletins={bulletins}
+              editing={editing}
+              pageSlug={pageSlug}
+            />
+          </Suspense>
+        ) : (
+          <PageContent
             page={page}
-            bulletins={bulletins}
+            siteConfig={siteConfig}
+            navNodes={navNodes}
+            pageId={pageId}
             editing={editing}
-            pageSlug={pageSlug}
+            isDragActive={isDragActive}
+            dragType={dragType}
+            onEditModule={onEditModule}
+            onSaveModule={onSaveModule}
+            onRemoveModule={onRemoveModule}
+            trayOpen={trayOpen}
+            onRemoveSlideshow={onRemoveSlideshow}
+            onEditSlideshow={onEditSlideshow}
           />
-        </Suspense>
-      ) : (
-        <PageContent
-          page={page}
-          siteConfig={siteConfig}
-          navNodes={navNodes}
-          pageId={pageId}
-          editing={editing}
-          isDragActive={isDragActive}
-          dragType={dragType}
-          onEditModule={onEditModule}
-          onSaveModule={onSaveModule}
-          onRemoveModule={onRemoveModule}
-          trayOpen={trayOpen}
-          onRemoveSlideshow={onRemoveSlideshow}
-          onEditSlideshow={onEditSlideshow}
-        />
-      )}
+        )}
+      </main>
 
       <div className="relative">
         {editing && <SectionOverlay label="FOOTER" onClick={onFooterSettings} />}

@@ -159,6 +159,33 @@ export async function createFirestoreRest(credentials) {
               body: JSON.stringify({ fields: encodedFields }),
             });
           },
+
+          async set(fields) {
+            const encodedFields = {};
+            for (const [key, value] of Object.entries(fields)) {
+              encodedFields[key] = toFirestoreValue(value);
+            }
+
+            const existing = await request(`https://firestore.googleapis.com/v1/${docPath}`);
+            if (existing) {
+              const mask = Object.keys(fields)
+                .map((key) => `updateMask.fieldPaths=${encodeURIComponent(key)}`)
+                .join("&");
+              await request(`https://firestore.googleapis.com/v1/${docPath}?${mask}`, {
+                method: "PATCH",
+                body: JSON.stringify({ fields: encodedFields }),
+              });
+              return;
+            }
+
+            await request(
+              `https://firestore.googleapis.com/v1/projects/${credentials.projectId}/databases/(default)/documents/${name}?documentId=${encodeURIComponent(id)}`,
+              {
+                method: "POST",
+                body: JSON.stringify({ fields: encodedFields }),
+              },
+            );
+          },
         };
       },
     };

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getFirebaseAdminStorage } from "@/lib/firebase/admin-storage";
 import { COLLECTIONS } from "@/lib/firestore/paths";
@@ -65,14 +67,20 @@ async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, met
   const storagePath = `media/${folderId}/${mediaId}_${filename}`;
   const bucket = storage.bucket();
   const file = bucket.file(storagePath);
+  const downloadToken = randomUUID();
 
   await file.save(buffer, {
-    metadata: { contentType: mimeType },
-    public: true,
+    metadata: {
+      contentType: mimeType,
+      metadata: {
+        firebaseStorageDownloadTokens: downloadToken,
+      },
+    },
   });
 
-  await file.makePublic();
-  const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  const downloadUrl =
+    `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}` +
+    `?alt=media&token=${downloadToken}`;
 
   const record = {
     name: filename,

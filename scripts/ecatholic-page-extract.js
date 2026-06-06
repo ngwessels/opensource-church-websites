@@ -36,26 +36,36 @@
       li.querySelector(".moduleTitle, h2.moduleTitle, h2.moduleName, .customModuleTitle")
         ?.textContent?.trim() || "";
 
-    const docRoot = li.querySelector(".documentModule, .documentList");
-    if (docRoot) {
+    const moduleInner = li.querySelector(".moduleInner");
+    const isDocumentModule =
+      moduleInner?.classList.contains("documentsModule") ||
+      moduleInner?.classList.contains("documentModule") ||
+      moduleInner?.classList.contains("document.Module");
+    if (isDocumentModule || li.querySelector(".documentList, .documentsModule, .documentModule")) {
       const items = [];
       const seen = new Set();
-      li.querySelectorAll(
-        ".documentList a[href], .documentModule a[href], .moduleBody a[href]",
-      ).forEach((a) => {
+      const isDocumentHref = (href) =>
+        /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf|csv)($|\?|#)/i.test(href) ||
+        href.includes("/documents/") ||
+        href.includes("/files/");
+      const addLink = (a) => {
         const href = a.href || a.getAttribute("href") || "";
-        if (!href) return;
-        if (!/\.pdf($|\?|#)/i.test(href) && !href.includes("/documents/")) return;
+        if (!href || href.includes("/admin/")) return;
+        if (!isDocumentHref(href)) return;
         const label =
           a.textContent.trim() ||
           a.querySelector(".documentName, .name")?.textContent?.trim() ||
-          href.split("/").pop();
+          decodeURIComponent(href.split("/").pop() || "");
         const key = `${href}|${label}`;
         if (label && !seen.has(key)) {
           seen.add(key);
           items.push({ label, url: href });
         }
-      });
+      };
+      li.querySelectorAll(
+        ".documentList a[href], .documentModule a[href], .moduleBody a[href], li.document a[href]",
+      ).forEach(addLink);
+      if (!items.length && isDocumentModule) li.querySelectorAll("a[href]").forEach(addLink);
       if (items.length) {
         modules.push({
           type: "documents",

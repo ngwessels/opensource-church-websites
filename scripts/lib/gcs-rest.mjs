@@ -1,4 +1,4 @@
-import { createSign } from "node:crypto";
+import { createSign, randomUUID } from "node:crypto";
 
 async function fetchAccessToken({ clientEmail, privateKey }) {
   const now = Math.floor(Date.now() / 1000);
@@ -54,19 +54,45 @@ export async function createGcsRest(credentials) {
     return token;
   }
 
+  function firebaseDownloadUrl(objectName, downloadToken) {
+    const encodedPath = encodeURIComponent(objectName);
+    return (
+      `https://firebasestorage.googleapis.com/v0/b/${credentials.bucketName}/o/${encodedPath}` +
+      `?alt=media&token=${downloadToken}`
+    );
+  }
+
   async function uploadPublicObject(objectName, buffer, contentType) {
     const authToken = await ensureToken();
+    const downloadToken = randomUUID();
+    const boundary = `upload_${randomUUID().replace(/-/g, "")}`;
+    const metadataJson = JSON.stringify({
+      name: objectName,
+      metadata: {
+        firebaseStorageDownloadTokens: downloadToken,
+      },
+    });
+
+    const multipartBody = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadataJson}\r\n`,
+      ),
+      Buffer.from(`--${boundary}\r\nContent-Type: ${contentType || "application/octet-stream"}\r\n\r\n`),
+      buffer,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+
     const url =
       `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(credentials.bucketName)}/o` +
-      `?uploadType=media&predefinedAcl=publicRead&name=${encodeURIComponent(objectName)}`;
+      "?uploadType=multipart";
 
     const res = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${authToken}`,
-        "Content-Type": contentType || "application/octet-stream",
+        "Content-Type": `multipart/related; boundary=${boundary}`,
       },
-      body: buffer,
+      body: multipartBody,
     });
 
     const body = await res.json().catch(() => null);
@@ -75,7 +101,7 @@ export async function createGcsRest(credentials) {
       throw new Error(message);
     }
 
-    return `https://storage.googleapis.com/${credentials.bucketName}/${objectName}`;
+    return firebaseDownloadUrl(objectName, downloadToken);
   }
 
   return { uploadPublicObject, bucketName: credentials.bucketName };
