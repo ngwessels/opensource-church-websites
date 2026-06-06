@@ -5,7 +5,11 @@ import { randomBytes } from "crypto";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 
-const CURSOR_REDIRECT_URI = "cursor://anysphere.cursor-mcp/oauth/callback";
+const CURSOR_REDIRECT_URIS = [
+  "cursor://anysphere.cursor-mcp/oauth/callback",
+  "https://www.cursor.com/agents/mcp/oauth/callback",
+  "https://cursor.com/agents/mcp/oauth/callback",
+];
 
 function getDb() {
   const db = getFirebaseAdminFirestore();
@@ -19,7 +23,7 @@ function now() {
 
 export function isAllowedRedirectUri(uri) {
   if (!uri) return false;
-  if (uri === CURSOR_REDIRECT_URI) return true;
+  if (CURSOR_REDIRECT_URIS.includes(uri)) return true;
   if (uri.startsWith("http://127.0.0.1:") || uri.startsWith("http://localhost:")) return true;
   return false;
 }
