@@ -7,6 +7,7 @@ import { Menu } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { SectionOverlay } from "@/components/builder/SectionOverlay";
+import { toBuilderHref } from "@/lib/builder/navigation";
 import {
   filterNavTreeForDisplay,
   isExternalHref,
@@ -36,9 +37,9 @@ function navLinkStyle(depth, mobile, headerStyles) {
   };
 }
 
-function NavItem({ node, navNodes, depth = 0, mobile = false }) {
+function NavItem({ node, navNodes, depth = 0, mobile = false, editing = false }) {
   const headerStyles = useHeaderStyles();
-  const href = resolveNavHref(navNodes, node);
+  const href = toBuilderHref(resolveNavHref(navNodes, node), editing);
   const isExternal = node.type === "link" && isExternalHref(href);
 
   if (node.type === "group") {
@@ -62,7 +63,14 @@ function NavItem({ node, navNodes, depth = 0, mobile = false }) {
           )}
           <ul className="pl-3">
             {node.children?.map((child) => (
-              <NavItem key={child.id} node={child} navNodes={navNodes} depth={depth + 1} mobile />
+              <NavItem
+                key={child.id}
+                node={child}
+                navNodes={navNodes}
+                depth={depth + 1}
+                mobile
+                editing={editing}
+              />
             ))}
           </ul>
         </li>
@@ -89,7 +97,13 @@ function NavItem({ node, navNodes, depth = 0, mobile = false }) {
             }}
           >
             {node.children.map((child) => (
-              <NavItem key={child.id} node={child} navNodes={navNodes} depth={depth + 1} />
+              <NavItem
+                key={child.id}
+                node={child}
+                navNodes={navNodes}
+                depth={depth + 1}
+                editing={editing}
+              />
             ))}
           </ul>
         )}
@@ -191,7 +205,7 @@ export function SiteHeader({
           >
             <ul className="mx-auto flex max-w-6xl flex-wrap items-center justify-start gap-x-1 gap-y-1">
               {quickLinks.map((link, i) => {
-                const href = resolveNavHref(navNodes, link);
+                const href = toBuilderHref(resolveNavHref(navNodes, link), editing);
                 return (
                   <li key={link.id} className="inline-flex items-center">
                     {i > 0 && <span className="mx-2 opacity-50" aria-hidden="true">|</span>}
@@ -265,7 +279,7 @@ export function SiteHeader({
         <div className="mx-auto flex max-w-6xl items-center justify-between px-2">
           <ul className="hidden flex-wrap items-center justify-center gap-1 md:flex">
             {displayNavTree.map((node) => (
-              <NavItem key={node.id} node={node} navNodes={navNodes} />
+              <NavItem key={node.id} node={node} navNodes={navNodes} editing={editing} />
             ))}
           </ul>
 
@@ -281,7 +295,7 @@ export function SiteHeader({
               <nav aria-label="Main navigation">
                 <ul className="space-y-1">
                   {displayNavTree.map((node) => (
-                    <NavItem key={node.id} node={node} navNodes={navNodes} mobile />
+                    <NavItem key={node.id} node={node} navNodes={navNodes} mobile editing={editing} />
                   ))}
                 </ul>
               </nav>

@@ -22,6 +22,9 @@
 
 # import scripts
 scripts/.bulletin-manifest.json
+scripts/.visitation-content-manifest.json
+scripts/.ecatholic-storage.json
+scripts/.chrome-profile/
 
 # misc
 .DS_Store

@@ -22,7 +22,7 @@ When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools 
 **Pages & modules**
 
 - `list_pages`, `get_page`, `update_page` — page metadata, layout, regions, SEO
-- `add_module`, `update_module`, `move_module`, `remove_module` — content modules (`text`, `links`, `buttons`, `image`, `gallery`, `slideshow`, `carousel`, `video`, `zoom`, `mass_times`, `calendar`, `documents`, `people`)
+- `add_module`, `update_module`, `move_module`, `remove_module` — content modules (`text`, `links`, `buttons`, `image`, `gallery`, `slideshow`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`)
 - `publish_page`, `schedule_page_publish`, `cancel_scheduled_page_publish`, `revert_page` — draft/publish workflow
 
 **Navigation / sitemap**

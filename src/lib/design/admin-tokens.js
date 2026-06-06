@@ -1,12 +1,17 @@
 import {
   Calendar,
+  Code,
+  Facebook,
   FileText,
   Images,
   Image,
+  Instagram,
   LayoutGrid,
   Link2,
+  MapPin,
   MousePointerClick,
   FileStack,
+  Rss,
   Users,
   Church,
   BookOpen,
@@ -45,6 +50,11 @@ export const MODULE_META = {
   carousel: { label: "Carousel", color: "bg-purple-600", icon: Images },
   video: { label: "Video", color: "bg-red-600", icon: Video },
   zoom: { label: "Zoom Live", color: "bg-sky-700", icon: Radio },
+  embed: { label: "Embed", color: "bg-slate-600", icon: Code },
+  facebook: { label: "Facebook", color: "bg-blue-700", icon: Facebook },
+  google_maps: { label: "Google Maps", color: "bg-green-700", icon: MapPin },
+  instagram: { label: "Instagram", color: "bg-pink-600", icon: Instagram },
+  rss: { label: "RSS", color: "bg-orange-600", icon: Rss },
 };
 
 export const MODULE_TILE_COLORS = Object.fromEntries(

@@ -53,6 +53,16 @@ export function getDefaultConfig(type) {
       return { title: "Documents", items: [] };
     case "calendar":
       return { title: "Upcoming Events", source: "manual", events: [], maxEvents: 15 };
+    case "embed":
+      return { title: "Embed", embedUrl: "", html: "", height: 400 };
+    case "facebook":
+      return { title: "Facebook", pageUrl: "", embedUrl: "", width: 500, height: 500 };
+    case "google_maps":
+      return { title: "Map", embedUrl: "", height: 450 };
+    case "instagram":
+      return { title: "Instagram", postUrl: "", embedUrl: "" };
+    case "rss":
+      return { title: "RSS Feed", feedUrl: "", maxItems: 10 };
     default:
       return {};
   }

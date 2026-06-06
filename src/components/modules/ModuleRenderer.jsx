@@ -15,6 +15,11 @@ import { SlideshowModule } from "./SlideshowModule";
 import { TextModule } from "./TextModule";
 import { VideoModule } from "./VideoModule";
 import { ZoomModule } from "./ZoomModule";
+import { EmbedModule } from "./EmbedModule";
+import { FacebookEmbedModule } from "./FacebookEmbedModule";
+import { GoogleMapsModule } from "./GoogleMapsModule";
+import { InstagramEmbedModule } from "./InstagramEmbedModule";
+import { RssModule } from "./RssModule";
 
 const MODULE_MAP = {
   text: TextModule,
@@ -31,6 +36,11 @@ const MODULE_MAP = {
   people: PeopleModule,
   buttons: ButtonsModule,
   calendar: CalendarModule,
+  embed: EmbedModule,
+  facebook: FacebookEmbedModule,
+  google_maps: GoogleMapsModule,
+  instagram: InstagramEmbedModule,
+  rss: RssModule,
 };
 
 const INLINE_EDIT_TYPES = new Set(["text"]);

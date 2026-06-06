@@ -18,6 +18,11 @@ const CONTENT_COLUMN_TYPES = new Set([
   "zoom",
   "mass_times",
   "daily_readings",
+  "embed",
+  "facebook",
+  "google_maps",
+  "instagram",
+  "rss",
 ]);
 
 const FEATURES_TYPES = new Set(["slideshow"]);

@@ -6,6 +6,7 @@ import * as nav from "@/lib/cms/nav";
 import * as pages from "@/lib/cms/pages";
 import * as site from "@/lib/cms/site";
 import * as media from "@/lib/cms/media";
+import { MODULE_TYPES } from "@/lib/modules/registry";
 
 function jsonResult(data) {
   return {
@@ -29,21 +30,9 @@ async function run(fn) {
   }
 }
 
-const moduleTypeSchema = z.enum([
-  "text",
-  "links",
-  "buttons",
-  "image",
-  "gallery",
-  "slideshow",
-  "carousel",
-  "video",
-  "zoom",
-  "mass_times",
-  "calendar",
-  "documents",
-  "people",
-]);
+const moduleTypeSchema = z.enum(
+  /** @type {[string, ...string[]]} */ (MODULE_TYPES),
+);
 
 const headerStylesSchema = z.object({
   headerBackground: z
@@ -155,7 +144,8 @@ export function registerMcpTools(server) {
   server.registerTool(
     "update_module",
     {
-      description: "Update a module config on a page",
+      description:
+        "Update a module config on a page. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
       inputSchema: {
         pageId: z.string(),
         moduleId: z.string(),

@@ -19,6 +19,7 @@ import { PeopleModuleEditor } from "./PeopleModuleEditor";
 import { SlideListEditor } from "./SlideListEditor";
 import { VideoModuleEditor } from "./VideoModuleEditor";
 import { ZoomModuleEditor } from "./ZoomModuleEditor";
+import { EmbedModuleEditor } from "./EmbedModuleEditor";
 
 const overlayZ = { zIndex: ADMIN_Z.overlay };
 
@@ -84,6 +85,10 @@ export function ModuleEditor({ module, siteConfig, onSave, onClose, pageId }) {
 
   if (module.type === "zoom") {
     return <ZoomModuleEditor module={module} onSave={onSave} onClose={onClose} />;
+  }
+
+  if (["embed", "facebook", "google_maps", "instagram", "rss"].includes(module.type)) {
+    return <EmbedModuleEditor module={module} onSave={onSave} onClose={onClose} />;
   }
 
   if (module.type === "people") {

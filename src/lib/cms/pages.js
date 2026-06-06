@@ -112,13 +112,16 @@ export async function removeModuleAdmin(pageId, moduleId) {
 }
 
 function buildPublishedSnapshot(data) {
-  return {
+  const snapshot = {
     regions: data.regions,
     layout: data.layout,
-    contentMarginX: data.contentMarginX,
     title: data.title,
     seo: data.seo,
   };
+  if (data.contentMarginX !== undefined) {
+    snapshot.contentMarginX = data.contentMarginX;
+  }
+  return snapshot;
 }
 
 export async function publishPageAdmin(pageId) {
