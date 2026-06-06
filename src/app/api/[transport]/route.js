@@ -45,11 +45,28 @@ const authedHandler = withMcpAuth(
       return response;
     });
   },
-  async (_request, bearerToken) => validateMcpToken(bearerToken),
+  async (request, bearerToken) => validateMcpToken(bearerToken),
   {
     required: true,
     resourceMetadataPath: "/.well-known/oauth-protected-resource",
   },
 );
 
-export { authedHandler as GET, authedHandler as POST, authedHandler as DELETE };
+function withMcpRequestLogging(handler) {
+  return async (request) => {
+    const method = request.method;
+    const hasAuthHeader = Boolean(request.headers.get("authorization"));
+    const response = await handler(request);
+    console.info("[mcp] request complete", {
+      method,
+      status: response.status,
+      hasAuthHeader,
+      authenticated: response.status !== 401,
+    });
+    return response;
+  };
+}
+
+const loggedHandler = withMcpRequestLogging(authedHandler);
+
+export { loggedHandler as GET, loggedHandler as POST, loggedHandler as DELETE };

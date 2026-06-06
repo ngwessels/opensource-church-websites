@@ -28,8 +28,8 @@ export async function GET(request) {
       oauthPendingCookieOptions(getAuthCodeTtlSeconds()),
     );
 
-    const consentUrl = new URL("/oauth/consent", request.url);
-    return NextResponse.redirect(consentUrl);
+    const loginUrl = new URL("/oauth/login", request.url);
+    return NextResponse.redirect(loginUrl);
   } catch (err) {
     const message = err instanceof Error ? err.message : "invalid_request";
     return NextResponse.json({ error: message }, { status: 400 });

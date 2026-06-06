@@ -25,24 +25,47 @@ export async function requireAdmin(uid) {
 }
 
 export async function validateMcpToken(bearerToken) {
-  if (!bearerToken?.startsWith("mcp_oat_")) return undefined;
+  if (!bearerToken) {
+    console.info("[mcp:auth] rejected: no bearer token");
+    return undefined;
+  }
+
+  if (!bearerToken.startsWith("mcp_oat_")) {
+    console.info("[mcp:auth] rejected: unexpected token prefix");
+    return undefined;
+  }
 
   const db = getFirebaseAdminFirestore();
-  if (!db) return undefined;
+  if (!db) {
+    console.warn("[mcp:auth] rejected: firebase admin not configured");
+    return undefined;
+  }
 
   const tokenHash = hashMcpToken(bearerToken);
   const lookupSnap = await db.collection(COLLECTIONS.mcpTokenLookup).doc(tokenHash).get();
-  if (!lookupSnap.exists) return undefined;
+  if (!lookupSnap.exists) {
+    console.warn("[mcp:auth] rejected: token not found");
+    return undefined;
+  }
 
   const lookup = lookupSnap.data();
-  if (lookup.revokedAt) return undefined;
+  if (lookup.revokedAt) {
+    console.warn("[mcp:auth] rejected: token revoked", { connectionId: lookup.connectionId });
+    return undefined;
+  }
 
   if (lookup.expiresAt && new Date(lookup.expiresAt).getTime() < Date.now()) {
+    console.warn("[mcp:auth] rejected: token expired", { connectionId: lookup.connectionId });
     return undefined;
   }
 
   const { uid, connectionId } = lookup;
-  await requireAdmin(uid);
+  try {
+    await requireAdmin(uid);
+  } catch {
+    console.warn("[mcp:auth] rejected: user is not admin", { uid, connectionId });
+    return undefined;
+  }
 
   const connSnap = await db
     .collection(COLLECTIONS.users)
@@ -51,11 +74,16 @@ export async function validateMcpToken(bearerToken) {
     .doc(connectionId)
     .get();
 
-  if (!connSnap.exists || connSnap.data()?.revokedAt) return undefined;
+  if (!connSnap.exists || connSnap.data()?.revokedAt) {
+    console.warn("[mcp:auth] rejected: connection missing or revoked", { uid, connectionId });
+    return undefined;
+  }
 
   const expiresAt = lookup.expiresAt
     ? Math.floor(new Date(lookup.expiresAt).getTime() / 1000)
     : undefined;
+
+  console.info("[mcp:auth] accepted", { uid, connectionId });
 
   return {
     token: bearerToken,
