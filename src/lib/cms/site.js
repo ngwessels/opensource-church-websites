@@ -103,6 +103,33 @@ export function getBuilderCapabilities() {
       "Only slideshow modules can be placed in the features region",
       "Each region has a max module count",
     ],
+    moduleConfigSchemas: {
+      links: {
+        title: "string",
+        items: [{ label: "string", href: "string" }],
+      },
+      buttons: {
+        items: [{ label: "string", href: "string" }],
+      },
+      documents: {
+        title: "string",
+        items: [{ label: "string", url: "string (downloadUrl from upload_media)" }],
+        workflow: [
+          "add_module type=documents",
+          "upload_media folderId=documents-root",
+          "update_module with items",
+          "publish_page",
+        ],
+      },
+      people: {
+        title: "string",
+        people: [{ id: "string", name: "string", role: "string?", email: "string?", phone: "string?", photoUrl: "string?" }],
+      },
+      photo_albums: {
+        title: "string",
+        albums: [{ label: "string", href: "string", imageSrc: "string", photoCount: "number?" }],
+      },
+    },
   };
 }
 

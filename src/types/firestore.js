@@ -22,7 +22,6 @@
 /**
  * @typedef {object} PageRecord
  * @property {PageStatus} status
- * @property {string} [scheduledPublishAt] - ISO timestamp when draft should auto-publish
  * @property {string} [publishedAt]
  */
 
@@ -60,7 +59,7 @@
 
 /** @typedef {'completed' | 'pending' | 'failed'} DonationStatus */
 
-/** @typedef {'text' | 'links' | 'image' | 'gallery' | 'slideshow' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'calendar' | 'documents' | 'people' | 'buttons' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */
+/** @typedef {'text' | 'links' | 'image' | 'gallery' | 'photo_albums' | 'slideshow' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'calendar' | 'documents' | 'people' | 'buttons' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */
 
 export const SITE_CONFIG_DOC = "site/config";
 export const DEFAULT_MEDIA_FOLDERS = {
@@ -71,7 +70,7 @@ export const DEFAULT_MEDIA_FOLDERS = {
 
 export const MODULE_CATEGORIES = {
   Core: ["text", "links", "buttons", "documents", "people", "calendar"],
-  "Images & Video": ["image", "gallery", "slideshow", "carousel", "video", "zoom"],
+  "Images & Video": ["image", "gallery", "photo_albums", "slideshow", "carousel", "video", "zoom"],
   Embed: ["embed", "facebook", "google_maps", "instagram", "rss"],
   Catholic: ["mass_times", "daily_readings"],
 };

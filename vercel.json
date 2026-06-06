@@ -1,19 +1,10 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/publish-scheduled",
-      "schedule": "*/5 * * * *"
-    }
-  ],
   "functions": {
     "src/app/api/[transport]/route.js": {
       "maxDuration": 60
     },
     "src/app/api/mcp-tokens/**": {
       "maxDuration": 10
-    },
-    "src/app/api/cron/**": {
-      "maxDuration": 60
     }
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Globe, Link2, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Globe, Link2, MousePointerClick, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { normalizeButtonsConfig } from "@/lib/buttons/schema";
 import { ADMIN_Z } from "@/lib/design/admin-tokens";
 import { useNavNodes } from "@/hooks/useNavNodes";
 import { resolveNavHref } from "@/lib/sitemap/tree";
@@ -71,7 +72,15 @@ function nodeTypeLabel(type) {
   return null;
 }
 
-export function LinksModuleEditor({ module, onSave, onClose }) {
+/**
+ * @param {Object} props
+ * @param {{ config?: Record<string, unknown> }} props.module
+ * @param {(config: Record<string, unknown>) => void} props.onSave
+ * @param {() => void} props.onClose
+ * @param {'links' | 'buttons'} [props.variant]
+ */
+export function LinksModuleEditor({ module, onSave, onClose, variant = "links" }) {
+  const isButtons = variant === "buttons";
   const { nodes, tree, loading } = useNavNodes();
   const [title, setTitle] = useState(module.config?.title || "");
   const [items, setItems] = useState(() => {
@@ -128,11 +137,18 @@ export function LinksModuleEditor({ module, onSave, onClose }) {
   };
 
   const handleSave = () => {
+    const savedItems = items
+      .filter((item) => item.label.trim() && item.href.trim())
+      .map(({ label, href }) => ({ label: label.trim(), href: href.trim() }));
+
+    if (isButtons) {
+      onSave(normalizeButtonsConfig({ items: savedItems }, { filterEmpty: true }));
+      return;
+    }
+
     onSave({
       title: title.trim(),
-      items: items
-        .filter((item) => item.label.trim() && item.href.trim())
-        .map(({ label, href }) => ({ label: label.trim(), href: href.trim() })),
+      items: savedItems,
     });
   };
 
@@ -140,28 +156,38 @@ export function LinksModuleEditor({ module, onSave, onClose }) {
     <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4" style={overlayZ}>
       <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-xl bg-card shadow-2xl">
         <div className="flex items-start gap-3 border-b border-border bg-muted/80 px-5 py-4">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm">
-            <Link2 className="size-5" />
+          <div
+            className={`flex size-10 shrink-0 items-center justify-center rounded-lg text-white shadow-sm ${
+              isButtons ? "bg-sky-600" : "bg-amber-500"
+            }`}
+          >
+            {isButtons ? <MousePointerClick className="size-5" /> : <Link2 className="size-5" />}
           </div>
           <div className="min-w-0 flex-1 space-y-3">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Edit links</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                {isButtons ? "Edit buttons" : "Edit links"}
+              </h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Add quick links to site pages or external URLs.
+                {isButtons
+                  ? "Add call-to-action buttons linking to site pages or external URLs."
+                  : "Add quick links to site pages or external URLs."}
               </p>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="links-section-title" className="text-muted-foreground">
-                Section title
-              </Label>
-              <Input
-                id="links-section-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Quick links"
-                className="h-9 bg-card"
-              />
-            </div>
+            {!isButtons && (
+              <div className="space-y-1.5">
+                <Label htmlFor="links-section-title" className="text-muted-foreground">
+                  Section title
+                </Label>
+                <Input
+                  id="links-section-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Quick links"
+                  className="h-9 bg-card"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -173,7 +199,7 @@ export function LinksModuleEditor({ module, onSave, onClose }) {
             >
               <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  Link {i + 1}
+                  {isButtons ? "Button" : "Link"} {i + 1}
                 </span>
                 {items.length > 1 && (
                   <Button
@@ -196,7 +222,7 @@ export function LinksModuleEditor({ module, onSave, onClose }) {
                     id={`link-label-${i}`}
                     value={item.label}
                     onChange={(e) => updateItem(i, { label: e.target.value })}
-                    placeholder="e.g. Contact us"
+                    placeholder={isButtons ? "e.g. Donate now" : "e.g. Contact us"}
                   />
                 </div>
 
@@ -319,7 +345,7 @@ export function LinksModuleEditor({ module, onSave, onClose }) {
             className={cn("w-full border-dashed", items.length > 0 && "mt-1")}
           >
             <Plus className="size-4" />
-            Add link
+            Add {isButtons ? "button" : "link"}
           </Button>
         </div>
 

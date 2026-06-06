@@ -11,7 +11,14 @@ import { COLLECTIONS } from "@/lib/firestore/paths";
 import { uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
-/** @typedef {'images' | 'videos' | 'all'} MediaFilter */
+/** @typedef {'images' | 'videos' | 'documents' | 'all'} MediaFilter */
+
+const DEFAULT_FOLDER_BY_FILTER = {
+  images: DEFAULT_MEDIA_FOLDERS.pictures,
+  videos: DEFAULT_MEDIA_FOLDERS.pictures,
+  documents: DEFAULT_MEDIA_FOLDERS.documents,
+  all: DEFAULT_MEDIA_FOLDERS.pictures,
+};
 
 export function MediaPicker({
   onSelect,
@@ -24,7 +31,9 @@ export function MediaPicker({
   const resolvedFilter = mediaFilter || (acceptImagesOnly ? "images" : "all");
   const [folders, setFolders] = useState([]);
   const [files, setFiles] = useState([]);
-  const [selectedFolder, setSelectedFolder] = useState(DEFAULT_MEDIA_FOLDERS.pictures);
+  const [selectedFolder, setSelectedFolder] = useState(
+    DEFAULT_FOLDER_BY_FILTER[resolvedFilter] || DEFAULT_MEDIA_FOLDERS.pictures,
+  );
   const [selectedId, setSelectedId] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -47,15 +56,22 @@ export function MediaPicker({
     return () => unsub();
   }, [selectedFolder]);
 
-  const pictureFolders = useMemo(
-    () => folders.filter((f) => f.type === "picture" || f.type === "pictures"),
-    [folders],
-  );
+  const visibleFolders = useMemo(() => {
+    if (resolvedFilter === "documents") {
+      return folders.filter((f) => f.type === "document" || f.type === "documents");
+    }
+    return folders.filter((f) => f.type === "picture" || f.type === "pictures");
+  }, [folders, resolvedFilter]);
 
   const visibleFiles = useMemo(() => {
     if (resolvedFilter === "all") return files;
     if (resolvedFilter === "videos") {
       return files.filter((f) => f.mimeType?.startsWith("video/"));
+    }
+    if (resolvedFilter === "documents") {
+      return files.filter(
+        (f) => !f.mimeType?.startsWith("image/") && !f.mimeType?.startsWith("video/"),
+      );
     }
     return files.filter((f) => f.mimeType?.startsWith("image/"));
   }, [files, resolvedFilter]);
@@ -84,12 +100,20 @@ export function MediaPicker({
   };
 
   const uploadAccept =
-    resolvedFilter === "videos" ? "video/*" : resolvedFilter === "images" ? "image/*" : "image/*,video/*";
+    resolvedFilter === "videos"
+      ? "video/*"
+      : resolvedFilter === "documents"
+        ? ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf"
+        : resolvedFilter === "images"
+          ? "image/*"
+          : "image/*,video/*";
   const uploadLabel = uploading
     ? `Uploading ${progress}%`
     : resolvedFilter === "videos"
       ? "Upload video"
-      : "Upload image";
+      : resolvedFilter === "documents"
+        ? "Upload document"
+        : "Upload image";
 
   const browser = (
     <div className={`flex min-h-0 flex-1 overflow-hidden ${fullscreen ? "" : "gap-4"}`}>
@@ -99,7 +123,7 @@ export function MediaPicker({
         }`}
       >
         <FolderTree
-          folders={pictureFolders}
+          folders={visibleFolders}
           selectedId={selectedFolder}
           onSelect={setSelectedFolder}
           onAddSubfolder={() => {}}

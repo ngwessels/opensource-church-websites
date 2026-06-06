@@ -6,23 +6,14 @@ import {
   Settings,
   Trash2,
   Eye,
-  ChevronDown,
   Plus,
   PanelBottomClose,
   RotateCcw,
-  CalendarClock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ADMIN_PAGE_NAV_HEIGHT } from "@/lib/design/admin-tokens";
-import { formatScheduledPublishAt } from "@/lib/pages/scheduled-publish";
 import { AdminIconButton } from "./AdminIconButton";
 
 function ToolbarDivider() {
@@ -40,8 +31,6 @@ export function AdminPageNav({
   onRevert,
   onPreview,
   onPublish,
-  onSchedule,
-  scheduledPublishAt,
 }) {
   return (
     <div
@@ -115,38 +104,9 @@ export function AdminPageNav({
 
         <ToolbarDivider />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              className={cn(
-                "relative h-9 gap-1 px-4 font-medium shadow-sm",
-                scheduledPublishAt && "pr-5",
-              )}
-            >
-              Publish
-              {scheduledPublishAt && (
-                <span
-                  className="absolute top-1.5 right-2 h-1.5 w-1.5 rounded-full bg-amber-400"
-                  aria-hidden
-                />
-              )}
-              <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-52">
-            <DropdownMenuItem onClick={onPublish}>Publish now</DropdownMenuItem>
-            <DropdownMenuItem onClick={onSchedule}>
-              <CalendarClock className="h-4 w-4" />
-              {scheduledPublishAt ? "Edit schedule" : "Schedule"}
-            </DropdownMenuItem>
-            {scheduledPublishAt && (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                Scheduled for {formatScheduledPublishAt(scheduledPublishAt)}
-              </div>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button size="sm" className="h-9 px-4 font-medium shadow-sm" onClick={onPublish}>
+          Publish
+        </Button>
       </div>
     </div>
   );

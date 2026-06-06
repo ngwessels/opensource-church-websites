@@ -28,10 +28,6 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const BASE = "https://www.visitationfg.org";
@@ -128,8 +124,8 @@ function parseArgs(argv) {
     importJson: importIdx >= 0 ? argv[importIdx + 1] : null,
     /** Re-scrape paths that already exist in the manifest. */
     force: argv.includes("--force"),
-    /** Upload images to Firebase Storage (default: keep eCatholic CDN URLs). */
     uploadImages: argv.includes("--upload-images"),
+    applyOnly: argv.includes("--apply-only"),
     /** Keep going when a page times out (default for --apply-all). */
     continueOnError:
       argv.includes("--continue-on-error") ||
@@ -153,8 +149,10 @@ Options:
   --apply                Write manifest entries to Firestore
   --publish              Publish after apply
   --from-manifest [file] Apply from manifest without scraping
+  --apply-only           Skip scrape; apply + publish from manifest only
   --import-json <file>   Merge one manual console extract into manifest
   --force                Re-scrape paths already in manifest
+  --upload-images        Download images to Firebase Storage (use with --connect for photo albums)
   --headless             Use Playwright Chromium (usually blocked by Cloudflare)
   --dry-run              Preview without writing
   --continue-on-error    Skip failed pages during batch scrape
@@ -168,6 +166,13 @@ Cloudflare workaround — start Chrome separately, then connect:
 Open https://www.visitationfg.org in that window, pass Cloudflare once, then:
 
   node scripts/migrate-visitation-content.mjs --connect 9222 --apply-all
+
+Keep that Chrome window open while the script runs. If the script exits immediately,
+port 9222 is not reachable — start Chrome with the command above first.
+
+Faster re-runs (skip scrape, apply manifest only):
+
+  node scripts/migrate-visitation-content.mjs --apply-only --apply-all --force --publish
 
 Manual fallback: paste scripts/ecatholic-page-extract.js in the browser console on each page.
 `);
@@ -214,7 +219,33 @@ function loadEnvFile(path) {
   }
 }
 
-function initFirebase() {
+function logProgress(message) {
+  process.stdout.write(`${message}\n`);
+}
+
+const CHROME_DEBUG_LAUNCH = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome \\
+  --remote-debugging-port=9222 \\
+  --user-data-dir="$HOME/.visitation-scrape-chrome"`;
+
+async function assertChromeDebugPort(connect) {
+  const endpoint = connect.startsWith("http") ? connect : `http://127.0.0.1:${connect}`;
+  const versionUrl = `${endpoint.replace(/\/$/, "")}/json/version`;
+  try {
+    const res = await fetch(versionUrl, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const info = await res.json();
+    logProgress(`[migrate] Chrome debug port OK (${info.Browser || "Chrome"})`);
+  } catch {
+    throw new Error(
+      `Cannot reach Chrome debug port at ${endpoint}.\n\n` +
+        `Start Chrome in a separate terminal and leave it running:\n\n` +
+        `  ${CHROME_DEBUG_LAUNCH}\n\n` +
+        `Then open https://www.visitationfg.org in that window before running this script.`,
+    );
+  }
+}
+
+async function initFirebase({ uploadImages = false } = {}) {
   loadEnvFile(join(ROOT, ".env.local"));
   loadEnvFile(join(ROOT, ".env"));
   const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
@@ -224,15 +255,43 @@ function initFirebase() {
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error("Firebase Admin credentials missing from .env.local");
   }
-  const app =
-    getApps().length > 0
-      ? getApps()[0]
-      : initializeApp({
-          credential: cert({ projectId, clientEmail, privateKey }),
-          projectId,
-          storageBucket,
-        });
-  return { db: getFirestore(app), storage: storageBucket ? getStorage(app) : null };
+
+  logProgress("[migrate] Connecting to Firestore (REST)…");
+  const { createFirestoreRest } = await import("./lib/firestore-rest.mjs");
+  const db = await createFirestoreRest({ projectId, clientEmail, privateKey });
+  logProgress("[migrate] Firestore ready.");
+
+  let storage = null;
+  if (uploadImages) {
+    if (!storageBucket) {
+      throw new Error("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is required for --upload-images");
+    }
+    logProgress("[migrate] Connecting to Cloud Storage (REST)…");
+    const { createGcsRest } = await import("./lib/gcs-rest.mjs");
+    storage = await createGcsRest({ clientEmail, privateKey, bucketName: storageBucket });
+    logProgress("[migrate] Cloud Storage ready.");
+  }
+
+  return { db, storage };
+}
+
+function pickScrapePage(context) {
+  const pages = context.pages();
+  const onSite = pages.find((p) => {
+    try {
+      return p.url().includes("visitationfg.org");
+    } catch {
+      return false;
+    }
+  });
+  return onSite || pages[0] || null;
+}
+
+async function resolveScrapePage(context) {
+  const existing = pickScrapePage(context);
+  if (existing) return existing;
+  logProgress("[migrate] Opening a new Chrome tab for scraping…");
+  return context.newPage();
 }
 
 function generateId() {
@@ -252,6 +311,13 @@ function layoutFor(pageId) {
 
 function emptyRegions(pageId) {
   const layout = layoutFor(pageId);
+  if (pageId === "page_1780708317956_ldt10go") {
+    return [
+      { id: "features", modules: [] },
+      { id: "content-1", modules: [] },
+      { id: "content-2", modules: [] },
+    ];
+  }
   if (layout === "sidebar-left") {
     return [
       { id: "features", modules: [] },
@@ -277,22 +343,126 @@ function buildPublishedSnapshot(data) {
 }
 
 /** Map site-relative paths to eCatholic CDN (works without Cloudflare). */
+function upgradeEcatholicImageSrc(src) {
+  if (!src?.trim()) return src;
+  return src
+    .trim()
+    .replace(/\/thumb\/photoalbums\//gi, "/photoalbums/")
+    .replace(/pictures-thumb/g, "pictures");
+}
+
 function resolveImageUrl(src) {
   if (!src) return null;
-  let path = src;
-  if (src.startsWith("http")) {
+  const upgraded = upgradeEcatholicImageSrc(src);
+  let path = upgraded;
+  if (upgraded.startsWith("http")) {
     try {
-      path = new URL(src).pathname;
+      const u = new URL(upgraded);
+      path = u.pathname;
+      if (path.startsWith("/photoalbums/") && /\.(jpe?g|png|gif|webp)$/i.test(path)) {
+        return `${u.origin}${path}`.split("?")[0];
+      }
+      if (path.startsWith("/pictures/") || path.startsWith("/documents/")) {
+        return `${ECATHOLIC_CDN}${path}`.split("?")[0];
+      }
+      return upgraded.split("?")[0];
     } catch {
-      return src.split("?")[0];
+      return upgraded.split("?")[0];
     }
   }
   if (!path.startsWith("/")) path = `/${path}`;
+  if (path.startsWith("/photoalbums/") && /\.(jpe?g|png|gif|webp)$/i.test(path)) {
+    return `${BASE}${path}`.split("?")[0];
+  }
   if (path.startsWith("/pictures/") || path.startsWith("/documents/")) {
     return `${ECATHOLIC_CDN}${path}`.split("?")[0];
   }
-  if (src.startsWith("http")) return src.split("?")[0];
+  if (upgraded.startsWith("http")) return upgraded.split("?")[0];
   return `${BASE}${path}`.split("?")[0];
+}
+
+function resolvePersonPhotoUrl(src) {
+  if (!src?.trim()) return "";
+  return resolveImageUrl(src) || upgradeEcatholicImageSrc(src).split("?")[0];
+}
+
+function isCssNoiseHtml(html) {
+  if (!html?.trim()) return true;
+  const stripped = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
+  if (!stripped) return true;
+  const plain = stripped
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!plain) return true;
+  return (
+    /^p\.p\d|span\.s\d|margin:\s*0\.0px|font:\s*[\d.]+px/i.test(plain) &&
+    !/<a\b/i.test(stripped)
+  );
+}
+
+/** Merge split text blocks and drop duplicate images from legacy scrapes. */
+function consolidateScrapedModules(modules) {
+  const byRegion = new Map();
+  for (const mod of modules) {
+    const region = mod.region || "content-1";
+    if (!byRegion.has(region)) byRegion.set(region, []);
+    byRegion.get(region).push(mod);
+  }
+
+  const out = [];
+  for (const [region, regionMods] of byRegion) {
+    const seenImages = new Set();
+    for (const mod of regionMods) {
+      if (mod.type === "text" && isCssNoiseHtml(mod.html)) continue;
+
+      if (mod.type === "image") {
+        const modSrc = resolveImageUrl(mod.src) || mod.src || "";
+        if (modSrc && seenImages.has(modSrc)) continue;
+        if (modSrc) seenImages.add(modSrc);
+      }
+      out.push({ ...mod, region });
+    }
+  }
+  return out;
+}
+
+function titleFromHtml(html) {
+  if (!html?.trim()) return "";
+  const heading = html.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i);
+  if (!heading) return "";
+  const text = heading[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return text && text.length <= 120 ? text : "";
+}
+
+function titleFromPath(path) {
+  if (!path || path === "/") return "";
+  const segment = path.replace(/^\//, "").split("/").pop() || "";
+  return segment
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function fillMissingModuleTitles(entry) {
+  const pageTitle = entry.pageSectionTitle || titleFromPath(entry.path);
+  for (const mod of entry.modules || []) {
+    if (mod.title?.trim()) continue;
+    if (mod.type === "text" && mod.html) {
+      const fromHtml = titleFromHtml(mod.html);
+      if (fromHtml) {
+        mod.title = fromHtml;
+        continue;
+      }
+    }
+    const pageTitleTypes = new Set(["text", "people", "documents", "links", "embed", "video"]);
+    if (pageTitleTypes.has(mod.type) && pageTitle) mod.title = pageTitle;
+    else if (mod.type === "people") mod.title = "Staff";
+    else if (mod.type === "links") mod.title = "Links";
+    else if (mod.type === "documents") mod.title = "Documents";
+  }
+  return entry;
 }
 
 function filenameFromUrl(url) {
@@ -304,25 +474,81 @@ function filenameFromUrl(url) {
   }
 }
 
-async function uploadImage(storage, sourceUrl, alt) {
-  const url = resolveImageUrl(sourceUrl);
+async function downloadImageBytes(sourceUrl, { page } = {}) {
+  const url = resolveImageUrl(sourceUrl) || sourceUrl;
+  if (page) {
+    const response = await page.request.get(url);
+    if (response.ok()) {
+      return {
+        buffer: Buffer.from(await response.body()),
+        contentType: response.headers()["content-type"] || "image/jpeg",
+        url,
+      };
+    }
+
+    const viaBrowser = await page.evaluate(async (imageUrl) => {
+      const res = await fetch(imageUrl);
+      if (!res.ok) return { ok: false, status: res.status };
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return {
+        ok: true,
+        contentType: res.headers.get("content-type") || "image/jpeg",
+        base64: btoa(binary),
+      };
+    }, url);
+
+    if (viaBrowser.ok) {
+      return {
+        buffer: Buffer.from(viaBrowser.base64, "base64"),
+        contentType: viaBrowser.contentType,
+        url,
+      };
+    }
+  }
+
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
+  return {
+    buffer: Buffer.from(await res.arrayBuffer()),
+    contentType: res.headers.get("content-type") || "image/jpeg",
+    url,
+  };
+}
+
+async function uploadImage(storage, sourceUrl, alt, { page } = {}) {
+  const { buffer, contentType, url } = await downloadImageBytes(sourceUrl, { page });
   if (buffer.length > 10 * 1024 * 1024) throw new Error(`Image too large: ${url}`);
 
   const mediaId = `media_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const filename = filenameFromUrl(url);
-  const mimeType = res.headers.get("content-type") || "image/jpeg";
+  const mimeType = contentType || "image/jpeg";
   const storagePath = `media/${PICTURES_FOLDER}/${mediaId}_${filename}`;
-  const bucket = storage.bucket();
-  const file = bucket.file(storagePath);
-
-  await file.save(buffer, { metadata: { contentType: mimeType }, public: true });
-  await file.makePublic();
-  const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  const downloadUrl = await storage.uploadPublicObject(storagePath, buffer, mimeType);
 
   return { downloadUrl, filename, alt: alt || "" };
+}
+
+async function resolveUploadedImageUrl(
+  sourceUrl,
+  alt,
+  { dryRun, storage, uploadImages, page },
+  imageUrlCache,
+) {
+  const source = resolveImageUrl(sourceUrl) || sourceUrl;
+  if (dryRun || !storage || !uploadImages) return source;
+  if (imageUrlCache.has(source)) return imageUrlCache.get(source);
+  try {
+    console.log(`  Uploading ${source}`);
+    const uploaded = await uploadImage(storage, source, alt, { page });
+    imageUrlCache.set(source, uploaded.downloadUrl);
+    await sleep(IMAGE_DELAY_MS);
+    return uploaded.downloadUrl;
+  } catch (err) {
+    console.warn(`  Upload failed, using source URL: ${err.message}`);
+    return source;
+  }
 }
 
 async function waitForPageContent(page, path) {
@@ -363,24 +589,202 @@ async function waitForPageContent(page, path) {
 }
 
 async function scrapePageDom(page, path) {
-  return page.evaluate(() => {
+  return page.evaluate(({ pagePath }) => {
     const SKIP_MODULE =
       ".massTimes, .calendar, .dailyReadings, .liveStream, .sectionNav, iframe[src*='google.com/calendar']";
+    const SKIP_WIDGET =
+      ".massTimes, .massTimesModule, .calendar, .embedModule, .dailyReadings, .usccbReadingsModule, .newsVAModule, .confessionTimesModule, iframe[src*='google.com/calendar']";
+
+    const cleanModuleTitle = (raw) => {
+      const parts = (raw || "")
+        .replace(/\t/g, " ")
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s && s !== "No Subtitle" && s !== "No Title");
+      return parts[0] || "";
+    };
 
     const h1 = document.querySelector("#core h1, #content1 h1, h1");
+
+    const inferPageSectionTitle = () => {
+      const siteName = h1?.textContent?.trim() || "Visitation Parish";
+      const fromDoc = document.title.replace(/\s*\|\s*.+$/, "").trim();
+      const first = fromDoc.split(" - ")[0]?.trim() || "";
+      if (!first || first === siteName) return "";
+      return first;
+    };
+
+    const titleFromHtml = (html) => {
+      if (!html?.trim()) return "";
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const heading = doc.querySelector("h2, h3, h4");
+      const text = heading?.textContent?.replace(/\s+/g, " ").trim() || "";
+      return text && text.length <= 120 ? text : "";
+    };
+
+    const pageSectionTitle = inferPageSectionTitle();
+
+    const resolveModuleTitle = (mod) => {
+      if (mod.title?.trim()) return mod;
+
+      if (mod.type === "text" && mod.html) {
+        const fromHtml = titleFromHtml(mod.html);
+        if (fromHtml) {
+          mod.title = fromHtml;
+          return mod;
+        }
+      }
+
+      const pageTitleTypes = new Set(["text", "people", "documents", "links", "embed", "video"]);
+      if (pageTitleTypes.has(mod.type) && pageSectionTitle) {
+        mod.title = pageSectionTitle;
+        return mod;
+      }
+
+      if (mod.type === "people" && !mod.title) mod.title = "Staff";
+      if (mod.type === "links" && !mod.title) mod.title = "Links";
+      if (mod.type === "documents" && !mod.title) mod.title = "Documents";
+
+      return mod;
+    };
+
     const title =
       h1?.textContent?.trim() || document.title.replace(/\s*\|\s*.+$/, "").trim();
 
     const scrapedModules = [];
-    const content1 = document.querySelector("#content1");
-    if (!content1) return { title, modules: scrapedModules, error: "no #content1" };
+    const isHome = pagePath === "/" || pagePath === "";
+    const regionContainers = isHome
+      ? [
+          { selector: "#content1", region: "content-1", skip: SKIP_MODULE },
+          { selector: "#content2", region: "content-2", skip: SKIP_WIDGET },
+        ]
+      : [{ selector: "#content1", region: "content-1", skip: SKIP_MODULE }];
 
-    for (const li of content1.querySelectorAll(":scope > li")) {
-      if (li.querySelector(SKIP_MODULE)) continue;
+    if (!document.querySelector("#content1")) {
+      return { title, modules: scrapedModules, error: "no #content1" };
+    }
 
-      const moduleTitle =
-        li.querySelector(".moduleTitle, h2.moduleTitle, h2.moduleName, .customModuleTitle")
-          ?.textContent?.trim() || "";
+    for (const { selector, region, skip } of regionContainers) {
+      const container = document.querySelector(selector);
+      if (!container) continue;
+
+      for (const li of container.querySelectorAll(":scope > li")) {
+        if (li.querySelector(skip)) continue;
+
+        const moduleTitle = cleanModuleTitle(
+          li.querySelector(
+            ".moduleTitle, h2.moduleTitle, h2.moduleName, .customModuleTitle, .moduleName, header h2, header .moduleTitle, header .moduleName",
+          )?.textContent,
+        );
+
+        const moduleInner = li.querySelector(".moduleInner");
+
+        if (moduleInner?.classList.contains("linksModule")) {
+          const items = [];
+          const seen = new Set();
+          li.querySelectorAll(".linkModule a[href], .moduleBody a[href], li.link a[href]").forEach((a) => {
+            const label = a.textContent.trim();
+            const href = a.href || a.getAttribute("href") || "";
+            const key = `${href}|${label}`;
+            if (label && href && !seen.has(key)) {
+              seen.add(key);
+              items.push({ label, href });
+            }
+          });
+          if (items.length) {
+            scrapedModules.push({ type: "links", title: moduleTitle, items, region });
+            continue;
+          }
+        }
+
+        if (moduleInner?.classList.contains("photoAlbumsModule")) {
+          const albums = [];
+          const seen = new Set();
+          const toFullSrc = (raw) => {
+            if (!raw) return "";
+            const abs = raw.startsWith("http") ? raw : new URL(raw, location.origin).href;
+            return abs.replace(/\/thumb\/photoalbums\//gi, "/photoalbums/").replace(/pictures-thumb/g, "pictures");
+          };
+          li.querySelectorAll("li.photoAlbum").forEach((albumEl) => {
+            const anchor = albumEl.querySelector("a.thumb[href*='photoalbums'], a.name[href*='photoalbums']");
+            const href = anchor?.href || "";
+            if (!href || seen.has(href)) return;
+            const img = albumEl.querySelector("img.thumbImage, img");
+            const rawSrc = img?.getAttribute("src") || img?.getAttribute("data-src") || img?.src || "";
+            const imageSrc = toFullSrc(rawSrc);
+            const label =
+              albumEl.querySelector(".name, .albumName")?.textContent?.trim() ||
+              img?.alt?.replace(/\s+photo album.*$/i, "").trim() ||
+              "";
+            const countMatch = albumEl.textContent.match(/(\d+)\s*Photos?/i);
+            const photoCount = countMatch ? Number(countMatch[1]) : undefined;
+            seen.add(href);
+            albums.push({ label, href, imageSrc, photoCount });
+          });
+          if (albums.length) {
+            scrapedModules.push({
+              type: "photo_albums",
+              title: moduleTitle || "Photo Albums",
+              albums,
+              region,
+            });
+            continue;
+          }
+        }
+
+        if (moduleInner?.classList.contains("imageModule")) {
+          const img = li.querySelector("img.thumbImage, img");
+          const src = img?.getAttribute("src") || img?.getAttribute("data-src") || "";
+          if (src && !/logo|icon|spacer|pixel|ecatholic-logo|powered-by-ecatholic/i.test(src)) {
+            scrapedModules.push({
+              type: "image",
+              title: moduleTitle,
+              src: src.replace(/pictures-thumb/g, "pictures"),
+              alt: img?.alt || "",
+              region,
+            });
+            continue;
+          }
+        }
+
+        if (moduleInner?.classList.contains("embedModule")) {
+          const iframe = moduleInner.querySelector("iframe");
+          const embedUrl =
+            iframe?.getAttribute("src") || iframe?.getAttribute("data-src") || "";
+          const body = moduleInner.querySelector(".moduleBody");
+          const html = body?.innerHTML?.trim() || "";
+          const heightAttr = iframe?.getAttribute("height");
+          const height = heightAttr ? parseInt(heightAttr, 10) || 400 : 400;
+          if (embedUrl || html) {
+            scrapedModules.push({
+              type: "embed",
+              title: moduleTitle || iframe?.getAttribute("title") || "Embed",
+              embedUrl,
+              html: embedUrl ? "" : html,
+              height,
+              region,
+            });
+            continue;
+          }
+        }
+
+        if (moduleInner?.classList.contains("customModule")) {
+          const view = li.querySelector(".fr-element.fr-view, .moduleBody .fr-view, .fr-view");
+          if (view) {
+            const clone = view.cloneNode(true);
+            clone.querySelectorAll("img, style").forEach((el) => el.remove());
+            const html = clone.innerHTML.trim();
+            if (html) {
+              scrapedModules.push({
+                type: "text",
+                title: moduleTitle,
+                html,
+                region,
+              });
+              continue;
+            }
+          }
+        }
 
       /** eCatholic document modules have no .fr-view — links live in .documentList */
       const docRoot = li.querySelector(".documentModule, .documentList");
@@ -406,8 +810,66 @@ async function scrapePageDom(page, path) {
         if (items.length) {
           scrapedModules.push({
             type: "documents",
-            title: moduleTitle || "Documents",
+            title: moduleTitle,
             items,
+            region,
+          });
+          continue;
+        }
+      }
+
+      /** eCatholic staff/people modules (.peopleModule) have no .fr-view */
+      if (li.querySelector(".peopleModule, .moduleInner.peopleModule")) {
+        const people = [];
+        const seen = new Set();
+        li.querySelectorAll(".peopleModule .person, .peopleModule li.person").forEach((person) => {
+          const name =
+            person.querySelector(".name span")?.textContent?.trim() ||
+            person.querySelector(".name")?.textContent?.trim() ||
+            person.querySelector(".personName, h3, h4, strong")?.textContent?.trim() ||
+            "";
+          if (!name || seen.has(name)) return;
+          seen.add(name);
+
+          const role =
+            person.querySelector(".role")?.textContent?.trim() ||
+            person.querySelector(".title, .position, .personTitle")?.textContent?.trim() ||
+            "";
+
+          const localMail = person.querySelector(".localMail")?.textContent?.trim() || "";
+          const domainMail = person.querySelector(".domainMail")?.textContent?.trim() || "";
+          let email = "";
+          if (localMail && domainMail) {
+            email = `${localMail}@${domainMail}`;
+          } else {
+            email =
+              person
+                .querySelector('a[href^="mailto:"]')
+                ?.getAttribute("href")
+                ?.replace(/^mailto:/i, "") ||
+              person.querySelector('a[href^="mailto:"]')?.textContent?.trim() ||
+              "";
+          }
+
+          const phone =
+            person.querySelector(".phone")?.textContent?.trim() ||
+            person.querySelector('a[href^="tel:"]')?.textContent?.trim() ||
+            "";
+
+          const photoEl = person.querySelector("img.thumbImage, .thumb img, picture img, img");
+          let photo = photoEl?.getAttribute("src") || photoEl?.getAttribute("data-src") || "";
+          if (photo && /spacer|blank\.gif|placeholder/i.test(photo)) photo = "";
+          if (photo) photo = photo.replace(/pictures-thumb/g, "pictures");
+
+          people.push({ name, role, email, phone, photo });
+        });
+
+        if (people.length) {
+          scrapedModules.push({
+            type: "people",
+            title: moduleTitle,
+            people,
+            region,
           });
           continue;
         }
@@ -483,12 +945,12 @@ async function scrapePageDom(page, path) {
             title: moduleTitle || "Video",
             source,
             embedUrl,
+            region,
           });
           continue;
         }
       }
 
-      const moduleInner = li.querySelector(".moduleInner");
       if (moduleInner) {
         if (moduleInner.classList.contains("facebookModule")) {
           const iframe = moduleInner.querySelector("iframe");
@@ -501,6 +963,7 @@ async function scrapePageDom(page, path) {
             embedUrl: src,
             width: 500,
             height: 500,
+            region,
           });
           continue;
         }
@@ -514,6 +977,7 @@ async function scrapePageDom(page, path) {
               title: moduleTitle || "Map",
               embedUrl: src,
               height: 450,
+              region,
             });
             continue;
           }
@@ -529,6 +993,7 @@ async function scrapePageDom(page, path) {
             postUrl: postLink?.href || "",
             embedUrl: src,
             height: 480,
+            region,
           });
           continue;
         }
@@ -548,6 +1013,7 @@ async function scrapePageDom(page, path) {
             title: moduleTitle || "RSS Feed",
             feedUrl: feedUrl || link?.href || "",
             maxItems: 10,
+            region,
           });
           continue;
         }
@@ -562,6 +1028,7 @@ async function scrapePageDom(page, path) {
               html,
               embedUrl: "",
               height: 400,
+              region,
             });
             continue;
           }
@@ -589,27 +1056,54 @@ async function scrapePageDom(page, path) {
             type: "image",
             src: img.getAttribute("src"),
             alt: img.alt || "",
+            region,
           });
         }
         continue;
       }
 
       const people = [];
-      li.querySelectorAll(".staffMember, .staff-member, .person").forEach((row) => {
+      const seenPeople = new Set();
+      li.querySelectorAll(".peopleModule .person, .peopleModule li.person, .staffMember, .staff-member, .person").forEach((row) => {
         const name =
-          row.querySelector(".name, h2, h3, strong")?.textContent?.trim() ||
+          row.querySelector(".name span")?.textContent?.trim() ||
+          row.querySelector(".name, .personName, h2, h3, strong")?.textContent?.trim() ||
           row.querySelector("a")?.textContent?.trim();
-        if (!name) return;
+        if (!name || seenPeople.has(name)) return;
+        seenPeople.add(name);
+
+        const localMail = row.querySelector(".localMail")?.textContent?.trim() || "";
+        const domainMail = row.querySelector(".domainMail")?.textContent?.trim() || "";
+        let email = "";
+        if (localMail && domainMail) {
+          email = `${localMail}@${domainMail}`;
+        } else {
+          email =
+            row.querySelector('a[href^="mailto:"]')?.getAttribute("href")?.replace(/^mailto:/i, "") ||
+            row.querySelector('a[href^="mailto:"]')?.textContent?.trim() ||
+            "";
+        }
+
         people.push({
           name,
-          role: row.querySelector(".title, .role, .position")?.textContent?.trim() || "",
-          email: row.querySelector('a[href^="mailto:"]')?.textContent?.trim() || "",
-          phone: row.querySelector('a[href^="tel:"]')?.textContent?.trim() || "",
+          role:
+            row.querySelector(".role, .title, .position")?.textContent?.trim() || "",
+          email,
+          phone:
+            row.querySelector(".phone")?.textContent?.trim() ||
+            row.querySelector('a[href^="tel:"]')?.textContent?.trim() ||
+            "",
+          photo: (() => {
+            const photoEl = row.querySelector("img.thumbImage, .thumb img, picture img, img");
+            let src = photoEl?.getAttribute("src") || photoEl?.getAttribute("data-src") || "";
+            if (!src || /spacer|blank\.gif|placeholder/i.test(src)) return "";
+            return src.replace(/pictures-thumb/g, "pictures");
+          })(),
         });
       });
 
       if (people.length) {
-        scrapedModules.push({ type: "people", title: moduleTitle || "Staff", people });
+        scrapedModules.push({ type: "people", title: moduleTitle, people, region });
         continue;
       }
 
@@ -621,8 +1115,9 @@ async function scrapePageDom(page, path) {
       if (docLinks.length) {
         scrapedModules.push({
           type: "documents",
-          title: moduleTitle || "Documents",
+          title: moduleTitle,
           items: docLinks,
+          region,
         });
         continue;
       }
@@ -631,70 +1126,129 @@ async function scrapePageDom(page, path) {
       if (iframe?.src) {
         scrapedModules.push({
           type: "video",
-          title: moduleTitle || "Video",
+          title: moduleTitle,
           source: iframe.src.includes("vimeo") ? "vimeo" : "youtube",
           embedUrl: iframe.src,
+          region,
         });
         continue;
       }
 
-      const childParts = [];
-      for (const node of view.childNodes) {
-        if (node.nodeName === "IMG") {
-          const src = node.getAttribute("src");
-          if (src && !/logo|icon|spacer|pixel|ecatholic-logo|powered-by-ecatholic/i.test(src)) {
-            childParts.push({ kind: "image", src: node.getAttribute("src"), alt: node.alt || "" });
-          }
-        } else if (node.nodeType === 1) {
-          const { imgs, text } = isImageOnly(node);
-          if (text) {
-            const nodeClone = node.cloneNode(true);
-            nodeClone.querySelectorAll("img").forEach((el) => el.remove());
-            childParts.push({
-              kind: "text",
-              html: nodeClone.innerHTML.trim(),
-              title: moduleTitle,
-            });
-          }
-          for (const img of imgs) {
-            childParts.push({ kind: "image", src: img.getAttribute("src"), alt: img.alt || "" });
-          }
-        }
-      }
+      const isContentImage = (src) =>
+        src && !/logo|icon|spacer|pixel|ecatholic-logo|powered-by-ecatholic/i.test(src);
 
-      if (childParts.length === 0) {
-        const { imgs, text } = isImageOnly(view);
-        if (imgs.length && !text) {
-          for (const img of imgs) {
-            scrapedModules.push({
-              type: "image",
-              src: img.getAttribute("src"),
-              alt: img.alt || "",
-            });
-          }
-        } else if (text) {
-          const clone = view.cloneNode(true);
-          clone.querySelectorAll("img").forEach((el) => el.remove());
+      const isCssNoise = (html) => {
+        if (!html?.trim()) return true;
+        const stripped = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
+        if (!stripped) return true;
+        const plain = stripped
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!plain) return true;
+        return (
+          /^p\.p\d|span\.s\d|margin:\s*0\.0px|font:\s*[\d.]+px/i.test(plain) &&
+          !/<a\b/i.test(stripped)
+        );
+      };
+
+      const viewClone = view.cloneNode(true);
+      viewClone.querySelectorAll("style").forEach((n) => n.remove());
+
+      const seenImages = new Set();
+      let textBuffer = [];
+
+      const flushText = () => {
+        if (!textBuffer.length) return;
+        const combined = textBuffer.join("").trim();
+        textBuffer = [];
+        if (!isCssNoise(combined)) {
           scrapedModules.push({
             type: "text",
             title: moduleTitle,
-            html: clone.innerHTML.trim(),
+            html: combined,
+            region,
           });
         }
-        continue;
-      }
+      };
 
-      for (const part of childParts) {
-        if (part.kind === "image") {
-          scrapedModules.push({ type: "image", src: part.src, alt: part.alt });
-        } else if (part.kind === "text" && part.html) {
-          scrapedModules.push({ type: "text", title: part.title || moduleTitle, html: part.html });
+      const pushImages = (imgs) => {
+        for (const img of imgs) {
+          const src = img.getAttribute("src");
+          if (!isContentImage(src)) continue;
+          const key = src.split("?")[0];
+          if (seenImages.has(key)) continue;
+          seenImages.add(key);
+          scrapedModules.push({ type: "image", src, alt: img.alt || "", region });
+        }
+      };
+
+      for (const node of viewClone.childNodes) {
+        if (node.nodeName === "IMG") {
+          flushText();
+          pushImages([node]);
+        } else if (node.nodeType === 1) {
+          if (node.nodeName === "STYLE") continue;
+          const { imgs, text } = isImageOnly(node);
+          if (imgs.length && !text) {
+            flushText();
+            pushImages(imgs);
+          } else if (text) {
+            const inlineImgs = [...node.querySelectorAll("img")].filter((img) =>
+              isContentImage(img.getAttribute("src")),
+            );
+            if (inlineImgs.length) {
+              flushText();
+              pushImages(inlineImgs);
+            }
+            const nodeClone = node.cloneNode(true);
+            nodeClone.querySelectorAll("img, style").forEach((el) => el.remove());
+            const html = nodeClone.innerHTML.trim();
+            if (!isCssNoise(html)) textBuffer.push(html);
+          }
+        }
+      }
+      flushText();
+
+      if (scrapedModules.length === 0) {
+        const { imgs, text } = isImageOnly(viewClone);
+        if (imgs.length && !text) {
+          pushImages(imgs);
+        } else if (text) {
+          const clone = viewClone.cloneNode(true);
+          clone.querySelectorAll("img").forEach((el) => el.remove());
+          const html = clone.innerHTML.trim();
+          if (!isCssNoise(html)) {
+            scrapedModules.push({ type: "text", title: moduleTitle, html, region });
+          }
         }
       }
     }
+    }
 
-    return { title, modules: scrapedModules };
-  });
+    if (isHome) {
+      const slides = [];
+      const seenSlides = new Set();
+      document
+        .querySelectorAll("#featureSlideshow img, #featureSlideshow [data-src]")
+        .forEach((el) => {
+          let src = el.src || el.getAttribute("data-src") || "";
+          src = src.replace(/pictures-thumb/g, "pictures");
+          if (!src || seenSlides.has(src) || /spacer|blank/i.test(src)) return;
+          seenSlides.add(src);
+          slides.push({ src, alt: el.alt || "", caption: "" });
+        });
+      if (slides.length) {
+        scrapedModules.unshift({ type: "slideshow", region: "features", slides });
+      }
+    }
+
+    for (let i = 0; i < scrapedModules.length; i++) {
+      scrapedModules[i] = resolveModuleTitle(scrapedModules[i]);
+    }
+
+    return { title, modules: scrapedModules, pageSectionTitle };
+  }, { pagePath: path });
 }
 
 async function scrapePath(page, path) {
@@ -711,6 +1265,7 @@ async function scrapePath(page, path) {
   await sleep(800);
   const data = await scrapePageDom(page, path);
   if (data.error) throw new Error(`${path}: ${data.error}`);
+  data.modules = consolidateScrapedModules(data.modules);
   return data;
 }
 
@@ -755,22 +1310,34 @@ function importJsonEntry(filePath) {
 }
 
 async function createBrowserSession({ headed, connect, chromeProfile }) {
+  logProgress("[migrate] Starting browser session…");
   const { chromium } = await import("playwright");
 
   if (connect) {
     const endpoint = connect.startsWith("http") ? connect : `http://127.0.0.1:${connect}`;
-    const browser = await chromium.connectOverCDP(endpoint);
+    await assertChromeDebugPort(connect);
+    const browser = await chromium.connectOverCDP(endpoint, { timeout: 15_000 });
     const context = browser.contexts()[0];
     if (!context) throw new Error(`No browser context at ${endpoint} — open Chrome with remote debugging first`);
-    process.stdout.write(`Connected to Chrome at ${endpoint}\n`);
+    const page = await resolveScrapePage(context);
+    logProgress(`[migrate] Connected to Chrome at ${endpoint} (tab: ${page.url()})`);
     return {
       kind: "cdp",
       browser,
       context,
-      page: context.pages()[0] || (await context.newPage()),
+      page,
       async close() {
-        await browser.close();
-        process.stdout.write("Disconnected from Chrome (left running).\n");
+        try {
+          await Promise.race([
+            browser.close(),
+            sleep(5_000).then(() => {
+              logProgress("[migrate] Chrome disconnect timed out — continuing.");
+            }),
+          ]);
+        } catch {
+          /* optional */
+        }
+        logProgress("[migrate] Disconnected from Chrome (left running).");
       },
     };
   }
@@ -857,10 +1424,12 @@ async function scrapePaths(paths, sessionOpts) {
     return manifest.filter((e) => paths.includes(e.path));
   }
 
-  return withBrowser(toScrape, sessionOpts, async (page, pathList, context) => {
+  return withBrowser(toScrape, sessionOpts, async (page, pathList, context, session) => {
     const results = [];
-    for (const path of pathList) {
-      console.log(`Scraping ${path} ...`);
+    const total = pathList.length;
+    for (let i = 0; i < pathList.length; i++) {
+      const path = pathList[i];
+      logProgress(`[migrate] Scraping ${i + 1}/${total}: ${path}`);
       try {
         const data = await scrapePath(page, path);
         const entry = {
@@ -870,7 +1439,7 @@ async function scrapePaths(paths, sessionOpts) {
           ...data,
         };
         writeManifestEntry(entry);
-        if (context.storageState) await saveStorageState(context);
+        if (session.kind !== "cdp") await saveStorageState(context);
         console.log(`  → ${data.modules.length} modules saved to manifest`);
         results.push(entry);
         if (pathList.length > 1) await sleep(2500);
@@ -886,77 +1455,160 @@ async function scrapePaths(paths, sessionOpts) {
   });
 }
 
-async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uploadImages }) {
+async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uploadImages, page }) {
   const firestoreModules = [];
-  let order = 0;
+  const orderByRegion = {};
   const imageUrlCache = new Map();
 
+  const nextOrder = (region) => {
+    orderByRegion[region] = orderByRegion[region] ?? 0;
+    return orderByRegion[region]++;
+  };
+
   for (const mod of scrapedModules) {
+    const region = mod.region || "content-1";
+
     if (mod.type === "text") {
       firestoreModules.push({
         id: generateId(),
         type: "text",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: { title: mod.title || "", html: mod.html },
       });
-    } else if (mod.type === "image") {
-      const source = resolveImageUrl(mod.src);
-      let downloadUrl = source;
-      if (!dryRun && storage && uploadImages) {
-        try {
-          if (imageUrlCache.has(source)) {
-            downloadUrl = imageUrlCache.get(source);
-          } else {
-            console.log(`  Uploading ${source}`);
-            const uploaded = await uploadImage(storage, source, mod.alt);
-            downloadUrl = uploaded.downloadUrl;
-            imageUrlCache.set(source, downloadUrl);
-            await sleep(IMAGE_DELAY_MS);
-          }
-        } catch (err) {
-          console.warn(`  Upload failed, using CDN URL: ${err.message}`);
-          downloadUrl = source;
-        }
+    } else if (mod.type === "links") {
+      firestoreModules.push({
+        id: generateId(),
+        type: "links",
+        region,
+        order: nextOrder(region),
+        config: {
+          title: mod.title || "Links",
+          items: (mod.items || []).map((item) => ({
+            label: item.label,
+            href: item.href || item.url || "/",
+          })),
+        },
+      });
+    } else if (mod.type === "photo_albums") {
+      const albums = [];
+      for (const album of mod.albums || []) {
+        albums.push({
+          label: album.label || "",
+          href: album.href || "/",
+          imageSrc: await resolveUploadedImageUrl(
+            album.imageSrc,
+            album.label,
+            { dryRun, storage, uploadImages, page },
+            imageUrlCache,
+          ),
+          photoCount: album.photoCount,
+        });
       }
       firestoreModules.push({
         id: generateId(),
+        type: "photo_albums",
+        region,
+        order: nextOrder(region),
+        config: {
+          title: mod.title || "Photo Albums",
+          albums,
+        },
+      });
+    } else if (mod.type === "gallery") {
+      const images = [];
+      for (const img of mod.images || []) {
+        images.push({
+          src: await resolveUploadedImageUrl(
+            img.src,
+            img.alt,
+            { dryRun, storage, uploadImages, page },
+            imageUrlCache,
+          ),
+          alt: img.alt || "",
+        });
+      }
+      firestoreModules.push({
+        id: generateId(),
+        type: "gallery",
+        region,
+        order: nextOrder(region),
+        config: {
+          title: mod.title || "Gallery",
+          images,
+        },
+      });
+    } else if (mod.type === "slideshow") {
+      const slides = [];
+      for (const slide of mod.slides || []) {
+        slides.push({
+          src: await resolveUploadedImageUrl(
+            slide.src,
+            slide.alt,
+            { dryRun, storage, uploadImages, page },
+            imageUrlCache,
+          ),
+          alt: slide.alt || "",
+          caption: slide.caption || "",
+        });
+      }
+      firestoreModules.push({
+        id: generateId(),
+        type: "slideshow",
+        region: "features",
+        order: nextOrder("features"),
+        config: { slides },
+      });
+    } else if (mod.type === "image") {
+      const downloadUrl = await resolveUploadedImageUrl(
+        mod.src,
+        mod.alt,
+        { dryRun, storage, uploadImages, page },
+        imageUrlCache,
+      );
+      firestoreModules.push({
+        id: generateId(),
         type: "image",
-        region: "content-1",
-        order: order++,
-        config: { title: mod.alt || "", src: downloadUrl, alt: mod.alt || "", caption: "" },
+        region,
+        order: nextOrder(region),
+        config: { title: mod.alt || mod.title || "", src: downloadUrl, alt: mod.alt || "", caption: "" },
       });
     } else if (mod.type === "people") {
       firestoreModules.push({
         id: generateId(),
         type: "people",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "Staff",
-          people: mod.people.map((p) => ({
-            id: generateId(),
-            name: p.name,
-            role: p.role || "",
-            email: p.email || "",
-            phone: p.phone || "",
-          })),
+          people: mod.people.map((p) => {
+            const person = {
+              id: generateId(),
+              name: p.name,
+              role: p.role || "",
+              email: p.email || "",
+              phone: p.phone || "",
+            };
+            const photoUrl = resolvePersonPhotoUrl(p.photo || p.photoUrl);
+            if (photoUrl) person.photoUrl = photoUrl;
+            return person;
+          }),
         },
       });
     } else if (mod.type === "documents") {
       firestoreModules.push({
         id: generateId(),
         type: "documents",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: { title: mod.title || "Documents", items: mod.items },
       });
     } else if (mod.type === "video") {
       firestoreModules.push({
         id: generateId(),
         type: "video",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "Video",
           source: mod.source,
@@ -968,8 +1620,8 @@ async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uplo
       firestoreModules.push({
         id: generateId(),
         type: "embed",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "Embed",
           embedUrl: mod.embedUrl || "",
@@ -981,8 +1633,8 @@ async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uplo
       firestoreModules.push({
         id: generateId(),
         type: "facebook",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "Facebook",
           pageUrl: mod.pageUrl || "",
@@ -995,8 +1647,8 @@ async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uplo
       firestoreModules.push({
         id: generateId(),
         type: "google_maps",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "Map",
           embedUrl: mod.embedUrl || "",
@@ -1007,8 +1659,8 @@ async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uplo
       firestoreModules.push({
         id: generateId(),
         type: "instagram",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "Instagram",
           postUrl: mod.postUrl || "",
@@ -1020,8 +1672,8 @@ async function scrapedToFirestoreModules(scrapedModules, storage, { dryRun, uplo
       firestoreModules.push({
         id: generateId(),
         type: "rss",
-        region: "content-1",
-        order: order++,
+        region,
+        order: nextOrder(region),
         config: {
           title: mod.title || "RSS Feed",
           feedUrl: mod.feedUrl || "",
@@ -1070,10 +1722,37 @@ function appendSpecialModules(pageId, modules) {
     });
   }
 
+  if (pageId === "page_1780708317956_ldt10go") {
+    const col2Count = () => modules.filter((m) => m.region === "content-2").length;
+    if (!modules.some((m) => m.type === "mass_times")) {
+      modules.push({
+        id: generateId(),
+        type: "mass_times",
+        region: "content-2",
+        order: col2Count(),
+        config: { title: "Mass Times", useSiteDefaults: true },
+      });
+    }
+    if (!modules.some((m) => m.type === "calendar")) {
+      modules.push({
+        id: generateId(),
+        type: "calendar",
+        region: "content-2",
+        order: col2Count(),
+        config: {
+          title: "Calendar",
+          source: "google",
+          googleCalendarId: "churchsecretary@vcsknights.org",
+          maxEvents: 30,
+        },
+      });
+    }
+  }
+
   return modules;
 }
 
-async function applyEntry(db, storage, entry, { dryRun, publish, mergeHome, uploadImages }) {
+async function applyEntry(db, storage, entry, { dryRun, publish, mergeHome, uploadImages, page }) {
   const pageId = entry.pageId || PAGE_MAP[entry.path];
   if (!pageId || SKIP_PAGE_IDS.has(pageId)) {
     console.log(`Skipping ${entry.path}`);
@@ -1082,9 +1761,11 @@ async function applyEntry(db, storage, entry, { dryRun, publish, mergeHome, uplo
 
   const layout = layoutFor(pageId);
   let regions = emptyRegions(pageId);
-  let modules = await scrapedToFirestoreModules(entry.modules || [], storage, {
+  const scraped = consolidateScrapedModules(fillMissingModuleTitles({ ...entry, modules: [...(entry.modules || [])] }).modules);
+  let modules = await scrapedToFirestoreModules(scraped, storage, {
     dryRun,
     uploadImages,
+    page,
   });
   modules = appendSpecialModules(pageId, modules);
 
@@ -1102,14 +1783,26 @@ async function applyEntry(db, storage, entry, { dryRun, publish, mergeHome, uplo
       { id: "features", modules: features },
       { id: "content-2", modules: content2 },
     ];
-    const base = content1.length;
-    for (let i = 0; i < modules.length; i++) {
-      modules[i].order = base + i;
-      regions.find((r) => r.id === "content-1").modules.push(modules[i]);
+    for (const mod of modules) {
+      const regionId = mod.region || "content-1";
+      let region = regions.find((r) => r.id === regionId);
+      if (!region) {
+        region = { id: regionId, modules: [] };
+        regions.push(region);
+      }
+      mod.order = region.modules.length;
+      region.modules.push(mod);
     }
   } else {
     for (const mod of modules) {
-      regions.find((r) => r.id === "content-1").modules.push(mod);
+      const regionId = mod.region || "content-1";
+      let region = regions.find((r) => r.id === regionId);
+      if (!region) {
+        region = { id: regionId, modules: [] };
+        regions.push(region);
+      }
+      mod.order = region.modules.length;
+      region.modules.push(mod);
     }
   }
 
@@ -1162,7 +1855,12 @@ async function applyEntry(db, storage, entry, { dryRun, publish, mergeHome, uplo
 }
 
 async function main() {
+  logProgress("[migrate] Visitation content migration");
   const opts = parseArgs(process.argv.slice(2));
+
+  if (opts.applyOnly) {
+    opts.fromManifest = opts.fromManifest || MANIFEST_PATH;
+  }
 
   if (opts.importJson) {
     const entry = importJsonEntry(opts.importJson);
@@ -1174,7 +1872,7 @@ async function main() {
     opts.path = entry.path;
   }
 
-  const paths = opts.path ? [opts.path] : opts.applyAll ? ALL_PATHS : null;
+  const paths = opts.path ? [opts.path] : opts.applyAll && !opts.applyOnly ? ALL_PATHS : null;
 
   if (opts.headless && !opts.connect) {
     console.warn(
@@ -1184,11 +1882,14 @@ async function main() {
 
   let entries = [];
 
-  if (opts.fromManifest) {
-    entries = JSON.parse(readFileSync(opts.fromManifest, "utf8"));
+  if (opts.fromManifest || opts.applyOnly) {
+    entries = JSON.parse(readFileSync(opts.fromManifest || MANIFEST_PATH, "utf8"));
     if (opts.path) entries = entries.filter((e) => e.path === opts.path);
-    console.log(`Loaded ${entries.length} entries from manifest`);
+    logProgress(`[migrate] Loaded ${entries.length} entries from manifest`);
   } else if (paths) {
+    logProgress(
+      `[migrate] Will scrape ${paths.length} page(s)${opts.apply ? ", then apply to Firestore" : ""}${opts.publish ? " and publish" : ""}`,
+    );
     entries = await scrapePaths(paths, {
       headed: opts.headed,
       connect: opts.connect,
@@ -1202,26 +1903,50 @@ async function main() {
   }
 
   if (!opts.apply && !opts.dryRun) {
-    console.log("Scrape complete. Re-run with --apply to write to Firestore.");
+    logProgress("[migrate] Scrape complete. Re-run with --apply to write to Firestore.");
     return;
   }
 
   const { db, storage } = opts.dryRun
     ? { db: null, storage: null }
-    : initFirebase();
+    : await initFirebase({ uploadImages: opts.uploadImages });
+
+  let imageBrowser = null;
+  if (opts.uploadImages && !opts.dryRun && storage) {
+    if (!opts.connect) {
+      console.warn(
+        "Warning: --upload-images without --connect may fail for Cloudflare-protected photo album URLs.",
+      );
+    } else {
+      logProgress("[migrate] Connecting to Chrome for image downloads…");
+      imageBrowser = await createBrowserSession({
+        headed: opts.headed,
+        connect: opts.connect,
+        chromeProfile: opts.chromeProfile,
+      });
+    }
+  }
+
   if (!opts.dryRun && !db) throw new Error("Firebase not configured");
 
-  for (const entry of entries) {
+  logProgress(`[migrate] Applying ${entries.length} page(s) to Firestore…`);
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    logProgress(`[migrate] Apply ${i + 1}/${entries.length}: ${entry.path}`);
     await applyEntry(db, storage, entry, {
       dryRun: opts.dryRun,
       publish: opts.publish,
-      mergeHome: entry.pageId === "page_1780708317956_ldt10go",
+      mergeHome:
+        entry.pageId === "page_1780708317956_ldt10go" && !opts.force,
       uploadImages: opts.uploadImages,
+      page: imageBrowser?.page,
     });
     await sleep(PAGE_DELAY_MS);
   }
 
-  console.log("Done.");
+  if (imageBrowser) await imageBrowser.close();
+
+  logProgress("[migrate] Done.");
 }
 
 main().catch((err) => {

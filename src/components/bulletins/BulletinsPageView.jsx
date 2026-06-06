@@ -35,73 +35,110 @@ function BulletinArchive({
 }) {
   const groups = groupBulletinsByYearMonth(bulletins);
   const years = Object.keys(groups).sort((a, b) => Number(b) - Number(a));
+  const latestYear = years[0];
+  const selectedYear = selectedDate?.slice(0, 4);
   const latestMonthKey = getBulletinMonthKey(latestDate);
   const selectedMonthKey = getBulletinMonthKey(selectedDate);
+
+  const renderYearMonths = (year) => (
+    <div className="space-y-1">
+      {Object.keys(groups[year])
+        .sort((a, b) => Number(b) - Number(a))
+        .map((month) => {
+          const monthKey = `${year}-${month}`;
+          const isOpen =
+            monthKey === latestMonthKey || monthKey === selectedMonthKey;
+
+          return (
+            <details
+              key={monthKey}
+              open={isOpen}
+              className="group rounded border border-zinc-100"
+            >
+              <summary className="cursor-pointer list-none px-2 py-2 text-sm font-medium text-zinc-900 marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  {formatBulletinMonthLabel(year, month)}
+                  <span
+                    aria-hidden
+                    className="text-xs text-zinc-400 transition-transform group-open:rotate-180"
+                  >
+                    ▼
+                  </span>
+                </span>
+              </summary>
+              <ul className="space-y-1 border-t border-zinc-100 px-2 py-2">
+                {groups[year][month].map((bulletin) => {
+                  const isSelected = bulletin.date === selectedDate;
+                  const href = pageSlug
+                    ? `${pageSlug}?date=${bulletin.date}`
+                    : `?date=${bulletin.date}`;
+
+                  return (
+                    <li key={bulletin.id}>
+                      <Link
+                        href={href}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          onSelect(bulletin.date);
+                        }}
+                        className={`block rounded px-2 py-1 text-sm transition-colors ${
+                          isSelected
+                            ? "bg-[var(--site-primary)]/10 font-medium text-[var(--site-primary)]"
+                            : "text-zinc-700 hover:bg-zinc-50 hover:text-[var(--site-primary)]"
+                        }`}
+                      >
+                        {formatBulletinDate(bulletin)}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          );
+        })}
+    </div>
+  );
 
   return (
     <aside className="w-full lg:w-1/3">
       <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        {years.map((year) => (
-          <div key={year} className="mb-4 last:mb-0">
-            <h3 className="mb-2 text-sm font-semibold text-zinc-900">Archive {year}</h3>
-            <div className="space-y-1">
-              {Object.keys(groups[year])
-                .sort((a, b) => Number(b) - Number(a))
-                .map((month) => {
-                  const monthKey = `${year}-${month}`;
-                  const isOpen =
-                    monthKey === latestMonthKey || monthKey === selectedMonthKey;
+        {years.map((year) => {
+          const isLatestYear = year === latestYear;
 
-                  return (
-                    <details
-                      key={monthKey}
-                      open={isOpen}
-                      className="group rounded border border-zinc-100"
-                    >
-                      <summary className="cursor-pointer list-none px-2 py-2 text-sm font-medium text-zinc-900 marker:content-none [&::-webkit-details-marker]:hidden">
-                        <span className="flex items-center justify-between gap-2">
-                          {formatBulletinMonthLabel(year, month)}
-                          <span
-                            aria-hidden
-                            className="text-xs text-zinc-400 transition-transform group-open:rotate-180"
-                          >
-                            ▼
-                          </span>
-                        </span>
-                      </summary>
-                      <ul className="space-y-1 border-t border-zinc-100 px-2 py-2">
-                        {groups[year][month].map((bulletin) => {
-                          const isSelected = bulletin.date === selectedDate;
-                          const href = pageSlug
-                            ? `${pageSlug}?date=${bulletin.date}`
-                            : `?date=${bulletin.date}`;
+          if (isLatestYear) {
+            return (
+              <div key={year} className="mb-4 last:mb-0">
+                <h3 className="mb-2 text-sm font-semibold text-zinc-900">
+                  Archive {year}
+                </h3>
+                {renderYearMonths(year)}
+              </div>
+            );
+          }
 
-                          return (
-                            <li key={bulletin.id}>
-                              <Link
-                                href={href}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  onSelect(bulletin.date);
-                                }}
-                                className={`block rounded px-2 py-1 text-sm transition-colors ${
-                                  isSelected
-                                    ? "bg-[var(--site-primary)]/10 font-medium text-[var(--site-primary)]"
-                                    : "text-zinc-700 hover:bg-zinc-50 hover:text-[var(--site-primary)]"
-                                }`}
-                              >
-                                {formatBulletinDate(bulletin)}
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </details>
-                  );
-                })}
-            </div>
-          </div>
-        ))}
+          return (
+            <details
+              key={year}
+              open={year === selectedYear}
+              className="group mb-4 rounded border border-zinc-100 last:mb-0"
+            >
+              <summary className="cursor-pointer list-none px-2 py-2 text-sm font-semibold text-zinc-900 marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  Archive {year}
+                  <span
+                    aria-hidden
+                    className="text-xs text-zinc-400 transition-transform group-open:rotate-180"
+                  >
+                    ▼
+                  </span>
+                </span>
+              </summary>
+              <div className="border-t border-zinc-100 px-2 py-2">
+                {renderYearMonths(year)}
+              </div>
+            </details>
+          );
+        })}
       </div>
     </aside>
   );

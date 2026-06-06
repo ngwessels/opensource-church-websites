@@ -23,7 +23,7 @@ When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools 
 
 - `list_pages`, `get_page`, `update_page` — page metadata, layout, regions, SEO
 - `add_module`, `update_module`, `move_module`, `remove_module` — content modules (`text`, `links`, `buttons`, `image`, `gallery`, `slideshow`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`)
-- `publish_page`, `schedule_page_publish`, `cancel_scheduled_page_publish`, `revert_page` — draft/publish workflow
+- `publish_page`, `revert_page` — draft/publish workflow
 
 **Navigation / sitemap**
 
@@ -44,7 +44,22 @@ When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools 
 
 **Discovery**
 
-- `get_builder_capabilities` — module types, layouts, region rules
+- `get_builder_capabilities` — module types, layouts, region rules, and `moduleConfigSchemas`
 - `get_site_summary` — quick overview of pages, nav, and design
+
+**Buttons module**
+
+Config shape: `{ items: [{ label, href }] }`. No section title. Use sitemap paths (e.g. `/about`) or full URLs for `href`.
+
+**Documents module**
+
+Config shape: `{ title, items: [{ label, url }] }`. Items use `url` (not `href`).
+
+1. `add_module` with `type: "documents"`
+2. `upload_media` with `folderId: "documents-root"` (returns `downloadUrl`)
+3. `update_module` with `config: { title, items: [{ label, url: downloadUrl }] }`
+4. `publish_page`
+
+External URLs can be used directly in `url` without uploading. Call `get_builder_capabilities` for full schema details.
 
 Prefer MCP tools when the user wants site content or design changed from Cursor. Call `get_site_summary` or `get_builder_capabilities` first when unsure of current structure.

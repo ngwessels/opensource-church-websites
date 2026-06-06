@@ -10,6 +10,7 @@ import { ImageModule } from "./ImageModule";
 import { LinksModule } from "./LinksModule";
 import { DailyReadingsModule } from "./DailyReadingsModule";
 import { MassTimesModule } from "./MassTimesModule";
+import { PhotoAlbumsModule } from "./PhotoAlbumsModule";
 import { PeopleModule } from "./PeopleModule";
 import { SlideshowModule } from "./SlideshowModule";
 import { TextModule } from "./TextModule";
@@ -26,6 +27,7 @@ const MODULE_MAP = {
   links: LinksModule,
   image: ImageModule,
   gallery: ImageModule,
+  photo_albums: PhotoAlbumsModule,
   slideshow: SlideshowModule,
   carousel: CarouselModule,
   video: VideoModule,

@@ -46,6 +46,7 @@ export const MODULE_META = {
   calendar: { label: "Calendar", color: "bg-amber-600", icon: Calendar },
   image: { label: "Image", color: "bg-blue-600", icon: Image },
   gallery: { label: "Gallery", color: "bg-indigo-600", icon: LayoutGrid },
+  photo_albums: { label: "Photo Albums", color: "bg-indigo-700", icon: Images },
   slideshow: { label: "Slideshow", color: "bg-violet-600", icon: Presentation },
   carousel: { label: "Carousel", color: "bg-purple-600", icon: Images },
   video: { label: "Video", color: "bg-red-600", icon: Video },

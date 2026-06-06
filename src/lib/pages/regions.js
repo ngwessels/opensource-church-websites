@@ -13,6 +13,7 @@ const CONTENT_COLUMN_TYPES = new Set([
   "calendar",
   "image",
   "gallery",
+  "photo_albums",
   "carousel",
   "video",
   "zoom",

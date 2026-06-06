@@ -11,10 +11,13 @@ import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
+import { ButtonsModuleEditor } from "./ButtonsModuleEditor";
 import { CalendarModuleEditor } from "./CalendarModuleEditor";
 import { DailyReadingsModuleEditor } from "./DailyReadingsModuleEditor";
+import { DocumentsModuleEditor } from "./DocumentsModuleEditor";
 import { LinksModuleEditor } from "./LinksModuleEditor";
 import { MassTimesModuleEditor } from "./MassTimesModuleEditor";
+import { PhotoAlbumsModuleEditor } from "./PhotoAlbumsModuleEditor";
 import { PeopleModuleEditor } from "./PeopleModuleEditor";
 import { SlideListEditor } from "./SlideListEditor";
 import { VideoModuleEditor } from "./VideoModuleEditor";
@@ -50,10 +53,18 @@ export function ModuleEditor({ module, siteConfig, onSave, onClose, pageId }) {
     return <GalleryModuleEditor module={module} onSave={onSave} onClose={onClose} />;
   }
 
+  if (module.type === "photo_albums") {
+    return <PhotoAlbumsModuleEditor module={module} onSave={onSave} onClose={onClose} />;
+  }
+
   if (module.type === "links") {
     return (
       <LinksModuleEditor module={module} onSave={onSave} onClose={onClose} />
     );
+  }
+
+  if (module.type === "buttons") {
+    return <ButtonsModuleEditor module={module} onSave={onSave} onClose={onClose} />;
   }
 
   if (module.type === "mass_times") {
@@ -93,6 +104,10 @@ export function ModuleEditor({ module, siteConfig, onSave, onClose, pageId }) {
 
   if (module.type === "people") {
     return <PeopleModuleEditor module={module} onSave={onSave} onClose={onClose} />;
+  }
+
+  if (module.type === "documents") {
+    return <DocumentsModuleEditor module={module} onSave={onSave} onClose={onClose} />;
   }
 
   return (

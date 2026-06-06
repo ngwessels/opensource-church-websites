@@ -2,6 +2,8 @@ import "server-only";
 
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
+import { normalizeButtonsConfig } from "@/lib/buttons/schema";
+import { normalizeDocumentsConfig } from "@/lib/documents/schema";
 import { getDefaultConfig } from "@/lib/modules/defaults";
 import {
   buildRegionsForColumnCount,
@@ -83,9 +85,17 @@ export async function updateModuleAdmin(pageId, moduleId, config) {
   const page = await getPageAdmin({ pageId });
   const regions = (page.regions || []).map((r) => ({
     ...r,
-    modules: (r.modules || []).map((m) =>
-      m.id === moduleId ? { ...m, config: { ...m.config, ...config } } : m,
-    ),
+    modules: (r.modules || []).map((m) => {
+      if (m.id !== moduleId) return m;
+      const merged = { ...m.config, ...config };
+      let normalized = merged;
+      if (m.type === "documents") {
+        normalized = normalizeDocumentsConfig(merged, { filterEmpty: true });
+      } else if (m.type === "buttons") {
+        normalized = normalizeButtonsConfig(merged, { filterEmpty: true });
+      }
+      return { ...m, config: normalized };
+    }),
   }));
   return updatePageAdmin(pageId, { regions });
 }
@@ -141,55 +151,6 @@ export async function publishPageAdmin(pageId) {
   });
   const updated = await ref.get();
   return { id: updated.id, ...updated.data() };
-}
-
-export async function schedulePagePublishAdmin(pageId, publishAt) {
-  const publishDate = new Date(publishAt);
-  if (Number.isNaN(publishDate.getTime())) throw new Error("Invalid publish date");
-  if (publishDate.getTime() <= Date.now()) throw new Error("Publish date must be in the future");
-
-  const db = getDb();
-  const ref = db.collection(COLLECTIONS.pages).doc(pageId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Page not found");
-
-  const ts = publishDate.toISOString();
-  await ref.update({
-    scheduledPublishAt: ts,
-    updatedAt: now(),
-  });
-  const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
-}
-
-export async function cancelScheduledPublishAdmin(pageId) {
-  const db = getDb();
-  const ref = db.collection(COLLECTIONS.pages).doc(pageId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Page not found");
-
-  await ref.update({
-    scheduledPublishAt: null,
-    updatedAt: now(),
-  });
-  const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
-}
-
-export async function processScheduledPublishesAdmin() {
-  const db = getDb();
-  const ts = now();
-  const snap = await db.collection(COLLECTIONS.pages).where("scheduledPublishAt", "<=", ts).get();
-
-  const published = [];
-  for (const docSnap of snap.docs) {
-    const data = docSnap.data();
-    if (!data.scheduledPublishAt) continue;
-    await publishPageAdmin(docSnap.id);
-    published.push({ pageId: docSnap.id, title: data.title, slug: data.slug });
-  }
-
-  return { published, checkedAt: ts };
 }
 
 export async function revertPageAdmin(pageId) {

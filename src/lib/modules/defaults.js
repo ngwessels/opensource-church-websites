@@ -32,6 +32,11 @@ export function getDefaultConfig(type) {
       };
     case "gallery":
       return { title: "Gallery", images: [] };
+    case "photo_albums":
+      return {
+        title: "Photo Albums",
+        albums: [{ label: "Album", href: "/", imageSrc: "", photoCount: 0 }],
+      };
     case "video":
       return { title: "Video", source: "youtube", url: "", embedUrl: "", src: "" };
     case "zoom":

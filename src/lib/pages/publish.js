@@ -1,7 +1,6 @@
 import { deleteField, doc, getDoc, updateDoc } from "firebase/firestore";
 
 import { COLLECTIONS } from "@/lib/firestore/paths";
-import { assertFuturePublishDate } from "@/lib/pages/scheduled-publish";
 
 function buildPublishedSnapshot(data) {
   return {
@@ -27,30 +26,6 @@ export async function publishPage(db, pageId) {
     publishedAt: now,
     scheduledPublishAt: deleteField(),
     updatedAt: now,
-  });
-}
-
-export async function schedulePagePublish(db, pageId, publishAt) {
-  const publishAtIso = assertFuturePublishDate(publishAt);
-  const pageRef = doc(db, COLLECTIONS.pages, pageId);
-  const snap = await getDoc(pageRef);
-  if (!snap.exists()) throw new Error("Page not found");
-
-  const now = new Date().toISOString();
-  await updateDoc(pageRef, {
-    scheduledPublishAt: publishAtIso,
-    updatedAt: now,
-  });
-}
-
-export async function cancelScheduledPublish(db, pageId) {
-  const pageRef = doc(db, COLLECTIONS.pages, pageId);
-  const snap = await getDoc(pageRef);
-  if (!snap.exists()) throw new Error("Page not found");
-
-  await updateDoc(pageRef, {
-    scheduledPublishAt: deleteField(),
-    updatedAt: new Date().toISOString(),
   });
 }
 

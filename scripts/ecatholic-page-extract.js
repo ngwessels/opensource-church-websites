@@ -66,6 +66,61 @@
       }
     }
 
+    if (li.querySelector(".peopleModule, .moduleInner.peopleModule")) {
+      const people = [];
+      const seen = new Set();
+      li.querySelectorAll(".peopleModule .person, .peopleModule li.person").forEach((person) => {
+        const name =
+          person.querySelector(".name span")?.textContent?.trim() ||
+          person.querySelector(".name")?.textContent?.trim() ||
+          person.querySelector(".personName, h3, h4, strong")?.textContent?.trim() ||
+          "";
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+
+        const role =
+          person.querySelector(".role")?.textContent?.trim() ||
+          person.querySelector(".title, .position, .personTitle")?.textContent?.trim() ||
+          "";
+
+        const localMail = person.querySelector(".localMail")?.textContent?.trim() || "";
+        const domainMail = person.querySelector(".domainMail")?.textContent?.trim() || "";
+        let email = "";
+        if (localMail && domainMail) {
+          email = `${localMail}@${domainMail}`;
+        } else {
+          email =
+            person
+              .querySelector('a[href^="mailto:"]')
+              ?.getAttribute("href")
+              ?.replace(/^mailto:/i, "") ||
+            person.querySelector('a[href^="mailto:"]')?.textContent?.trim() ||
+            "";
+        }
+
+        const phone =
+          person.querySelector(".phone")?.textContent?.trim() ||
+          person.querySelector('a[href^="tel:"]')?.textContent?.trim() ||
+          "";
+
+        const photoEl = person.querySelector("img.thumbImage, .thumb img, picture img, img");
+        let photo = photoEl?.getAttribute("src") || photoEl?.getAttribute("data-src") || "";
+        if (photo && /spacer|blank\.gif|placeholder/i.test(photo)) photo = "";
+        if (photo) photo = photo.replace(/pictures-thumb/g, "pictures");
+
+        people.push({ name, role, email, phone, photo });
+      });
+
+      if (people.length) {
+        modules.push({
+          type: "people",
+          title: moduleTitle || "Staff",
+          people,
+        });
+        continue;
+      }
+    }
+
     const mediaInner = li.querySelector(
       ".moduleInner.youtubeModule, .moduleInner.vimeoModule, .youtubeModule, .vimeoModule",
     );
@@ -203,6 +258,26 @@
         continue;
       }
 
+      if (moduleInner.classList.contains("embedModule")) {
+        const iframe = moduleInner.querySelector("iframe");
+        const embedUrl =
+          iframe?.getAttribute("src") || iframe?.getAttribute("data-src") || "";
+        const body = moduleInner.querySelector(".moduleBody");
+        const html = body?.innerHTML?.trim() || "";
+        const heightAttr = iframe?.getAttribute("height");
+        const height = heightAttr ? parseInt(heightAttr, 10) || 400 : 400;
+        if (embedUrl || html) {
+          modules.push({
+            type: "embed",
+            title: moduleTitle || iframe?.getAttribute("title") || "Embed",
+            embedUrl,
+            html: embedUrl ? "" : html,
+            height,
+          });
+          continue;
+        }
+      }
+
       if (moduleInner.classList.contains("customHTMLModule") || moduleInner.classList.contains("htmlModule")) {
         const body = moduleInner.querySelector(".moduleBody, .customHTML, .htmlContent") || moduleInner;
         const html = body.innerHTML?.trim() || "";
@@ -222,53 +297,90 @@
     const view = li.querySelector(".fr-element.fr-view, .moduleBody .fr-view, .fr-view");
     if (!view) continue;
 
-    const { imgs: viewImgs, text: viewText } = isImageOnly(view);
-    if (viewImgs.length && !viewText) {
-      for (const img of viewImgs) {
-        modules.push({ type: "image", src: img.getAttribute("src"), alt: img.alt || "" });
-      }
-      continue;
-    }
+    const moduleStart = modules.length;
 
-    const childParts = [];
-    for (const node of view.childNodes) {
+    const isContentImage = (src) =>
+      src && !/logo|icon|spacer|pixel|ecatholic-logo|powered-by-ecatholic/i.test(src);
+
+    const isCssNoise = (html) => {
+      if (!html?.trim()) return true;
+      const stripped = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").trim();
+      if (!stripped) return true;
+      const plain = stripped
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!plain) return true;
+      return (
+        /^p\.p\d|span\.s\d|margin:\s*0\.0px|font:\s*[\d.]+px/i.test(plain) &&
+        !/<a\b/i.test(stripped)
+      );
+    };
+
+    const viewClone = view.cloneNode(true);
+    viewClone.querySelectorAll("style").forEach((n) => n.remove());
+
+    const seenImages = new Set();
+    let textBuffer = [];
+
+    const flushText = () => {
+      if (!textBuffer.length) return;
+      const combined = textBuffer.join("").trim();
+      textBuffer = [];
+      if (!isCssNoise(combined)) {
+        modules.push({ type: "text", title: moduleTitle, html: combined });
+      }
+    };
+
+    const pushImages = (imgs) => {
+      for (const img of imgs) {
+        const src = img.getAttribute("src");
+        if (!isContentImage(src)) continue;
+        const key = src.split("?")[0];
+        if (seenImages.has(key)) continue;
+        seenImages.add(key);
+        modules.push({ type: "image", src, alt: img.alt || "" });
+      }
+    };
+
+    for (const node of viewClone.childNodes) {
       if (node.nodeName === "IMG") {
-        const src = node.getAttribute("src");
-        if (src && !/logo|icon|spacer|pixel|ecatholic-logo|powered-by-ecatholic/i.test(src)) {
-          childParts.push({ kind: "image", src, alt: node.alt || "" });
-        }
+        flushText();
+        pushImages([node]);
       } else if (node.nodeType === 1) {
+        if (node.nodeName === "STYLE") continue;
         const { imgs, text } = isImageOnly(node);
-        if (text) {
+        if (imgs.length && !text) {
+          flushText();
+          pushImages(imgs);
+        } else if (text) {
+          const inlineImgs = [...node.querySelectorAll("img")].filter((img) =>
+            isContentImage(img.getAttribute("src")),
+          );
+          if (inlineImgs.length) {
+            flushText();
+            pushImages(inlineImgs);
+          }
           const nodeClone = node.cloneNode(true);
-          nodeClone.querySelectorAll("img").forEach((el) => el.remove());
-          childParts.push({ kind: "text", html: nodeClone.innerHTML.trim(), title: moduleTitle });
-        }
-        for (const img of imgs) {
-          childParts.push({ kind: "image", src: img.getAttribute("src"), alt: img.alt || "" });
+          nodeClone.querySelectorAll("img, style").forEach((el) => el.remove());
+          const html = nodeClone.innerHTML.trim();
+          if (!isCssNoise(html)) textBuffer.push(html);
         }
       }
     }
+    flushText();
 
-    if (childParts.length === 0) {
-      const { imgs, text } = isImageOnly(view);
+    if (modules.length === moduleStart) {
+      const { imgs, text } = isImageOnly(viewClone);
       if (imgs.length && !text) {
-        for (const img of imgs) {
-          modules.push({ type: "image", src: img.getAttribute("src"), alt: img.alt || "" });
-        }
+        pushImages(imgs);
       } else if (text) {
-        const clone = view.cloneNode(true);
+        const clone = viewClone.cloneNode(true);
         clone.querySelectorAll("img").forEach((el) => el.remove());
-        modules.push({ type: "text", title: moduleTitle, html: clone.innerHTML.trim() });
-      }
-      continue;
-    }
-
-    for (const part of childParts) {
-      if (part.kind === "image") {
-        modules.push({ type: "image", src: part.src, alt: part.alt });
-      } else if (part.kind === "text" && part.html) {
-        modules.push({ type: "text", title: part.title || moduleTitle, html: part.html });
+        const html = clone.innerHTML.trim();
+        if (!isCssNoise(html)) {
+          modules.push({ type: "text", title: moduleTitle, html });
+        }
       }
     }
   }

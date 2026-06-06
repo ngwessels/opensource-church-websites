@@ -145,7 +145,7 @@ export function registerMcpTools(server) {
     "update_module",
     {
       description:
-        "Update a module config on a page. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
+        "Update a module config on a page. Common types: links {title, items: [{label, href}]}; buttons {items: [{label, href}]}; photo_albums {title, albums: [{label, href, imageSrc, photoCount?}]}; documents {title, items: [{label, url}]} — upload PDFs/docs via upload_media with folderId documents-root, then set url to the returned downloadUrl; people {title, people: [{id, name, role?, email?, phone?, photoUrl?}]}. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
       inputSchema: {
         pageId: z.string(),
         moduleId: z.string(),
@@ -186,27 +186,6 @@ export function registerMcpTools(server) {
       inputSchema: { pageId: z.string() },
     },
     async ({ pageId }) => run(() => pages.publishPageAdmin(pageId)),
-  );
-
-  server.registerTool(
-    "schedule_page_publish",
-    {
-      description: "Schedule a page draft to publish at a future ISO timestamp",
-      inputSchema: {
-        pageId: z.string(),
-        publishAt: z.string().describe("ISO 8601 datetime in the future"),
-      },
-    },
-    async ({ pageId, publishAt }) => run(() => pages.schedulePagePublishAdmin(pageId, publishAt)),
-  );
-
-  server.registerTool(
-    "cancel_scheduled_page_publish",
-    {
-      description: "Cancel a scheduled page publish",
-      inputSchema: { pageId: z.string() },
-    },
-    async ({ pageId }) => run(() => pages.cancelScheduledPublishAdmin(pageId)),
   );
 
   server.registerTool(
@@ -365,7 +344,7 @@ export function registerMcpTools(server) {
     "upload_media",
     {
       description:
-        "Upload media via base64 (max ~3MB) or sourceUrl. Optional description, alt, and tags help identify the file later.",
+        "Upload media via base64 (max ~3MB) or sourceUrl. Optional description, alt, and tags help identify the file later. For documents modules, use folderId documents-root and set item url to the returned downloadUrl.",
       inputSchema: {
         folderId: z.string(),
         filename: z.string(),
