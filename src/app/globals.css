@@ -1,0 +1,263 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(0.985 0.004 240);
+  --foreground: oklch(0.21 0.02 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 250);
+  --primary: oklch(0.52 0.13 200);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.008 240);
+  --secondary-foreground: oklch(0.21 0.02 250);
+  --muted: oklch(0.96 0.008 240);
+  --muted-foreground: oklch(0.48 0.02 250);
+  --accent: oklch(0.94 0.025 200);
+  --accent-foreground: oklch(0.21 0.02 250);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.91 0.01 240);
+  --input: oklch(0.91 0.01 240);
+  --ring: oklch(0.52 0.13 200);
+  --chart-1: oklch(0.52 0.13 200);
+  --chart-2: oklch(0.65 0.10 220);
+  --chart-3: oklch(0.48 0.02 250);
+  --chart-4: oklch(0.72 0.12 190);
+  --chart-5: oklch(0.35 0.04 250);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.985 0.004 240);
+  --sidebar-foreground: oklch(0.21 0.02 250);
+  --sidebar-primary: oklch(0.52 0.13 200);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.008 240);
+  --sidebar-accent-foreground: oklch(0.21 0.02 250);
+  --sidebar-border: oklch(0.91 0.01 240);
+  --sidebar-ring: oklch(0.52 0.13 200);
+  /* Admin builder chrome */
+  --admin-accent: oklch(0.52 0.13 200);
+  --admin-toolbar-height: 65px;
+  --admin-page-nav-height: 60px;
+  --admin-module-tray-height: 320px;
+  --sitemap-bottom-bar-height: 130px;
+  /* Parish site (overridden per-site in PublicSite) */
+  --site-primary: #7f1d1d;
+  --site-secondary: #1e3a5f;
+  --site-accent: #d97706;
+  --site-heading-font: Georgia, serif;
+}
+
+.site-root .prose :where(h1, h2, h3, h4) {
+  font-family: var(--site-heading-font, inherit);
+}
+
+.site-root #navBackground {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.site-root #navBackground .site-nav-link {
+  color: var(--site-nav-text);
+  font-family: inherit;
+  font-size: var(--site-nav-font-size, 0.875rem);
+  transition: background-color 0.15s ease;
+}
+
+.site-root #navBackground .site-nav-link:hover {
+  background-color: color-mix(in srgb, var(--site-nav-text) 18%, var(--site-nav-bg));
+}
+
+.dark {
+  --background: oklch(0.16 0.02 250);
+  --foreground: oklch(0.95 0.01 240);
+  --card: oklch(0.20 0.02 250);
+  --card-foreground: oklch(0.95 0.01 240);
+  --popover: oklch(0.20 0.02 250);
+  --popover-foreground: oklch(0.95 0.01 240);
+  --primary: oklch(0.65 0.14 200);
+  --primary-foreground: oklch(0.15 0.02 250);
+  --secondary: oklch(0.24 0.02 250);
+  --secondary-foreground: oklch(0.95 0.01 240);
+  --muted: oklch(0.24 0.02 250);
+  --muted-foreground: oklch(0.65 0.02 250);
+  --accent: oklch(0.28 0.03 200);
+  --accent-foreground: oklch(0.95 0.01 240);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.65 0.14 200);
+  --chart-1: oklch(0.65 0.14 200);
+  --chart-2: oklch(0.55 0.10 220);
+  --chart-3: oklch(0.65 0.02 250);
+  --chart-4: oklch(0.75 0.12 190);
+  --chart-5: oklch(0.40 0.04 250);
+  --sidebar: oklch(0.20 0.02 250);
+  --sidebar-foreground: oklch(0.95 0.01 240);
+  --sidebar-primary: oklch(0.65 0.14 200);
+  --sidebar-primary-foreground: oklch(0.15 0.02 250);
+  --sidebar-accent: oklch(0.24 0.02 250);
+  --sidebar-accent-foreground: oklch(0.95 0.01 240);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.65 0.14 200);
+  --admin-accent: oklch(0.65 0.14 200);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .admin-tab-active {
+    box-shadow: inset 0 -3px 0 0 var(--admin-accent);
+  }
+  .admin-page-nav {
+    @apply border-t border-border/80 bg-card/95 backdrop-blur-md;
+    box-shadow:
+      0 -1px 0 0 rgb(0 0 0 / 0.04),
+      0 -12px 32px -8px rgb(0 0 0 / 0.08);
+  }
+  .admin-module-tray {
+    @apply border-t border-border/80 bg-muted/95 backdrop-blur-md;
+    box-shadow: 0 -8px 24px -12px rgb(0 0 0 / 0.12);
+  }
+  .module-tray-extended {
+    padding-bottom: calc(var(--admin-module-tray-height) + var(--admin-page-nav-height));
+  }
+  .edit-region-drop {
+    @apply border-2 border-dashed border-transparent transition-colors;
+  }
+  .edit-region-drop.is-editing {
+    @apply border-border;
+  }
+  .edit-region-drop.is-drag-active {
+    @apply border-primary/40 bg-primary/5;
+  }
+  .edit-region-drop.is-over {
+    @apply border-primary/60 bg-primary/10;
+  }
+  .edit-region-features.is-editing {
+    @apply border-transparent;
+  }
+  .insert-slot.is-over {
+    @apply bg-primary/10;
+  }
+  .error-banner-shake {
+    animation: error-shake 0.4s ease-in-out;
+  }
+  @keyframes error-shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-4px); }
+    40%, 80% { transform: translateX(4px); }
+  }
+
+  .sitemap-editor .sitemap-nav-admin ul {
+    @apply min-h-[200px] items-start;
+  }
+
+  .sitemap-editor .sitemap-column {
+    @apply align-top;
+  }
+
+  .sitemap-editor .sitemap-node-card {
+    @apply min-h-[32px];
+  }
+
+  .sitemap-editor .sitemap-template-tile {
+    @apply select-none shadow-sm;
+  }
+
+  .sitemap-editor .sitemap-quick-links {
+    @apply bg-card;
+  }
+
+  .sitemap-editor .sitemap-bottom-bar {
+    @apply bg-muted;
+  }
+
+  .sitemap-editor .sitemap-drop-indicator {
+    @apply w-full;
+  }
+
+  .sitemap-editor .sitemap-children {
+    @apply border-l border-border;
+  }
+
+  .color-input {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  .color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: calc(var(--radius) - 2px);
+  }
+
+  .color-input::-moz-color-swatch {
+    border: none;
+    border-radius: calc(var(--radius) - 2px);
+  }
+}

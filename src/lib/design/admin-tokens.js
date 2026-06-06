@@ -1,0 +1,56 @@
+import {
+  Calendar,
+  FileText,
+  Images,
+  Image,
+  LayoutGrid,
+  Link2,
+  MousePointerClick,
+  FileStack,
+  Users,
+  Church,
+  BookOpen,
+  Presentation,
+  Video,
+  Radio,
+} from "lucide-react";
+
+export const ADMIN_TOOLBAR_HEIGHT = 65;
+export const ADMIN_PAGE_NAV_HEIGHT = 60;
+export const MODULE_TRAY_HEIGHT = 320;
+
+export const ADMIN_Z = {
+  toolbar: 50,
+  sectionTab: 40,
+  moduleTray: 45,
+  pageNav: 50,
+  overlay: 60,
+  errorBanner: 55,
+  /** Portaled menus (select, dropdown) above module editor overlays */
+  popover: 70,
+};
+
+export const MODULE_META = {
+  text: { label: "Text / HTML", color: "bg-emerald-600", icon: FileText },
+  links: { label: "Links", color: "bg-amber-500", icon: Link2 },
+  buttons: { label: "Buttons", color: "bg-sky-600", icon: MousePointerClick },
+  documents: { label: "Documents", color: "bg-zinc-500", icon: FileStack },
+  people: { label: "People", color: "bg-red-600", icon: Users },
+  mass_times: { label: "Mass Times", color: "bg-amber-800", icon: Church },
+  daily_readings: { label: "Daily Readings", color: "bg-rose-800", icon: BookOpen },
+  calendar: { label: "Calendar", color: "bg-amber-600", icon: Calendar },
+  image: { label: "Image", color: "bg-blue-600", icon: Image },
+  gallery: { label: "Gallery", color: "bg-indigo-600", icon: LayoutGrid },
+  slideshow: { label: "Slideshow", color: "bg-violet-600", icon: Presentation },
+  carousel: { label: "Carousel", color: "bg-purple-600", icon: Images },
+  video: { label: "Video", color: "bg-red-600", icon: Video },
+  zoom: { label: "Zoom Live", color: "bg-sky-700", icon: Radio },
+};
+
+export const MODULE_TILE_COLORS = Object.fromEntries(
+  Object.entries(MODULE_META).map(([k, v]) => [k, v.color]),
+);
+
+export const MODULE_LABELS = Object.fromEntries(
+  Object.entries(MODULE_META).map(([k, v]) => [k, v.label]),
+);

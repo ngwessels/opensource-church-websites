@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/mcp/**": {
+      "maxDuration": 60
+    },
+    "src/app/api/mcp-tokens/**": {
+      "maxDuration": 10
+    }
+  }
+}
