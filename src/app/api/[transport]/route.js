@@ -3,7 +3,6 @@ import { after } from "next/server";
 
 import { mcpAuthStorage, touchMcpConnectionLastUsed, validateMcpToken } from "@/lib/cms/auth";
 import { registerMcpTools } from "@/lib/mcp/server";
-import { getMcpResourceUrl } from "@/lib/oauth/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,7 +48,6 @@ const authedHandler = withMcpAuth(
   async (_request, bearerToken) => validateMcpToken(bearerToken),
   {
     required: true,
-    resourceUrl: getMcpResourceUrl(),
     resourceMetadataPath: "/.well-known/oauth-protected-resource",
   },
 );
