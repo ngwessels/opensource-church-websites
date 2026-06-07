@@ -382,6 +382,41 @@ export function isExternalHref(href) {
   return /^https?:\/\//i.test(href || "");
 }
 
+export const FOOTER_QUICK_LINKS_SOURCE = "quickLinks";
+
+/** @param {{ title?: string, source?: string } | null | undefined} column */
+export function isSyncedQuickLinksColumn(column) {
+  if (!column) return false;
+  if (column.source === FOOTER_QUICK_LINKS_SOURCE) return true;
+  return (column.title || "").trim().toLowerCase() === "quick links";
+}
+
+/**
+ * @param {object[]} quickLinks
+ * @param {object[]} navNodes
+ */
+export function quickLinksToFooterLinks(quickLinks, navNodes) {
+  return (quickLinks || []).map((link) => ({
+    label: link.title || "",
+    href: resolveNavHref(navNodes, link),
+  }));
+}
+
+/**
+ * Replace synced quick-link footer columns with live sitemap quick links.
+ * @param {object[]} columns
+ * @param {object[]} quickLinks
+ * @param {object[]} navNodes
+ */
+export function resolveFooterColumns(columns, quickLinks, navNodes) {
+  return (columns || []).flatMap((col) => {
+    if (!isSyncedQuickLinksColumn(col)) return [col];
+    const links = quickLinksToFooterLinks(quickLinks, navNodes);
+    if (!links.length) return [];
+    return [{ ...col, links }];
+  });
+}
+
 /** Hide groups reserved for header-only external quick links. */
 export function filterNavTreeForDisplay(tree) {
   return tree

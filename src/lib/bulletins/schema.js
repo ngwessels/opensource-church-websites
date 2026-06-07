@@ -43,6 +43,19 @@ export function groupBulletinsByYear(bulletins) {
   return groups;
 }
 
+/** @returns {string} Upcoming Sunday (or today if Sunday) as YYYY-MM-DD in local time */
+export function getDefaultBulletinDate() {
+  const today = new Date();
+  const day = today.getDay();
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() + daysUntilSunday);
+  const year = sunday.getFullYear();
+  const month = String(sunday.getMonth() + 1).padStart(2, "0");
+  const dayOfMonth = String(sunday.getDate()).padStart(2, "0");
+  return `${year}-${month}-${dayOfMonth}`;
+}
+
 /** @param {string} date - ISO date YYYY-MM-DD */
 export function getBulletinMonthKey(date) {
   if (!date) return null;

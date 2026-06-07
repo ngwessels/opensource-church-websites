@@ -1,11 +1,61 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
-export function HeroSlideshow({ module, editing = false }) {
+function SlideCaption({ slide, captionLayout }) {
+  if (captionLayout === "centered") {
+    const title = slide.title || slide.caption;
+    if (!title && !slide.subtitle && !slide.ctaLabel) return null;
+    return (
+      <div className="site-hero-caption-centered">
+        {title && <h2 className="site-hero-caption-title">{title}</h2>}
+        {slide.subtitle && <p className="site-hero-caption-subtitle">{slide.subtitle}</p>}
+        {slide.ctaLabel && (
+          slide.ctaHref?.startsWith("http") ? (
+            <a href={slide.ctaHref} className="site-hero-cta" target="_blank" rel="noopener noreferrer">
+              {slide.ctaLabel}
+            </a>
+          ) : (
+            <Link href={slide.ctaHref || "#"} className="site-hero-cta">
+              {slide.ctaLabel}
+            </Link>
+          )
+        )}
+      </div>
+    );
+  }
+
+  if (captionLayout === "overlayBoxLeft") {
+    const title = slide.title || slide.caption;
+    if (!title && !slide.subtitle) return null;
+    return (
+      <div className="site-hero-caption-box">
+        {title && <h2 className="site-hero-caption-title">{title}</h2>}
+        {slide.subtitle && <p className="site-hero-caption-subtitle">{slide.subtitle}</p>}
+      </div>
+    );
+  }
+
+  if (!slide.caption) return null;
+  return (
+    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-6 py-8">
+      <p className="text-lg text-white">{slide.caption}</p>
+    </div>
+  );
+}
+
+export function HeroSlideshow({ module, editing = false, captionLayout = "bottomGradient" }) {
   const slides = module?.config?.slides || [];
   const [index, setIndex] = useState(0);
+  const layout = captionLayout || "bottomGradient";
+  const wrapperClass =
+    layout === "centered"
+      ? "site-hero-slideshow--centered"
+      : layout === "overlayBoxLeft"
+        ? "site-hero-slideshow--overlayBox"
+        : "";
 
   useEffect(() => {
     if (slides.length <= 1) return undefined;
@@ -23,7 +73,7 @@ export function HeroSlideshow({ module, editing = false }) {
   }
 
   return (
-    <div className="relative h-[480px] w-full overflow-hidden bg-zinc-900">
+    <div className={`relative h-[480px] w-full overflow-hidden bg-zinc-900 ${wrapperClass}`}>
       {slides.map((slide, i) => (
         <div
           key={i}
@@ -39,15 +89,11 @@ export function HeroSlideshow({ module, editing = false }) {
             unoptimized
             priority={i === 0}
           />
-          {slide.caption && (
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-6 py-8">
-              <p className="text-lg text-white">{slide.caption}</p>
-            </div>
-          )}
+          <SlideCaption slide={slide} captionLayout={layout} />
         </div>
       ))}
       {slides.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
+        <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
           {slides.map((_, i) => (
             <button
               key={i}

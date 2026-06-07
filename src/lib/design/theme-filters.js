@@ -2,8 +2,8 @@
 
 /** @typedef {Object} ThemeFilters
  * @property {string[]} dominantColor
- * @property {string[]} headerLayout
- * @property {string[]} navStyle
+ * @property {string[]} headerVariant
+ * @property {string[]} moduleVariant
  * @property {string[]} mood
  */
 
@@ -21,13 +21,20 @@ export const FILTER_OPTIONS = {
     { value: "grey", label: "Grey" },
     { value: "white", label: "White" },
   ],
-  headerLayout: [
-    { value: "centered", label: "Centered" },
-    { value: "logoLeft", label: "Logo Left" },
+  headerVariant: [
+    { value: "centeredBanner", label: "Centered Banner" },
+    { value: "logoLeftStack", label: "Logo Left" },
+    { value: "lightLogoLeft", label: "Light Logo Left" },
+    { value: "lightCentered", label: "Light Centered" },
+    { value: "inlineNav", label: "Inline Nav" },
+    { value: "minimalBar", label: "Minimal Bar" },
+    { value: "heroBand", label: "Hero Band" },
   ],
-  navStyle: [
-    { value: "solid", label: "Solid" },
-    { value: "transparent", label: "Transparent" },
+  moduleVariant: [
+    { value: "classic", label: "Classic" },
+    { value: "card", label: "Card" },
+    { value: "flatBar", label: "Flat Bar" },
+    { value: "bordered", label: "Bordered" },
   ],
   mood: [
     { value: "light", label: "Light" },
@@ -39,8 +46,8 @@ export const FILTER_OPTIONS = {
 export function emptyFilters() {
   return {
     dominantColor: [],
-    headerLayout: [],
-    navStyle: [],
+    headerVariant: [],
+    moduleVariant: [],
     mood: [],
   };
 }
@@ -55,10 +62,16 @@ export function filterThemes(themes, filters) {
     if (filters.dominantColor.length > 0 && !filters.dominantColor.includes(theme.meta.dominantColor)) {
       return false;
     }
-    if (filters.headerLayout.length > 0 && !filters.headerLayout.includes(theme.layout.header)) {
+    if (
+      filters.headerVariant.length > 0 &&
+      !filters.headerVariant.includes(theme.structure.headerVariant)
+    ) {
       return false;
     }
-    if (filters.navStyle.length > 0 && !filters.navStyle.includes(theme.layout.nav)) {
+    if (
+      filters.moduleVariant.length > 0 &&
+      !filters.moduleVariant.includes(theme.structure.moduleVariant)
+    ) {
       return false;
     }
     if (filters.mood.length > 0 && !filters.mood.includes(theme.meta.mood)) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { donorFromStripeSession } from "@/lib/donations/schema";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getStripe } from "@/lib/stripe/server";
 
@@ -41,6 +42,14 @@ export async function POST(request) {
 
     const frequency = session.metadata?.frequency ?? "once";
     const amountCents = session.amount_total ?? 0;
+    const fundId = session.metadata?.fundId;
+    const fundLabel = session.metadata?.fundLabel;
+    const returnPath = session.metadata?.returnPath;
+
+    const donor = donorFromStripeSession(
+      session.customer_details,
+      session.customer_email ?? undefined,
+    );
 
     await db.collection("donations").doc(session.id).set({
       amountCents,
@@ -49,7 +58,11 @@ export async function POST(request) {
       status: "completed",
       stripeSessionId: session.id,
       stripeCustomerId: typeof session.customer === "string" ? session.customer : undefined,
-      donorEmail: session.customer_details?.email ?? session.customer_email ?? undefined,
+      ...(donor ? { donor } : {}),
+      donorEmail: donor?.email ?? session.customer_details?.email ?? session.customer_email ?? undefined,
+      ...(fundId ? { fundId } : {}),
+      ...(fundLabel ? { fundLabel } : {}),
+      ...(returnPath ? { returnPath } : {}),
       createdAt: new Date().toISOString(),
     });
 

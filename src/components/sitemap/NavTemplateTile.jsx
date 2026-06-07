@@ -4,12 +4,11 @@ import { useDraggable } from "@dnd-kit/core";
 
 import { cn } from "@/lib/utils";
 
-export const NAV_TEMPLATE_STYLES = {
-  page: "bg-primary text-primary-foreground",
-  secure_page: "bg-red-700 text-white",
-  link: "bg-primary/85 text-primary-foreground",
-  group: "border-2 border-dashed border-primary/40 bg-primary/5 text-primary",
-};
+import { NAV_TEMPLATE_TYPES, NAV_TYPE_META } from "./nav-type-meta";
+
+export const NAV_TEMPLATE_STYLES = Object.fromEntries(
+  NAV_TEMPLATE_TYPES.map((type) => [type, NAV_TYPE_META[type].tileClass]),
+);
 
 export const NAV_TEMPLATE_LABELS = {
   page: "Page",
@@ -19,6 +18,8 @@ export const NAV_TEMPLATE_LABELS = {
 };
 
 export function NavTemplateTile({ type, onAdd, isOverlay = false }) {
+  const meta = NAV_TYPE_META[type];
+  const Icon = meta?.icon;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `template-${type}`,
     data: { fromPalette: true, type },
@@ -26,17 +27,22 @@ export function NavTemplateTile({ type, onAdd, isOverlay = false }) {
   });
 
   const className = cn(
-    "sitemap-template-tile rounded px-4 py-2.5 text-sm font-medium transition-opacity",
-    NAV_TEMPLATE_STYLES[type],
+    "sitemap-template-tile inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
+    meta?.tileClass,
     isOverlay
-      ? "cursor-grabbing shadow-lg ring-2 ring-blue-300/60"
-      : "cursor-grab hover:opacity-90 active:cursor-grabbing",
+      ? "cursor-grabbing shadow-lg ring-2 ring-primary/30"
+      : "cursor-grab shadow-sm hover:shadow-md active:cursor-grabbing",
     isDragging && !isOverlay && "opacity-40",
   );
 
+  const label = NAV_TEMPLATE_LABELS[type];
+
   if (isOverlay) {
     return (
-      <div className={className}>{NAV_TEMPLATE_LABELS[type]}</div>
+      <div className={className}>
+        {Icon && <Icon className="h-4 w-4" />}
+        {label}
+      </div>
     );
   }
 
@@ -49,7 +55,8 @@ export function NavTemplateTile({ type, onAdd, isOverlay = false }) {
       onClick={() => onAdd?.(type)}
       className={className}
     >
-      {NAV_TEMPLATE_LABELS[type]}
+      {Icon && <Icon className="h-4 w-4" />}
+      {label}
     </button>
   );
 }

@@ -60,6 +60,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /formSubmissions/{submissionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /users/{userId}/mcpConnections/{connectionId} {
       allow read, create, update: if isOwner(userId) && isAdmin();
       allow delete: if false;

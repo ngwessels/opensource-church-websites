@@ -6,6 +6,14 @@ import { useRef, useState } from "react";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ADMIN_Z } from "@/lib/design/admin-tokens";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { uploadMediaFile } from "@/lib/media/upload";
@@ -22,7 +30,8 @@ import { PeopleModuleEditor } from "./PeopleModuleEditor";
 import { SlideListEditor } from "./SlideListEditor";
 import { VideoModuleEditor } from "./VideoModuleEditor";
 import { ZoomModuleEditor } from "./ZoomModuleEditor";
-import { EmbedModuleEditor } from "./EmbedModuleEditor";
+import { FeatureTilesModuleEditor } from "./FeatureTilesModuleEditor";
+import { FormModuleEditor } from "./FormModuleEditor";
 
 const overlayZ = { zIndex: ADMIN_Z.overlay };
 
@@ -39,6 +48,10 @@ export function ModuleEditor({ module, siteConfig, onSave, onClose, pageId }) {
 
   if (module.type === "image") {
     return <ImageModuleEditor module={module} onSave={onSave} onClose={onClose} pageId={pageId} />;
+  }
+
+  if (module.type === "feature_tiles") {
+    return <FeatureTilesModuleEditor module={module} onSave={onSave} onClose={onClose} />;
   }
 
   if (module.type === "slideshow") {
@@ -110,6 +123,10 @@ export function ModuleEditor({ module, siteConfig, onSave, onClose, pageId }) {
     return <DocumentsModuleEditor module={module} onSave={onSave} onClose={onClose} />;
   }
 
+  if (module.type === "form") {
+    return <FormModuleEditor module={module} onSave={onSave} onClose={onClose} />;
+  }
+
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4" style={overlayZ}>
       <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl">
@@ -132,6 +149,7 @@ function SlideshowModuleEditor({ module, onSave, onClose }) {
         <div className="flex-1 overflow-auto p-4">
           <SlideListEditor
             slides={module.config?.slides}
+            showHeroFields
             onChange={(data) => {
               dataRef.current = data;
             }}
@@ -199,6 +217,7 @@ function ImageModuleEditor({ module, onSave, onClose }) {
   const [src, setSrc] = useState(module.config?.src || "");
   const [alt, setAlt] = useState(module.config?.alt || "");
   const [caption, setCaption] = useState(module.config?.caption || "");
+  const [size, setSize] = useState(module.config?.size || "small");
   const [showPicker, setShowPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -304,12 +323,26 @@ function ImageModuleEditor({ module, onSave, onClose }) {
             onChange={(e) => setCaption(e.target.value)}
             placeholder="Caption (optional)"
           />
+          <div className="space-y-2">
+            <Label htmlFor="image-size">Display size</Label>
+            <Select value={size} onValueChange={setSize}>
+              <SelectTrigger id="image-size">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="small">Small</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="large">Large</SelectItem>
+                <SelectItem value="full">Full width</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="flex justify-end gap-2 border-t px-4 py-3">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" onClick={() => onSave({ title, src, alt, caption })}>
+          <Button type="button" onClick={() => onSave({ title, src, alt, caption, size })}>
             Save
           </Button>
         </div>

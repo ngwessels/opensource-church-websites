@@ -13,7 +13,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PublicSite } from "@/components/site/PublicSite";
 import { getPageType } from "@/lib/bulletins/schema";
@@ -21,9 +21,17 @@ import { useBulletins } from "@/hooks/useBulletins";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { getDefaultConfig } from "@/lib/modules/defaults";
-import { publishPage, revertPageDraft } from "@/lib/pages/publish";
+import {
+  buildPublishedSnapshot,
+  getPagePublishSnapshot,
+  pageDiffersFromPublished,
+  pageHasUnpublishedChanges,
+  publishPage,
+  revertPageDraft,
+} from "@/lib/pages/publish";
 import {
   clearFeaturesRegion,
+  isFeaturesModuleType,
   FEATURES_REGION_ID,
   findModuleRegionId,
   getDropValidationError,
@@ -34,11 +42,13 @@ import {
   removeModuleById,
 } from "@/lib/pages/regions";
 import { MODULE_LABELS } from "@/lib/design/admin-tokens";
+import { PAGE_VIEWPORT_PREVIEW_WIDTHS } from "@/lib/pages/viewports";
 import { buildNavTree, generateId, sortQuickLinks } from "@/lib/sitemap/tree";
 import { useNavNodes } from "@/hooks/useNavNodes";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
 
 import { AdminFooter } from "./AdminFooter";
+import { DonationSettingsSheet } from "./DonationSettingsSheet";
 import { HeaderFooterSheet } from "./HeaderFooterSheet";
 import { ModuleEditor } from "./ModuleEditor";
 import { ModuleTile } from "./ModuleTile";
@@ -50,16 +60,19 @@ export function EditWebsite({ slug = "" }) {
   const { nodes } = useNavNodes();
   const [page, setPage] = useState(null);
   const [pageId, setPageId] = useState(null);
+  const [loadedSnapshot, setLoadedSnapshot] = useState(null);
   const [trayOpen, setTrayOpen] = useState(false);
   const [editingModule, setEditingModule] = useState(null);
   const [sectionSheet, setSectionSheet] = useState(null);
   const [pageSettingsOpen, setPageSettingsOpen] = useState(false);
+  const [donationSettingsOpen, setDonationSettingsOpen] = useState(false);
   const [dragType, setDragType] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dropError, setDropError] = useState(null);
   const [toast, setToast] = useState(null);
   const [moduleToRemove, setModuleToRemove] = useState(null);
   const [removingModule, setRemovingModule] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState("desktop");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -69,6 +82,12 @@ export function EditWebsite({ slug = "" }) {
   const quickLinks = sortQuickLinks(nodes);
   const { bulletins } = useBulletins();
   const isBulletinsPage = getPageType(page) === "bulletins";
+  const isDonationPage = getPageType(page) === "donation";
+  const canPublish = useMemo(
+    () => pageHasUnpublishedChanges(page, { baselineSnapshot: loadedSnapshot }),
+    [page, loadedSnapshot],
+  );
+  const canRevert = useMemo(() => pageDiffersFromPublished(page), [page]);
 
   const showToast = (message) => {
     setToast(message);
@@ -81,6 +100,8 @@ export function EditWebsite({ slug = "" }) {
   };
 
   const loadPage = useCallback(async () => {
+    setPage(null);
+    setLoadedSnapshot(null);
     const db = getFirebaseFirestore();
     const { collection, query, where, getDocs } = await import("firebase/firestore");
     const q = query(collection(db, COLLECTIONS.pages), where("slug", "==", slug));
@@ -89,15 +110,26 @@ export function EditWebsite({ slug = "" }) {
       const d = snap.docs[0];
       const raw = d.data();
       const normalized = normalizePageRegions(raw);
+      const snapshot = getPagePublishSnapshot(normalized);
       setPageId(d.id);
-      setPage(normalized);
+      setLoadedSnapshot(snapshot);
       if (normalized !== raw) {
-        await updateDoc(doc(db, COLLECTIONS.pages, d.id), {
+        const updates = {
           regions: normalized.regions,
           contentColumns: normalized.contentColumns,
           maxModulesPerRegion: normalized.maxModulesPerRegion,
           updatedAt: new Date().toISOString(),
+        };
+        if (raw.status === "published") {
+          updates.publishedSnapshot = buildPublishedSnapshot({ ...raw, ...updates });
+        }
+        await updateDoc(doc(db, COLLECTIONS.pages, d.id), updates);
+        setPage({
+          ...normalized,
+          publishedSnapshot: updates.publishedSnapshot ?? raw.publishedSnapshot,
         });
+      } else {
+        setPage(normalized);
       }
     }
   }, [slug]);
@@ -127,8 +159,8 @@ export function EditWebsite({ slug = "" }) {
 
     const regions = insertModuleAt(page?.regions || [], region, mod, insertIndex);
     const updates = { regions };
-    if (type === "slideshow" && region === FEATURES_REGION_ID) {
-      updates.heroSlideshowEnabled = true;
+    if (isFeaturesModuleType(type) && region === FEATURES_REGION_ID) {
+      updates.heroSlideshowEnabled = type === "slideshow";
     }
     await updatePage(updates);
     const added = regions.flatMap((r) => r.modules).find((m) => m.id === mod.id);
@@ -167,7 +199,7 @@ export function EditWebsite({ slug = "" }) {
   };
 
   const handlePublish = async () => {
-    if (!pageId) return;
+    if (!pageId || !canPublish) return;
     try {
       await publishPage(getFirebaseFirestore(), pageId);
       await loadPage();
@@ -186,6 +218,11 @@ export function EditWebsite({ slug = "" }) {
 
   const handlePageSettingsSave = async (updates) => {
     await updatePage(updates);
+    await loadPage();
+  };
+
+  const handleDonationSettingsSave = async (donationConfig) => {
+    await updatePage({ donationConfig });
     await loadPage();
   };
 
@@ -298,7 +335,7 @@ export function EditWebsite({ slug = "" }) {
       let regions = removeModuleById(page.regions, module.id);
       const updates = { regions };
 
-      if (module.type === "slideshow" && findModuleRegionId(page, module.id) === FEATURES_REGION_ID) {
+      if (isFeaturesModuleType(module.type) && findModuleRegionId(page, module.id) === FEATURES_REGION_ID) {
         regions = clearFeaturesRegion(regions);
         updates.regions = regions;
         updates.heroSlideshowEnabled = false;
@@ -329,8 +366,8 @@ export function EditWebsite({ slug = "" }) {
   };
 
   const handleTrayAdd = (type) => {
-    if (type === "slideshow") {
-      showError("Drag Slideshow onto the features area above your content.");
+    if (isFeaturesModuleType(type)) {
+      showError("Drag Slideshow or Feature Tiles onto the features area above your content.");
       return;
     }
     handleAddModule(type, "content-1");
@@ -368,26 +405,46 @@ export function EditWebsite({ slug = "" }) {
           </div>
         )}
 
-        <PublicSite
-          siteConfig={config}
-          navTree={navTree}
-          navNodes={nodes}
-          quickLinks={quickLinks}
-          page={page}
-          pageId={pageId}
-          bulletins={bulletins}
-          editing
-          trayOpen={trayOpen}
-          isDragActive={isDragging}
-          dragType={dragType}
-          onEditModule={setEditingModule}
-          onSaveModule={handleSaveModuleConfig}
-          onRemoveModule={requestRemoveModule}
-          onRemoveSlideshow={requestRemoveModule}
-          onEditSlideshow={setEditingModule}
-          onHeaderSettings={(focus) => setSectionSheet({ section: "header", focus })}
-          onFooterSettings={() => setSectionSheet("footer")}
-        />
+        {isDonationPage && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
+            Donors see the donation form below your page content. Click the edit button on the form
+            to configure funds and amounts.
+          </div>
+        )}
+
+        <div className="flex justify-center bg-muted/30">
+          <div
+            className="w-full transition-[max-width] duration-200"
+            style={{
+              maxWidth: PAGE_VIEWPORT_PREVIEW_WIDTHS[previewDevice]
+                ? `${PAGE_VIEWPORT_PREVIEW_WIDTHS[previewDevice]}px`
+                : "100%",
+            }}
+          >
+            <PublicSite
+              siteConfig={config}
+              navTree={navTree}
+              navNodes={nodes}
+              quickLinks={quickLinks}
+              page={page}
+              pageId={pageId}
+              bulletins={bulletins}
+              editing
+              previewViewport={previewDevice}
+              trayOpen={trayOpen}
+              isDragActive={isDragging}
+              dragType={dragType}
+              onEditModule={setEditingModule}
+              onSaveModule={handleSaveModuleConfig}
+              onRemoveModule={requestRemoveModule}
+              onRemoveSlideshow={requestRemoveModule}
+              onEditSlideshow={setEditingModule}
+              onHeaderSettings={(focus) => setSectionSheet({ section: "header", focus })}
+              onFooterSettings={() => setSectionSheet("footer")}
+              onEditDonation={isDonationPage ? () => setDonationSettingsOpen(true) : undefined}
+            />
+          </div>
+        </div>
 
         {toast && (
           <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground shadow-lg">
@@ -399,6 +456,8 @@ export function EditWebsite({ slug = "" }) {
       <AdminFooter
         trayOpen={trayOpen}
         hideContentTray={isBulletinsPage}
+        previewDevice={previewDevice}
+        onPreviewDeviceChange={setPreviewDevice}
         onCloseTray={() => setTrayOpen(false)}
         onAddModule={handleTrayAdd}
         onAddContent={() => setTrayOpen((o) => !o)}
@@ -409,6 +468,8 @@ export function EditWebsite({ slug = "" }) {
         onRevert={handleRevert}
         onPreview={() => window.open(slug ? `/${slug}` : "/", "_blank")}
         onPublish={handlePublish}
+        canPublish={canPublish}
+        canRevert={canRevert}
         dropError={dropError}
       />
 
@@ -437,8 +498,18 @@ export function EditWebsite({ slug = "" }) {
       <PageSettingsSheet
         open={pageSettingsOpen}
         page={page}
+        pageTitle={page?.title}
+        siteName={config?.name}
+        siteSeo={config?.seo}
         onClose={() => setPageSettingsOpen(false)}
         onSave={handlePageSettingsSave}
+      />
+
+      <DonationSettingsSheet
+        open={donationSettingsOpen}
+        page={page}
+        onClose={() => setDonationSettingsOpen(false)}
+        onSave={handleDonationSettingsSave}
       />
 
       <RemoveModuleDialog

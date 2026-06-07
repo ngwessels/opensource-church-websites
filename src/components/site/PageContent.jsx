@@ -1,6 +1,5 @@
 "use client";
 
-import { getContentMarginXStyle } from "@/lib/pages/layout";
 import {
   getContentColumnCount,
   getContentRegionIds,
@@ -8,6 +7,8 @@ import {
   isSidebarLayout,
   SIDEBAR_REGION_ID,
 } from "@/lib/pages/regions";
+import { getResponsiveLayoutStyle } from "@/lib/pages/viewports";
+import { filterSectionNavItems } from "@/lib/pages/visibility";
 import { getSectionNavContext } from "@/lib/sitemap/tree";
 
 import { RegionColumn } from "@/components/builder/RegionColumn";
@@ -19,6 +20,7 @@ export function PageContent({
   siteConfig,
   navNodes = [],
   pageId,
+  hiddenPageIds = null,
   editing = false,
   onEditModule,
   onSaveModule,
@@ -26,17 +28,30 @@ export function PageContent({
   trayOpen = false,
   onRemoveSlideshow,
   onEditSlideshow,
+  heroCaptionVariant = "bottomGradient",
   isDragActive = false,
   dragType = null,
+  previewViewport = null,
+  donationReturnPath = null,
+  onEditDonation,
 }) {
   const layout = page?.layout || "default";
   const columnCount = getContentColumnCount(page);
   const contentIds = getContentRegionIds(columnCount);
+  const layoutOptions = previewViewport ? { previewViewport } : {};
+  const responsiveStyle = getResponsiveLayoutStyle(page, layoutOptions);
+  const useResponsiveClasses = !previewViewport;
+
   const sectionNavContext = getSectionNavContext(navNodes, {
     slug: page?.slug,
     pageId,
   });
-  const hasSectionNav = Boolean(sectionNavContext);
+  const sectionNavItems =
+    sectionNavContext &&
+    (!editing && hiddenPageIds?.size
+      ? filterSectionNavItems(sectionNavContext.items, hiddenPageIds)
+      : sectionNavContext.items);
+  const hasSectionNav = Boolean(sectionNavItems?.length);
   const hasSidebarLayout = isSidebarLayout(layout);
   const sidebarFirst = hasSectionNav
     ? layout !== "sidebar-right"
@@ -58,17 +73,26 @@ export function PageContent({
       isDragActive={isDragActive}
       dragType={dragType}
       columnCount={columnCount}
-      className="min-w-0 flex-1"
+      className="min-w-0"
+      donationReturnPath={id === "content-1" ? donationReturnPath : null}
+      onEditDonation={id === "content-1" ? onEditDonation : null}
     />
   ));
 
-  const marginStyle = getContentMarginXStyle(page);
+  const marginClass = useResponsiveClasses ? "page-content-responsive" : "";
+  const columnsClass = useResponsiveClasses ? "page-content-columns" : "grid gap-8";
+  const columnsStyle = previewViewport
+    ? {
+        gridTemplateColumns: `repeat(${responsiveStyle["--cols-mobile"]}, minmax(0, 1fr))`,
+      }
+    : undefined;
+
   const coreClass =
     layout === "full-width" && !hasSectionNav
       ? "w-full"
       : layout === "default" && !hasSectionNav
-        ? "mx-auto max-w-3xl"
-        : "mx-auto max-w-6xl";
+        ? "site-content-inner mx-auto max-w-3xl"
+        : "site-content-inner mx-auto w-full";
 
   const features = (
     <DroppableFeatures
@@ -77,6 +101,7 @@ export function PageContent({
       isDragActive={isDragActive}
       dragType={dragType}
       trayOpen={trayOpen}
+      heroCaptionVariant={heroCaptionVariant}
       onRemoveSlideshow={onRemoveSlideshow}
       onEditSlideshow={onEditSlideshow}
     />
@@ -86,7 +111,7 @@ export function PageContent({
     <aside className="w-full space-y-4 lg:w-1/3">
       {hasSectionNav && (
         <SectionNav
-          items={sectionNavContext.items}
+          items={sectionNavItems}
           activeNodeId={sectionNavContext.activeNodeId}
           navNodes={navNodes}
           editing={editing}
@@ -116,15 +141,16 @@ export function PageContent({
         {features}
         <div
           id="core"
-          className={`flex flex-col gap-8 py-8 ${coreClass} ${
+          className={`flex flex-col gap-8 py-8 ${coreClass} ${marginClass} ${
             sidebarFirst ? "lg:flex-row" : "lg:flex-row-reverse"
           }`}
-          style={marginStyle}
+          style={responsiveStyle}
         >
           {sidebarColumn}
           <div
             id="content1"
-            className={`flex min-w-0 flex-col gap-8 ${columnCount > 1 ? "lg:flex-row" : ""} lg:w-2/3`}
+            className={`min-w-0 lg:w-2/3 ${columnsClass}`}
+            style={columnsStyle}
           >
             {contentColumns}
           </div>
@@ -137,8 +163,8 @@ export function PageContent({
     <div>
       {features}
       <div
-        className={`flex flex-col gap-8 py-8 ${columnCount > 1 ? "lg:flex-row" : ""} ${coreClass}`}
-        style={marginStyle}
+        className={`py-8 ${columnsClass} ${coreClass} ${marginClass}`}
+        style={{ ...responsiveStyle, ...columnsStyle }}
       >
         {contentColumns}
       </div>

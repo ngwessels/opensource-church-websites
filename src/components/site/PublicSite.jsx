@@ -3,8 +3,10 @@
 import { Suspense } from "react";
 
 import { BulletinsPageView } from "@/components/bulletins/BulletinsPageView";
+import { useAdminPublicRedirect } from "@/hooks/useAdminPublicRedirect";
 import { getPageType } from "@/lib/bulletins/schema";
-import { getThemeById } from "@/lib/design/themes";
+import { resolveDesignTheme } from "@/lib/design/themes";
+import { tokensToCssVars } from "@/lib/design/themes/templates";
 
 import { PageContent } from "./PageContent";
 import { SectionOverlay } from "@/components/builder/SectionOverlay";
@@ -20,6 +22,7 @@ export function PublicSite({
   pageId,
   bulletins = [],
   editing = false,
+  designPreview = false,
   isDragActive = false,
   dragType = null,
   onEditModule,
@@ -30,76 +33,124 @@ export function PublicSite({
   onEditSlideshow,
   onHeaderSettings,
   onFooterSettings,
+  previewViewport = null,
+  onEditDonation,
 }) {
-  const colors = siteConfig?.design?.colors || {};
+  const { checking: redirectingAdmin } = useAdminPublicRedirect({
+    enabled: !editing && !designPreview,
+    pageSlug: page?.slug ?? "",
+  });
+
+  if (redirectingAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-zinc-500">Loading…</div>
+    );
+  }
+
+  const { theme, structure, tokens } = resolveDesignTheme(siteConfig?.design);
   const fonts = siteConfig?.design?.fonts || {};
-  const theme = getThemeById(siteConfig?.design?.themeId);
   const layout = siteConfig?.design?.layout || theme.layout || {};
   const headerLayout = layout.header || siteConfig?.headerConfig?.layout || "centered";
   const navStyle = layout.nav || theme.layout?.nav || "solid";
   const isBulletinsPage = getPageType(page) === "bulletins";
+  const isDonationPage = getPageType(page) === "donation";
   const pageSlug = page?.slug ? `/${page.slug}` : "";
+  const donationReturnPath = isDonationPage ? pageSlug || "/" : null;
+
+  const cssVars = tokensToCssVars({
+    ...tokens,
+    colors: {
+      ...tokens.colors,
+      ...siteConfig?.design?.colors,
+    },
+    fonts: {
+      ...tokens.fonts,
+      ...fonts,
+    },
+  });
 
   return (
-    <div
-      className="site-root flex min-h-screen flex-col bg-white"
-      style={{
-        "--site-primary": colors.primary || "#7f1d1d",
-        "--site-secondary": colors.secondary || "#1e3a5f",
-        "--site-accent": colors.accent || "#d97706",
-        "--site-heading-font": fonts.heading || "Georgia, serif",
-        fontFamily: fonts.body,
-      }}
-      data-header-layout={headerLayout}
-      data-nav-style={navStyle}
-    >
-      <SiteHeader
-        siteConfig={siteConfig}
-        navTree={navTree}
-        navNodes={navNodes}
-        quickLinks={quickLinks}
-        navStyle={navStyle}
-        editing={editing}
-        onHeaderSettings={onHeaderSettings}
-      />
+      <div
+        className="site-root flex min-h-screen flex-col"
+        style={{
+          ...cssVars,
+          fontFamily: fonts.body || tokens.fonts.body,
+        }}
+        data-site-template={theme.template}
+        data-header-variant={structure.headerVariant}
+        data-nav-variant={structure.navVariant}
+        data-footer-variant={structure.footerVariant}
+        data-module-variant={structure.moduleVariant}
+        data-quick-links-variant={structure.quickLinksVariant}
+        data-features-variant={structure.featuresVariant}
+        data-hero-caption-variant={structure.heroCaptionVariant}
+        data-header-tone={structure.headerTone}
+        data-nav-uppercase={tokens.typography.navUppercase ? "true" : "false"}
+        data-header-layout={headerLayout}
+        data-nav-style={navStyle}
+      >
+        <SiteHeader
+          siteConfig={siteConfig}
+          navTree={navTree}
+          navNodes={navNodes}
+          quickLinks={quickLinks}
+          navStyle={navStyle}
+          headerVariant={structure.headerVariant}
+          quickLinksVariant={structure.quickLinksVariant}
+          editing={editing}
+          onHeaderSettings={onHeaderSettings}
+          previewViewport={previewViewport}
+        />
 
-      <main className="flex-1">
-        {isBulletinsPage ? (
-          <Suspense
-            fallback={
-              <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-zinc-500">Loading bulletins…</div>
-            }
-          >
-            <BulletinsPageView
+        <main className="flex-1">
+          {isBulletinsPage ? (
+            <Suspense
+              fallback={
+                <div className="site-content-inner mx-auto px-4 py-8 text-sm opacity-60">
+                  Loading bulletins…
+                </div>
+              }
+            >
+              <BulletinsPageView
+                page={page}
+                bulletins={bulletins}
+                editing={editing}
+                pageSlug={pageSlug}
+              />
+            </Suspense>
+          ) : (
+            <PageContent
               page={page}
-              bulletins={bulletins}
+              siteConfig={siteConfig}
+              navNodes={navNodes}
+              pageId={pageId}
               editing={editing}
-              pageSlug={pageSlug}
+              heroCaptionVariant={structure.heroCaptionVariant}
+              isDragActive={isDragActive}
+              dragType={dragType}
+              onEditModule={onEditModule}
+              onSaveModule={onSaveModule}
+              onRemoveModule={onRemoveModule}
+              trayOpen={trayOpen}
+              onRemoveSlideshow={onRemoveSlideshow}
+              onEditSlideshow={onEditSlideshow}
+              previewViewport={previewViewport}
+              donationReturnPath={donationReturnPath}
+              onEditDonation={onEditDonation}
             />
-          </Suspense>
-        ) : (
-          <PageContent
-            page={page}
-            siteConfig={siteConfig}
-            navNodes={navNodes}
-            pageId={pageId}
-            editing={editing}
-            isDragActive={isDragActive}
-            dragType={dragType}
-            onEditModule={onEditModule}
-            onSaveModule={onSaveModule}
-            onRemoveModule={onRemoveModule}
-            trayOpen={trayOpen}
-            onRemoveSlideshow={onRemoveSlideshow}
-            onEditSlideshow={onEditSlideshow}
-          />
-        )}
-      </main>
+          )}
+        </main>
 
-      <div className="relative">
-        {editing && <SectionOverlay label="FOOTER" onClick={onFooterSettings} />}
-        <SiteFooter siteConfig={siteConfig} />
+        <div className="relative">
+          {editing && <SectionOverlay label="FOOTER" onClick={onFooterSettings} />}
+          <SiteFooter
+            siteConfig={siteConfig}
+            footerVariant={structure.footerVariant}
+            quickLinks={quickLinks}
+            navNodes={navNodes}
+            editing={editing}
+          />
+        </div>
       </div>
-    </div>
   );
 }

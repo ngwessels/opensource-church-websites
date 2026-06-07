@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createEmptyDocumentItem,
+  isPdfDocument,
   normalizeDocumentItem,
   normalizeDocumentsConfig,
 } from "@/lib/documents/schema";
@@ -42,9 +43,9 @@ export function DocumentsModuleEditor({ module, onSave, onClose }) {
       prev.map((item, i) => {
         if (i !== index) return item;
         if (source === "library") {
-          return { ...item, source, url: "", mediaId: "" };
+          return { ...item, source, url: "", mediaId: "", mimeType: "", displayMode: "link" };
         }
-        return { ...item, source, mediaId: "" };
+        return { ...item, source, mediaId: "", mimeType: "", displayMode: "link" };
       }),
     );
   };
@@ -65,6 +66,7 @@ export function DocumentsModuleEditor({ module, onSave, onClose }) {
       label,
       url: file.downloadUrl || "",
       mediaId: file.id || "",
+      mimeType: file.mimeType || "",
       source: "library",
     });
     setPickerIndex(null);
@@ -99,7 +101,8 @@ export function DocumentsModuleEditor({ module, onSave, onClose }) {
             <div>
               <h2 className="text-base font-semibold text-foreground">Edit documents</h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Add downloadable files from your library or link to external documents.
+                Add downloadable files from your library, show PDFs inline on the page, or link to
+                external documents.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -213,6 +216,30 @@ export function DocumentsModuleEditor({ module, onSave, onClose }) {
                     </TabsContent>
                   </Tabs>
                 </div>
+
+                {isPdfDocument(item) && item.mediaId && item.source === "library" && (
+                  <div className="space-y-2">
+                    <Label>Display</Label>
+                    <Tabs
+                      value={item.displayMode || "link"}
+                      onValueChange={(value) => updateItem(i, { displayMode: value })}
+                      className="gap-3"
+                    >
+                      <TabsList className="grid h-9 w-full grid-cols-2">
+                        <TabsTrigger value="link" className="text-xs sm:text-sm">
+                          Download link
+                        </TabsTrigger>
+                        <TabsTrigger value="inline" className="text-xs sm:text-sm">
+                          Show on page
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    <p className="text-xs text-muted-foreground">
+                      Show on page displays all PDF pages inline. Works for PDFs uploaded to your
+                      file library.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}

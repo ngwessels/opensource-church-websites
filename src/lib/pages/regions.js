@@ -1,3 +1,5 @@
+import { getMaxContentColumns } from "./viewports.js";
+
 export const FEATURES_REGION_ID = "features";
 export const SIDEBAR_REGION_ID = "sidebar";
 export const DEFAULT_CONTENT_COLUMNS = 1;
@@ -11,6 +13,7 @@ const CONTENT_COLUMN_TYPES = new Set([
   "documents",
   "people",
   "calendar",
+  "form",
   "image",
   "gallery",
   "photo_albums",
@@ -26,7 +29,13 @@ const CONTENT_COLUMN_TYPES = new Set([
   "rss",
 ]);
 
-const FEATURES_TYPES = new Set(["slideshow"]);
+const FEATURES_TYPES = new Set(["slideshow", "feature_tiles"]);
+
+export const FEATURES_MODULE_TYPES = FEATURES_TYPES;
+
+export function isFeaturesModuleType(type) {
+  return FEATURES_TYPES.has(type);
+}
 
 export function getContentRegionId(index) {
   return `content-${index}`;
@@ -37,12 +46,7 @@ export function getContentRegionIds(columnCount = DEFAULT_CONTENT_COLUMNS) {
 }
 
 export function getContentColumnCount(page) {
-  if (page?.contentColumns) return page.contentColumns;
-  const regions = page?.regions || [];
-  const contentRegions = regions.filter((r) => r.id.startsWith("content-"));
-  if (contentRegions.length > 0) return contentRegions.length;
-  if (regions.some((r) => r.id === "main")) return 1;
-  return DEFAULT_CONTENT_COLUMNS;
+  return getMaxContentColumns(page);
 }
 
 export function getMaxModulesPerRegion(page) {
@@ -50,7 +54,7 @@ export function getMaxModulesPerRegion(page) {
 }
 
 export function getRegionLabel(regionId, columnCount) {
-  if (regionId === FEATURES_REGION_ID) return "Features Slideshow";
+  if (regionId === FEATURES_REGION_ID) return "Features";
   if (regionId === SIDEBAR_REGION_ID) return "Sidebar";
   const match = regionId.match(/^content-(\d+)$/);
   if (match) {
@@ -117,12 +121,12 @@ export function getDropValidationError(type, regionId, page, { excludeModuleId }
     return "No regions on the page allow for this module.";
   }
 
-  if (type === "slideshow" && regionId !== FEATURES_REGION_ID) {
-    return "Slideshow modules must be placed in the features area.";
+  if (isFeaturesModuleType(type) && regionId !== FEATURES_REGION_ID) {
+    return "Features modules must be placed in the features area.";
   }
 
-  if (type !== "slideshow" && regionId === FEATURES_REGION_ID) {
-    return "Only slideshow modules can be placed in the features area.";
+  if (!isFeaturesModuleType(type) && regionId === FEATURES_REGION_ID) {
+    return "Only slideshow or feature tile modules can be placed in the features area.";
   }
 
   if (isRegionFull(page, regionId, excludeModuleId)) {
@@ -152,8 +156,8 @@ export function normalizePageRegions(page) {
   if (mainIdx >= 0) {
     const main = regions[mainIdx];
     const content1Idx = regions.findIndex((r) => r.id === "content-1");
-    const slideshows = (main.modules || []).filter((m) => m.type === "slideshow");
-    const otherModules = (main.modules || []).filter((m) => m.type !== "slideshow");
+    const slideshows = (main.modules || []).filter((m) => isFeaturesModuleType(m.type));
+    const otherModules = (main.modules || []).filter((m) => !isFeaturesModuleType(m.type));
 
     if (slideshows.length > 0) {
       let features = regions.find((r) => r.id === FEATURES_REGION_ID);
@@ -195,11 +199,11 @@ export function normalizePageRegions(page) {
   const features = regions.find((r) => r.id === FEATURES_REGION_ID);
   for (const region of regions) {
     if (!isContentRegion(region.id)) continue;
-    const slideshows = (region.modules || []).filter((m) => m.type === "slideshow");
-    if (slideshows.length === 0) continue;
-    region.modules = (region.modules || []).filter((m) => m.type !== "slideshow");
+    const featureModules = (region.modules || []).filter((m) => isFeaturesModuleType(m.type));
+    if (featureModules.length === 0) continue;
+    region.modules = (region.modules || []).filter((m) => !isFeaturesModuleType(m.type));
     if ((features.modules || []).length === 0) {
-      features.modules = slideshows.map((m, i) => ({ ...m, region: FEATURES_REGION_ID, order: i }));
+      features.modules = featureModules.map((m, i) => ({ ...m, region: FEATURES_REGION_ID, order: i }));
     }
     changed = true;
   }
@@ -301,12 +305,20 @@ export function removeModuleById(regions, moduleId) {
   }));
 }
 
-export function hasFeaturesSlideshow(page) {
+export function hasFeaturesModule(page) {
   return getRegionModuleCount(page, FEATURES_REGION_ID) > 0;
+}
+
+/** @deprecated Use hasFeaturesModule */
+export function hasFeaturesSlideshow(page) {
+  const mod = getRegionModules(page, FEATURES_REGION_ID)[0];
+  return mod?.type === "slideshow";
 }
 
 /** Whether the hero slideshow section is available in the editor (optional). */
 export function isHeroSlideshowEnabled(page) {
-  if (hasFeaturesSlideshow(page)) return true;
+  const mod = getRegionModules(page, FEATURES_REGION_ID)[0];
+  if (mod?.type === "slideshow") return true;
+  if (mod?.type === "feature_tiles") return false;
   return page?.heroSlideshowEnabled !== false;
 }

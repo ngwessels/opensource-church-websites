@@ -6,6 +6,7 @@ export const COLLECTIONS = {
   mediaFolders: "mediaFolders",
   users: "users",
   donations: "donations",
+  formSubmissions: "formSubmissions",
   bulletins: "bulletins",
   mcpTokenLookup: "mcpTokenLookup",
   mcpOAuthClients: "mcpOAuthClients",

@@ -9,6 +9,13 @@ import { useDesignPreviewListener } from "@/hooks/useDesignPreviewBridge";
 import { getPageType } from "@/lib/bulletins/schema";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
+import {
+  filterNavTreeForPublic,
+  filterQuickLinksForPublic,
+  filterSiteConfigForPublic,
+  getHiddenPageSets,
+  isPageHidden,
+} from "@/lib/pages/visibility";
 import { buildNavTree, sortQuickLinks } from "@/lib/sitemap/tree";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 
@@ -24,6 +31,7 @@ export function PublicPageClient({ slug = "" }) {
   const [navNodes, setNavNodes] = useState([]);
   const [quickLinks, setQuickLinks] = useState([]);
   const [bulletins, setBulletins] = useState([]);
+  const [hiddenPageIds, setHiddenPageIds] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -35,25 +43,44 @@ export function PublicPageClient({ slug = "" }) {
     }
 
     async function load() {
+      setPage(null);
+      setPageId(null);
+      setError(null);
       const db = getFirebaseFirestore();
       const { doc, getDoc } = await import("firebase/firestore");
 
       const siteSnap = await getDoc(doc(db, COLLECTIONS.site, "config"));
-      setSiteConfig(siteSnap.exists() ? siteSnap.data() : null);
+      const rawSiteConfig = siteSnap.exists() ? siteSnap.data() : null;
 
-      const navSnap = await getDocs(collection(db, COLLECTIONS.navNodes));
+      const [navSnap, hiddenSnap] = await Promise.all([
+        getDocs(collection(db, COLLECTIONS.navNodes)),
+        getDocs(query(collection(db, COLLECTIONS.pages), where("hidden", "==", true))),
+      ]);
       const nodes = navSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const hiddenPages = hiddenSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const { pageIds: hiddenPageIds, slugs: hiddenSlugs } = getHiddenPageSets(hiddenPages);
+
+      setHiddenPageIds(hiddenPageIds);
+      setSiteConfig(filterSiteConfigForPublic(rawSiteConfig, hiddenSlugs));
       setNavNodes(nodes);
-      setNavTree(buildNavTree(nodes));
-      setQuickLinks(sortQuickLinks(nodes));
+      setNavTree(filterNavTreeForPublic(buildNavTree(nodes), hiddenPageIds));
+      setQuickLinks(filterQuickLinksForPublic(sortQuickLinks(nodes), hiddenPageIds));
 
       const pageSnap = await getDocs(
         query(collection(db, COLLECTIONS.pages), where("slug", "==", slug)),
       );
       if (!pageSnap.empty) {
         const pageDoc = pageSnap.docs[0];
+        const pageData = pageDoc.data();
+        if (isPageHidden(pageData)) {
+          setPage(null);
+          setPageId(null);
+          setError("Page not found");
+          setLoading(false);
+          return;
+        }
         setPageId(pageDoc.id);
-        setPage(pageDoc.data());
+        setPage(pageData);
 
         if (getPageType(pageData) === "bulletins") {
           const bulletinSnap = await getDocs(
@@ -62,6 +89,8 @@ export function PublicPageClient({ slug = "" }) {
           setBulletins(bulletinSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
         }
       } else {
+        setPage(null);
+        setPageId(null);
         setError("Page not found");
       }
       setLoading(false);
@@ -129,6 +158,8 @@ export function PublicPageClient({ slug = "" }) {
       page={page}
       pageId={pageId}
       bulletins={bulletins}
+      hiddenPageIds={hiddenPageIds}
+      designPreview={designPreviewEnabled}
     />
   );
 }

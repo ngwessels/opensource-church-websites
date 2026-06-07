@@ -16,13 +16,23 @@ export function resolveHeaderStyles(headerConfig, design) {
   const styles = { ...DEFAULT_HEADER_STYLES, ...headerConfig?.styles };
   const colors = design?.colors || {};
   const fonts = design?.fonts || {};
+  const headerTone = design?.structure?.headerTone || "dark";
+  const isLight = headerTone === "light";
+  const lightBg = colors.background || design?.tokens?.colors?.background || "#ffffff";
+  const lightText = colors.text || design?.tokens?.colors?.text || "#18181b";
 
   return {
-    headerBackground: styles.headerBackground || colors.primary || "#7f1d1d",
-    navBackground: styles.navBackground || colors.secondary || "#1e3a5f",
-    titleColor: styles.titleColor || "#ffffff",
-    taglineColor: styles.taglineColor || "rgba(255, 255, 255, 0.9)",
-    navTextColor: styles.navTextColor || "#ffffff",
+    headerBackground:
+      styles.headerBackground ||
+      (isLight ? lightBg : colors.primary || "#7f1d1d"),
+    navBackground:
+      styles.navBackground ||
+      (isLight ? "transparent" : colors.secondary || "#1e3a5f"),
+    titleColor: styles.titleColor || (isLight ? lightText : "#ffffff"),
+    taglineColor:
+      styles.taglineColor ||
+      (isLight ? "rgba(24, 24, 27, 0.72)" : "rgba(255, 255, 255, 0.9)"),
+    navTextColor: styles.navTextColor || (isLight ? lightText : "#ffffff"),
     titleFont: styles.titleFont || fonts.heading || "Georgia, serif",
     taglineFont: styles.taglineFont || fonts.body || "Arial, sans-serif",
     navFont: styles.navFont || fonts.body || "Arial, sans-serif",

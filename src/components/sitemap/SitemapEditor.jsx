@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageSettingsSheet } from "@/components/builder/PageSettingsSheet";
 import { getPageType } from "@/lib/bulletins/schema";
+import { useSiteConfig } from "@/hooks/useSiteConfig";
 
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
@@ -42,11 +43,16 @@ import {
   syncPageSlugs,
 } from "@/lib/sitemap/tree";
 
+import { Button } from "@/components/ui/button";
+import { ADMIN_PAGE_NAV_HEIGHT } from "@/lib/design/admin-tokens";
+import { cn } from "@/lib/utils";
+
+import { DeleteNavNodeDialog } from "./DeleteNavNodeDialog";
 import { NavColumn } from "./NavColumn";
+import { NAV_TEMPLATE_TYPES } from "./nav-type-meta";
 import { NavTemplateTile, NAV_TEMPLATE_LABELS, NAV_TEMPLATE_STYLES } from "./NavTemplateTile";
 import { QuickLinksBar, parseQuickLinkDragId } from "./QuickLinksBar";
-
-const TEMPLATE_TYPES = ["page", "secure_page", "link", "group"];
+import { SitemapDndProvider } from "./SitemapDndContext";
 
 function createNode(type, parentId, nodes) {
   if (!canCreateTypeAtParent(type, parentId)) {
@@ -122,6 +128,7 @@ function resolveDropParent(nodes, overData, overId) {
 
 export function SitemapEditor({ initialNodes }) {
   const router = useRouter();
+  const { config } = useSiteConfig();
   const [nodes, setNodes] = useState(initialNodes);
   const [maxLevel, setMaxLevel] = useState(4);
   const [saving, setSaving] = useState(false);
@@ -129,8 +136,10 @@ export function SitemapEditor({ initialNodes }) {
   const [dropError, setDropError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pageTypeMap, setPageTypeMap] = useState({});
+  const [pageHiddenMap, setPageHiddenMap] = useState({});
   const [settingsPage, setSettingsPage] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const tree = useMemo(() => buildNavTree(nodes), [nodes]);
   const quickLinks = useMemo(() => sortQuickLinks(nodes), [nodes]);
@@ -161,6 +170,20 @@ export function SitemapEditor({ initialNodes }) {
     );
   }, []);
 
+  const handleQuickLinkRename = useCallback((id, title) => {
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, title } : n)));
+  }, []);
+
+  const handleRemoveFromQuickLinks = useCallback((id) => {
+    setNodes((prev) => removeFromQuickLinks(prev, id));
+  }, []);
+
+  const handleUpdateExternalUrl = useCallback((id, externalUrl) => {
+    setNodes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, externalUrl: externalUrl || "https://" } : n)),
+    );
+  }, []);
+
   const handleDelete = useCallback((id) => {
     setNodes((prev) => {
       const toRemove = new Set([id]);
@@ -177,6 +200,16 @@ export function SitemapEditor({ initialNodes }) {
       return prev.filter((n) => !toRemove.has(n.id));
     });
   }, []);
+
+  const handleDeleteRequest = useCallback((node) => {
+    setDeleteTarget(node);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (!deleteTarget) return;
+    handleDelete(deleteTarget.id);
+    setDeleteTarget(null);
+  }, [deleteTarget, handleDelete]);
 
   const handleView = useCallback(
     (node) => {
@@ -195,6 +228,7 @@ export function SitemapEditor({ initialNodes }) {
     const db = getFirebaseFirestore();
     if (!db || pageIds.length === 0) {
       setPageTypeMap({});
+      setPageHiddenMap({});
       return;
     }
 
@@ -204,12 +238,19 @@ export function SitemapEditor({ initialNodes }) {
       const entries = await Promise.all(
         pageIds.map(async (pageId) => {
           const snap = await getDoc(doc(db, COLLECTIONS.pages, pageId));
-          const type = snap.exists() ? getPageType(snap.data()) : "content";
-          return [pageId, type];
+          const data = snap.exists() ? snap.data() : null;
+          return [
+            pageId,
+            {
+              type: data ? getPageType(data) : "content",
+              hidden: data?.hidden === true,
+            },
+          ];
         }),
       );
       if (!cancelled) {
-        setPageTypeMap(Object.fromEntries(entries));
+        setPageTypeMap(Object.fromEntries(entries.map(([id, meta]) => [id, meta.type])));
+        setPageHiddenMap(Object.fromEntries(entries.map(([id, meta]) => [id, meta.hidden])));
       }
     })();
 
@@ -520,10 +561,11 @@ export function SitemapEditor({ initialNodes }) {
 
   return (
     <div className="sitemap-editor flex h-full flex-col bg-muted">
-      <div className="border-b border-border bg-card px-6 py-4 shadow-sm">
-        <h1 className="text-lg font-semibold text-foreground">Edit Site Map and Quick Links</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Drag pages to reorganize navigation and quick links.
+      <div className="border-b border-border bg-card px-6 py-5 shadow-sm">
+        <h1 className="text-lg font-semibold text-foreground">Site Map &amp; Quick Links</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          Each column is a top-level menu item. Drag to reorder, nest under link groups, or add
+          shortcuts to the header quick links bar.
         </p>
       </div>
 
@@ -534,123 +576,179 @@ export function SitemapEditor({ initialNodes }) {
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div
-          className="relative min-h-0 flex-1 overflow-auto p-6"
-          style={{ paddingBottom: "calc(var(--sitemap-bottom-bar-height) + 1rem)" }}
-        >
-          {isDragging && activeDrag?.kind === "palette" && (
-            <div className="pointer-events-none absolute inset-0 z-10 bg-black/5" />
-          )}
-
-          <QuickLinksBar quickLinks={quickLinks} />
-
-          <div id="navAdmin" className="sitemap-nav-admin overflow-x-auto pb-4">
-            <ul className="flex gap-3">
-              {tree.map((column) => (
-                <NavColumn
-                  key={column.id}
-                  column={column}
-                  allNodes={nodes}
-                  maxLevel={maxLevel}
-                  pageTypeMap={pageTypeMap}
-                  onRename={handleRename}
-                  onDelete={handleDelete}
-                  onView={handleView}
-                  onSettings={handleSettings}
-                />
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <div
-          id="navAdminNewBackground"
-          className="sitemap-bottom-bar fixed inset-x-0 bottom-0 z-50 border-t border-border bg-muted shadow-[0_-4px_12px_rgba(0,0,0,0.06)]"
-        >
-          {dropError && (
-            <div className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">{dropError}</div>
-          )}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Drag to add:
-              </span>
-              {TEMPLATE_TYPES.map((type) => (
-                <NavTemplateTile key={type} type={type} onAdd={addTemplate} />
-              ))}
-            </div>
-          </div>
+        <SitemapDndProvider isDragging={isDragging}>
           <div
-            className="flex items-center justify-between border-t border-border/80 bg-card/95 px-6 backdrop-blur-md"
-            style={{ height: "var(--admin-page-nav-height)" }}
+            className="relative min-h-0 flex-1 overflow-auto px-6 py-5"
+            style={{ paddingBottom: "calc(var(--sitemap-bottom-bar-height) + 1rem)" }}
           >
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>
-                Levels:{" "}
-                {[2, 3, 4].map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => setMaxLevel(l)}
-                    className={`mx-1 rounded px-2 py-0.5 ${
-                      maxLevel === l ? "bg-emerald-600 text-white" : "bg-muted hover:bg-muted/80"
-                    }`}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </span>
-              <span>{pageCount} pages used</span>
+            {isDragging && (
+              <div className="pointer-events-none absolute inset-0 z-10 bg-background/40 backdrop-blur-[1px]" />
+            )}
+
+            <QuickLinksBar
+              quickLinks={quickLinks}
+              nodes={nodes}
+              onRename={handleQuickLinkRename}
+              onRemove={handleRemoveFromQuickLinks}
+              onUpdateExternalUrl={handleUpdateExternalUrl}
+            />
+
+            <section>
+              <div className="mb-3 flex items-baseline justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Main Navigation</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {tree.length} top-level {tree.length === 1 ? "item" : "items"}
+                  </p>
+                </div>
+                {tree.length > 4 && (
+                  <p className="shrink-0 text-xs text-muted-foreground">Scroll horizontally →</p>
+                )}
+              </div>
+
+              <div
+                id="navAdmin"
+                className="sitemap-nav-admin -mx-1 overflow-x-auto px-1 pb-2"
+              >
+                <ul className="flex gap-4">
+                  {tree.map((column) => (
+                    <NavColumn
+                      key={column.id}
+                      column={column}
+                      allNodes={nodes}
+                      maxLevel={maxLevel}
+                      pageTypeMap={pageTypeMap}
+                      pageHiddenMap={pageHiddenMap}
+                      onRename={handleRename}
+                      onDelete={handleDeleteRequest}
+                      onView={handleView}
+                      onSettings={handleSettings}
+                    />
+                  ))}
+                </ul>
+              </div>
+            </section>
+          </div>
+
+          {dropError && (
+            <div
+              className="fixed left-1/2 top-20 z-[60] -translate-x-1/2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-900 shadow-lg dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+              role="alert"
+            >
+              {dropError}
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => router.push("/builder/edit")}
-                className="rounded border border-border px-4 py-2 text-sm hover:bg-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="rounded bg-emerald-600 px-6 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
+          )}
+
+          <div
+            id="navAdminNewBackground"
+            className="sitemap-bottom-bar fixed inset-x-0 bottom-0 z-50 border-t border-border bg-muted/95 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md"
+          >
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/60 px-6 py-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Add new
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {NAV_TEMPLATE_TYPES.map((type) => (
+                  <NavTemplateTile key={type} type={type} onAdd={addTemplate} />
+                ))}
+              </div>
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                Drag onto a column or click to add at the top level
+              </span>
+            </div>
+            <div
+              className="flex items-center justify-between gap-4 bg-card/95 px-6"
+              style={{ height: ADMIN_PAGE_NAV_HEIGHT }}
+            >
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide">Depth</span>
+                  <div
+                    className="flex items-center rounded-lg border border-border/90 bg-muted/80 p-0.5"
+                    role="group"
+                    aria-label="Maximum navigation depth"
+                  >
+                    {[2, 3, 4].map((l) => (
+                      <button
+                        key={l}
+                        type="button"
+                        onClick={() => setMaxLevel(l)}
+                        className={cn(
+                          "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                          maxLevel === l
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-card hover:text-foreground",
+                        )}
+                      >
+                        {l} levels
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <span className="hidden h-4 w-px bg-border sm:block" aria-hidden />
+                <span>{pageCount} pages</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push("/builder/edit")}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <DragOverlay dropAnimation={{ duration: 200, easing: "ease" }}>
-          {activeDrag?.kind === "palette" && (
-            <div
-              className={`rounded px-4 py-2.5 text-sm font-medium text-white shadow-lg ${NAV_TEMPLATE_STYLES[activeDrag.type]}`}
-            >
-              {NAV_TEMPLATE_LABELS[activeDrag.type]}
-            </div>
-          )}
-          {activeDrag?.kind === "nav-node" && activeDrag.node && (
-            <div className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground shadow-lg">
-              {activeDrag.node.title}
-            </div>
-          )}
-          {activeDrag?.kind === "quick-link" && activeDrag.node && (
-            <span className="inline-flex rounded-full bg-amber-500 px-3 py-1 text-sm font-medium text-white shadow-lg">
-              {activeDrag.node.title}
-            </span>
-          )}
-        </DragOverlay>
+          <DragOverlay dropAnimation={{ duration: 200, easing: "ease" }}>
+            {activeDrag?.kind === "palette" && (
+              <div
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-xl",
+                  NAV_TEMPLATE_STYLES[activeDrag.type],
+                )}
+              >
+                {NAV_TEMPLATE_LABELS[activeDrag.type]}
+              </div>
+            )}
+            {activeDrag?.kind === "nav-node" && activeDrag.node && (
+              <div className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-xl">
+                {activeDrag.node.title}
+              </div>
+            )}
+            {activeDrag?.kind === "quick-link" && activeDrag.node && (
+              <span className="inline-flex items-center rounded-full border border-amber-600/30 bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-xl">
+                {activeDrag.node.title}
+              </span>
+            )}
+          </DragOverlay>
+        </SitemapDndProvider>
       </DndContext>
 
       <PageSettingsSheet
         open={settingsOpen}
         page={settingsPage}
+        pageTitle={settingsPage?.title}
+        siteName={config?.name}
+        siteSeo={config?.seo}
         onClose={() => {
           setSettingsOpen(false);
           setSettingsPage(null);
         }}
         onSave={handlePageSettingsSave}
+      />
+
+      <DeleteNavNodeDialog
+        node={deleteTarget}
+        nodes={nodes}
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={handleDeleteConfirm}
       />
     </div>
   );

@@ -13,9 +13,17 @@ function filenameToAlt(name) {
   return name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
 }
 
-export function SlideListEditor({ slides: initialSlides = [], onChange, showTitle = false, title: initialTitle = "" }) {
+export function SlideListEditor({
+  slides: initialSlides = [],
+  onChange,
+  showTitle = false,
+  showHeroFields = false,
+  title: initialTitle = "",
+}) {
   const [slides, setSlides] = useState(
-    initialSlides.length ? initialSlides : [{ src: "", alt: "", caption: "" }],
+    initialSlides.length
+      ? initialSlides
+      : [{ src: "", alt: "", caption: "", title: "", subtitle: "", ctaLabel: "", ctaHref: "" }],
   );
   const [title, setTitle] = useState(initialTitle);
   const [pickingIndex, setPickingIndex] = useState(null);
@@ -81,7 +89,10 @@ export function SlideListEditor({ slides: initialSlides = [], onChange, showTitl
 
   const addSlide = () => {
     setSlides((prev) => {
-      const next = [...prev, { src: "", alt: "", caption: "" }];
+      const next = [
+        ...prev,
+        { src: "", alt: "", caption: "", title: "", subtitle: "", ctaLabel: "", ctaHref: "" },
+      ];
       onChange?.({ slides: next, title });
       return next;
     });
@@ -178,9 +189,37 @@ export function SlideListEditor({ slides: initialSlides = [], onChange, showTitl
           <input
             value={slide.caption || ""}
             onChange={(e) => updateSlide(i, "caption", e.target.value)}
-            placeholder="Caption"
+            placeholder={showHeroFields ? "Caption (bottom gradient layout)" : "Caption"}
             className="w-full rounded border px-3 py-2 text-sm"
           />
+          {showHeroFields && (
+            <>
+              <input
+                value={slide.title || ""}
+                onChange={(e) => updateSlide(i, "title", e.target.value)}
+                placeholder="Hero title (centered / overlay box)"
+                className="w-full rounded border px-3 py-2 text-sm"
+              />
+              <input
+                value={slide.subtitle || ""}
+                onChange={(e) => updateSlide(i, "subtitle", e.target.value)}
+                placeholder="Hero subtitle"
+                className="w-full rounded border px-3 py-2 text-sm"
+              />
+              <input
+                value={slide.ctaLabel || ""}
+                onChange={(e) => updateSlide(i, "ctaLabel", e.target.value)}
+                placeholder="Button label (centered layout)"
+                className="w-full rounded border px-3 py-2 text-sm"
+              />
+              <input
+                value={slide.ctaHref || ""}
+                onChange={(e) => updateSlide(i, "ctaHref", e.target.value)}
+                placeholder="Button link"
+                className="w-full rounded border px-3 py-2 text-sm"
+              />
+            </>
+          )}
         </div>
       ))}
       <button type="button" onClick={addSlide} className="text-sm text-primary hover:underline">

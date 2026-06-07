@@ -1,3 +1,5 @@
+import { generateId } from "@/lib/sitemap/tree";
+
 /** @param {import('@/types/firestore').ModuleType} type */
 export function getDefaultConfig(type) {
   switch (type) {
@@ -8,7 +10,7 @@ export function getDefaultConfig(type) {
     case "buttons":
       return { items: [{ label: "Learn More", href: "/" }] };
     case "image":
-      return { title: "Image", src: "", alt: "", caption: "" };
+      return { title: "Image", src: "", alt: "", caption: "", size: "small" };
     case "slideshow":
       return {
         slides: [
@@ -16,6 +18,35 @@ export function getDefaultConfig(type) {
             src: "https://images.unsplash.com/photo-1507692049794-5218e5217951?w=1600",
             alt: "Church",
             caption: "Welcome to our parish",
+            title: "Welcome to Our Parish",
+            subtitle: "Join us for worship and community",
+            ctaLabel: "Learn More",
+            ctaHref: "/",
+          },
+        ],
+      };
+    case "feature_tiles":
+      return {
+        items: [
+          {
+            label: "About Us",
+            href: "/about",
+            imageSrc: "https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=600",
+          },
+          {
+            label: "Mass Times",
+            href: "/mass-times",
+            imageSrc: "https://images.unsplash.com/photo-1507692049794-5218e5217951?w=600",
+          },
+          {
+            label: "Ministries",
+            href: "/ministries",
+            imageSrc: "https://images.unsplash.com/photo-1519491050282-cf00bc3695f6?w=600",
+          },
+          {
+            label: "Contact",
+            href: "/contact",
+            imageSrc: "https://images.unsplash.com/photo-1548013146-72479768bada?w=600",
           },
         ],
       };
@@ -58,6 +89,21 @@ export function getDefaultConfig(type) {
       return { title: "Documents", items: [] };
     case "calendar":
       return { title: "Upcoming Events", source: "manual", events: [], maxEvents: 15 };
+    case "form":
+      return {
+        formId: generateId(),
+        title: "Contact Form",
+        description: "",
+        submitLabel: "Submit",
+        successMessage: "Thank you! Your submission has been received.",
+        notificationEmails: [],
+        fields: [
+          { id: generateId(), type: "text", label: "Name", required: true },
+          { id: generateId(), type: "email", label: "Email", required: true },
+          { id: generateId(), type: "textarea", label: "Message", required: true },
+        ],
+        honeypotFieldName: `_hp_${Math.random().toString(36).slice(2, 10)}`,
+      };
     case "embed":
       return { title: "Embed", embedUrl: "", html: "", height: 400 };
     case "facebook":

@@ -1,7 +1,21 @@
 import { DEFAULT_HEADER_STYLES } from "@/lib/site/header-styles";
 
-const DESIGN_KEYS = ["themeId", "colors", "fonts", "layout"];
+import { getThemeById } from "./themes";
+import { mergeStructure, mergeTokens, structureToLegacyLayout } from "./themes/templates";
+
+const DESIGN_KEYS = ["themeId", "colors", "fonts", "layout", "structure", "tokens"];
 const HEADER_TEXT_COLOR_KEYS = ["titleColor", "taglineColor", "navTextColor"];
+
+const STRUCTURE_KEYS = [
+  "headerVariant",
+  "navVariant",
+  "footerVariant",
+  "moduleVariant",
+  "quickLinksVariant",
+  "featuresVariant",
+  "heroCaptionVariant",
+  "headerTone",
+];
 
 /**
  * Shallow compare published vs draft design for unsaved-changes detection.
@@ -18,13 +32,20 @@ export function headerTextColorsEqual(published = {}, draft = {}) {
   return true;
 }
 
+function structureEqual(a = {}, b = {}) {
+  for (const key of STRUCTURE_KEYS) {
+    if ((a[key] || "") !== (b[key] || "")) return false;
+  }
+  return true;
+}
+
 export function designEquals(
   published = {},
   draft = {},
   publishedHeaderStyles = {},
   draftHeaderStyles = {},
 ) {
-  if ((published.themeId || "classic") !== (draft.themeId || "classic")) return false;
+  if (getThemeById(published.themeId).id !== getThemeById(draft.themeId).id) return false;
 
   for (const colorKey of ["primary", "secondary", "accent"]) {
     if ((published.colors?.[colorKey] || "") !== (draft.colors?.[colorKey] || "")) return false;
@@ -36,6 +57,8 @@ export function designEquals(
 
   if ((published.layout?.header || "") !== (draft.layout?.header || "")) return false;
   if ((published.layout?.nav || "") !== (draft.layout?.nav || "")) return false;
+
+  if (!structureEqual(published.structure, draft.structure)) return false;
 
   if (!headerTextColorsEqual(publishedHeaderStyles, draftHeaderStyles)) return false;
 
@@ -49,21 +72,36 @@ export function designEquals(
  * @returns {object}
  */
 export function normalizeDesign(design = {}, theme) {
+  const resolvedTheme = theme || getThemeById(design.themeId);
+  const structure = mergeStructure({
+    ...resolvedTheme.structure,
+    ...design.structure,
+  });
+  const tokens = mergeTokens({
+    colors: { ...resolvedTheme.tokens.colors, ...design.colors },
+    fonts: { ...resolvedTheme.tokens.fonts, ...design.fonts },
+    typography: { ...resolvedTheme.tokens.typography, ...design.tokens?.typography },
+    spacing: { ...resolvedTheme.tokens.spacing, ...design.tokens?.spacing },
+    shape: { ...resolvedTheme.tokens.shape, ...design.tokens?.shape },
+  });
+  const layout = design.layout?.header
+    ? { header: design.layout.header, nav: design.layout.nav }
+    : structureToLegacyLayout(structure);
+
   return {
-    themeId: design.themeId || theme.id,
+    themeId: resolvedTheme.id,
     colors: {
-      primary: design.colors?.primary || theme.colors.primary,
-      secondary: design.colors?.secondary || theme.colors.secondary,
-      accent: design.colors?.accent || theme.colors.accent,
+      primary: tokens.colors.primary,
+      secondary: tokens.colors.secondary,
+      accent: tokens.colors.accent,
     },
     fonts: {
-      heading: design.fonts?.heading || theme.fonts.heading,
-      body: design.fonts?.body || theme.fonts.body,
+      heading: tokens.fonts.heading,
+      body: tokens.fonts.body,
     },
-    layout: {
-      header: design.layout?.header || theme.layout.header,
-      nav: design.layout?.nav || theme.layout.nav,
-    },
+    layout,
+    structure,
+    tokens,
   };
 }
 

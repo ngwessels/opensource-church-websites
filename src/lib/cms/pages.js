@@ -4,6 +4,7 @@ import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { normalizeButtonsConfig } from "@/lib/buttons/schema";
 import { normalizeDocumentsConfig } from "@/lib/documents/schema";
+import { normalizeFormConfig } from "@/lib/forms/schema";
 import { getDefaultConfig } from "@/lib/modules/defaults";
 import {
   buildRegionsForColumnCount,
@@ -13,6 +14,8 @@ import {
   moveModule,
   normalizePageRegions,
 } from "@/lib/pages/regions";
+import { getMaxContentColumns } from "@/lib/pages/viewports";
+import { wouldHideHomePage } from "@/lib/pages/visibility";
 import { generateId } from "@/lib/sitemap/tree";
 
 function getDb() {
@@ -52,11 +55,26 @@ export async function updatePageAdmin(pageId, updates) {
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Page not found");
 
+  const data = snap.data();
+  if (wouldHideHomePage(data, updates.hidden)) {
+    throw new Error("The home page cannot be hidden");
+  }
+
   if (updates.contentColumns !== undefined) {
     const check = canReduceColumns(snap.data(), updates.contentColumns);
     if (!check.ok) throw new Error(check.error);
     if (updates.regions === undefined) {
       updates.regions = buildRegionsForColumnCount(snap.data(), updates.contentColumns);
+    }
+  }
+
+  if (updates.contentColumnsByViewport !== undefined && updates.contentColumns === undefined) {
+    const maxColumns = getMaxContentColumns({ ...snap.data(), ...updates });
+    const check = canReduceColumns(snap.data(), maxColumns);
+    if (!check.ok) throw new Error(check.error);
+    updates.contentColumns = maxColumns;
+    if (updates.regions === undefined) {
+      updates.regions = buildRegionsForColumnCount(snap.data(), maxColumns);
     }
   }
 
@@ -93,6 +111,8 @@ export async function updateModuleAdmin(pageId, moduleId, config) {
         normalized = normalizeDocumentsConfig(merged, { filterEmpty: true });
       } else if (m.type === "buttons") {
         normalized = normalizeButtonsConfig(merged, { filterEmpty: true });
+      } else if (m.type === "form") {
+        normalized = normalizeFormConfig(merged);
       }
       return { ...m, config: normalized };
     }),
@@ -131,6 +151,12 @@ function buildPublishedSnapshot(data) {
   if (data.contentMarginX !== undefined) {
     snapshot.contentMarginX = data.contentMarginX;
   }
+  if (data.contentMarginXByViewport !== undefined) {
+    snapshot.contentMarginXByViewport = data.contentMarginXByViewport;
+  }
+  if (data.contentColumnsByViewport !== undefined) {
+    snapshot.contentColumnsByViewport = data.contentColumnsByViewport;
+  }
   return snapshot;
 }
 
@@ -166,6 +192,8 @@ export async function revertPageAdmin(pageId) {
     regions: data.publishedSnapshot.regions,
     layout: data.publishedSnapshot.layout,
     contentMarginX: data.publishedSnapshot.contentMarginX,
+    contentMarginXByViewport: data.publishedSnapshot.contentMarginXByViewport,
+    contentColumnsByViewport: data.publishedSnapshot.contentColumnsByViewport,
     title: data.publishedSnapshot.title,
     seo: data.publishedSnapshot.seo,
     updatedAt: now(),

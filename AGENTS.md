@@ -22,7 +22,7 @@ When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools 
 **Pages & modules**
 
 - `list_pages`, `get_page`, `update_page` — page metadata, layout, regions, SEO
-- `add_module`, `update_module`, `move_module`, `remove_module` — content modules (`text`, `links`, `buttons`, `image`, `gallery`, `slideshow`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`)
+- `add_module`, `update_module`, `move_module`, `remove_module` — content modules (`text`, `links`, `buttons`, `image`, `gallery`, `slideshow`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `form`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`)
 - `publish_page`, `revert_page` — draft/publish workflow
 
 **Navigation / sitemap**
@@ -61,5 +61,18 @@ Config shape: `{ title, items: [{ label, url }] }`. Items use `url` (not `href`)
 4. `publish_page`
 
 External URLs can be used directly in `url` without uploading. Call `get_builder_capabilities` for full schema details.
+
+**Forms module**
+
+Config shape: `{ formId, title, description, submitLabel, successMessage, notificationEmails, fields: [{ id, type, label, ... }] }`.
+
+Field types: `heading`, `paragraph`, `text`, `email`, `phone`, `textarea`, `select`, `radio`, `checkbox`, `date`, `file`.
+
+1. `add_module` with `type: "form"`
+2. `update_module` with fields and `notificationEmails` (Mailgun recipients)
+3. `publish_page` — public submissions go to `POST /api/forms/submit` with `formId`
+4. View responses in the builder module editor (Responses tab) or via Firestore `formSubmissions` collection (admin read)
+
+Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notifications.
 
 Prefer MCP tools when the user wants site content or design changed from Cursor. Call `get_site_summary` or `get_builder_capabilities` first when unsure of current structure.

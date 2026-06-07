@@ -1,142 +1,14 @@
 "use client";
 
-import { createContext, useContext } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { Menu } from "lucide-react";
-
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { SectionOverlay } from "@/components/builder/SectionOverlay";
-import { toBuilderHref } from "@/lib/builder/navigation";
-import {
-  filterNavTreeForDisplay,
-  isExternalHref,
-  resolveNavHref,
-} from "@/lib/sitemap/tree";
+import { filterNavTreeForDisplay } from "@/lib/sitemap/tree";
+import { resolveDesignTheme } from "@/lib/design/themes";
+import { inlineMobileNavRowClass } from "@/lib/pages/viewports";
 import { resolveHeaderStyles } from "@/lib/site/header-styles";
+import { cn } from "@/lib/utils";
 
-const HeaderStylesContext = createContext(null);
-
-function useHeaderStyles() {
-  return useContext(HeaderStylesContext);
-}
-
-const NAV_LINK_CLASS = "site-nav-link";
-
-function navLinkStyle(depth, mobile, headerStyles) {
-  if (mobile) {
-    return { className: "block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50" };
-  }
-
-  return {
-    className:
-      depth > 0
-        ? `${NAV_LINK_CLASS} block px-4 py-2 text-sm`
-        : `${NAV_LINK_CLASS} block px-3 py-2.5 text-sm font-medium`,
-    style: headerStyles.navFontSize ? { fontSize: headerStyles.navFontSize } : undefined,
-  };
-}
-
-function NavItem({ node, navNodes, depth = 0, mobile = false, editing = false }) {
-  const headerStyles = useHeaderStyles();
-  const href = toBuilderHref(resolveNavHref(navNodes, node), editing);
-  const isExternal = node.type === "link" && isExternalHref(href);
-
-  if (node.type === "group") {
-    const hasLanding = node.pageId && href !== "#";
-    const groupLinkStyle = mobile
-      ? { className: "block px-3 py-2 text-sm font-semibold text-zinc-900" }
-      : {
-          className: `${NAV_LINK_CLASS} block px-3 py-2.5 text-sm font-medium`,
-          style: headerStyles?.navFontSize ? { fontSize: headerStyles.navFontSize } : undefined,
-        };
-
-    if (mobile) {
-      return (
-        <li>
-          {hasLanding ? (
-            <Link href={href} className={groupLinkStyle.className}>
-              {node.title}
-            </Link>
-          ) : (
-            <span className={groupLinkStyle.className}>{node.title}</span>
-          )}
-          <ul className="pl-3">
-            {node.children?.map((child) => (
-              <NavItem
-                key={child.id}
-                node={child}
-                navNodes={navNodes}
-                depth={depth + 1}
-                mobile
-                editing={editing}
-              />
-            ))}
-          </ul>
-        </li>
-      );
-    }
-
-    return (
-      <li className="group relative">
-        {hasLanding ? (
-          <Link href={href} className={groupLinkStyle.className} style={groupLinkStyle.style}>
-            {node.title}
-          </Link>
-        ) : (
-          <span className={groupLinkStyle.className} style={groupLinkStyle.style}>
-            {node.title}
-          </span>
-        )}
-        {node.children?.length > 0 && (
-          <ul
-            className="absolute left-0 top-full z-20 hidden min-w-[220px] rounded-md py-1 shadow-lg group-hover:block"
-            style={{
-              backgroundColor: headerStyles?.navBackground,
-              fontFamily: headerStyles?.navFont,
-            }}
-          >
-            {node.children.map((child) => (
-              <NavItem
-                key={child.id}
-                node={child}
-                navNodes={navNodes}
-                depth={depth + 1}
-                editing={editing}
-              />
-            ))}
-          </ul>
-        )}
-      </li>
-    );
-  }
-
-  const { className, style } = navLinkStyle(depth, mobile, headerStyles || {});
-
-  if (node.type === "link") {
-    return (
-      <li>
-        <a
-          href={href}
-          className={className}
-          style={style}
-          target={isExternal ? "_blank" : "_self"}
-          rel={isExternal ? "noopener noreferrer" : undefined}
-        >
-          {node.title}
-        </a>
-      </li>
-    );
-  }
-
-  return (
-    <li>
-      <Link href={href} className={className} style={style}>
-        {node.title}
-      </Link>
-    </li>
-  );
-}
+import { HeaderStylesContext } from "./header/header-context";
+import { MobileNav } from "./header/MobileNav";
+import { renderHeaderVariant } from "./header/HeaderVariants";
 
 export function SiteHeader({
   siteConfig,
@@ -144,165 +16,55 @@ export function SiteHeader({
   navNodes = [],
   quickLinks,
   navStyle = "solid",
+  headerVariant = "centeredBanner",
+  quickLinksVariant = "inline",
   editing = false,
   onHeaderSettings,
+  previewViewport = null,
 }) {
-  const name = siteConfig?.name || "Parish";
-  const tagline = siteConfig?.tagline || "";
   const headerConfig = siteConfig?.headerConfig || {};
-  const headerStyles = resolveHeaderStyles(headerConfig, siteConfig?.design);
-  const showTagline = headerConfig.showTagline !== false;
-  const showLogo = headerConfig.showLogo && headerConfig.logoUrl;
-  const layout = headerConfig.layout || "centered";
-
-  const navClass = navStyle === "transparent" ? "bg-transparent" : "shadow-sm";
+  const { structure } = resolveDesignTheme(siteConfig?.design);
+  const headerStyles = resolveHeaderStyles(headerConfig, {
+    ...siteConfig?.design,
+    structure,
+  });
   const displayNavTree = filterNavTreeForDisplay(navTree);
+  const isInlineNav = headerVariant === "inlineNav";
 
-  function QuickLinkAnchor({ link, href }) {
-    const external = link.type === "link" && isExternalHref(href);
-    if (external) {
-      return (
-        <a href={href} className="hover:underline" target="_blank" rel="noopener noreferrer">
-          {link.title}
-        </a>
-      );
-    }
-    if (link.type === "link") {
-      return (
-        <a href={href} className="hover:underline" target="_self">
-          {link.title}
-        </a>
-      );
-    }
-    return (
-      <Link href={href} className="hover:underline">
-        {link.title}
-      </Link>
-    );
-  }
-
-  const navStyleProps = {
-    "--site-nav-text": headerStyles.navTextColor,
-    "--site-nav-bg": headerStyles.navBackground,
-    ...(headerStyles.navFontSize ? { "--site-nav-font-size": headerStyles.navFontSize } : {}),
-    fontFamily: headerStyles.navFont,
-    ...(navStyle === "transparent" ? {} : { backgroundColor: headerStyles.navBackground }),
+  const sharedProps = {
+    siteConfig,
+    navNodes,
+    quickLinks,
+    headerStyles,
+    displayNavTree,
+    navStyle,
+    quickLinksVariant,
+    editing,
+    onHeaderSettings,
+    previewViewport,
   };
 
   return (
     <HeaderStylesContext.Provider value={headerStyles}>
-      <header id="header" className="relative">
-        {quickLinks?.length > 0 && (
-          <nav
-            id="quickLinks"
-            aria-label="Quick links"
-            className="absolute top-0 right-0 left-0 z-10 px-4 py-1 text-sm"
-            style={{
-              color: headerStyles.titleColor,
-              fontFamily: headerStyles.navFont,
-              fontSize: headerStyles.navFontSize || undefined,
-            }}
-          >
-            <ul className="mx-auto flex max-w-6xl flex-wrap items-center justify-start gap-x-1 gap-y-1">
-              {quickLinks.map((link, i) => {
-                const href = toBuilderHref(resolveNavHref(navNodes, link), editing);
-                return (
-                  <li key={link.id} className="inline-flex items-center">
-                    {i > 0 && <span className="mx-2 opacity-50" aria-hidden="true">|</span>}
-                    <QuickLinkAnchor link={link} href={href} />
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        )}
-        <div
-          className={`relative px-4 py-8 ${layout === "logoLeft" ? "text-left" : "text-center"}`}
-          style={{ backgroundColor: headerStyles.headerBackground }}
-        >
-          {editing && (
-            <SectionOverlay
-              label="TITLE"
-              onClick={() => onHeaderSettings?.("title")}
-            />
-          )}
+      {renderHeaderVariant(headerVariant, sharedProps)}
+      {isInlineNav && (
+        <div className={cn(inlineMobileNavRowClass(previewViewport))}>
           <div
-            className={`mx-auto flex max-w-6xl items-center gap-6 ${
-              layout === "logoLeft" ? "flex-row" : "flex-col justify-center"
-            }`}
+            className="flex items-center justify-end border-t px-2"
+            style={{ backgroundColor: headerStyles.navBackground }}
           >
-            {showLogo && (
-              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-white/10">
-                <Image src={headerConfig.logoUrl} alt="" fill className="object-cover" unoptimized />
-              </div>
-            )}
-            <div>
-              <h1
-                className={headerStyles.titleFontSize ? "" : "text-3xl tracking-wide md:text-4xl"}
-                style={{
-                  color: headerStyles.titleColor,
-                  fontFamily: headerStyles.titleFont,
-                  fontWeight: headerStyles.titleFontWeight,
-                  fontSize: headerStyles.titleFontSize || undefined,
-                }}
-              >
-                {name}
-              </h1>
-              {showTagline && tagline && (
-                <p
-                  className={headerStyles.titleFontSize ? "mt-2" : "mt-2 text-sm md:text-base"}
-                  style={{
-                    color: headerStyles.taglineColor,
-                    fontFamily: headerStyles.taglineFont,
-                  }}
-                >
-                  {tagline}
-                </p>
-              )}
-            </div>
+            <MobileNav
+              displayNavTree={displayNavTree}
+              navNodes={navNodes}
+              headerStyles={headerStyles}
+              editing={editing}
+              siteName={siteConfig?.name || "Parish"}
+              quickLinks={quickLinks}
+              previewViewport={previewViewport}
+            />
           </div>
         </div>
-      </header>
-
-      <nav
-        className={navClass}
-        id="navBackground"
-        aria-label="Main navigation"
-        style={navStyleProps}
-      >
-        {editing && (
-          <SectionOverlay
-            label="NAV"
-            onClick={() => onHeaderSettings?.("nav")}
-          />
-        )}
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-2">
-          <ul className="hidden flex-wrap items-center justify-center gap-1 md:flex">
-            {displayNavTree.map((node) => (
-              <NavItem key={node.id} node={node} navNodes={navNodes} editing={editing} />
-            ))}
-          </ul>
-
-          <Sheet>
-            <SheetTrigger
-              className="ml-auto p-3 md:hidden"
-              style={{ color: headerStyles.navTextColor }}
-              aria-label="Open menu"
-            >
-              <Menu className="h-6 w-6" />
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[280px]">
-              <nav aria-label="Main navigation">
-                <ul className="space-y-1">
-                  {displayNavTree.map((node) => (
-                    <NavItem key={node.id} node={node} navNodes={navNodes} mobile editing={editing} />
-                  ))}
-                </ul>
-              </nav>
-            </SheetContent>
-          </Sheet>
-        </div>
-      </nav>
+      )}
     </HeaderStylesContext.Provider>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { FILTER_OPTIONS } from "@/lib/design/theme-filters";
+import { emptyFilters, FILTER_OPTIONS } from "@/lib/design/theme-filters";
 import { cn } from "@/lib/utils";
 
 function FilterGroup({ label, groupKey, options, active, onToggle }) {
@@ -55,14 +55,7 @@ export function ThemeFilterSidebar({ filters, onChange, resultCount, totalCount 
             variant="ghost"
             size="sm"
             className="h-auto px-1.5 py-0.5 text-xs"
-            onClick={() =>
-              onChange({
-                dominantColor: [],
-                headerLayout: [],
-                navStyle: [],
-                mood: [],
-              })
-            }
+            onClick={() => onChange(emptyFilters())}
           >
             Clear all
           </Button>
@@ -81,18 +74,18 @@ export function ThemeFilterSidebar({ filters, onChange, resultCount, totalCount 
         />
         <Separator />
         <FilterGroup
-          label="Header Layout"
-          groupKey="headerLayout"
-          options={FILTER_OPTIONS.headerLayout}
-          active={filters.headerLayout}
+          label="Header Style"
+          groupKey="headerVariant"
+          options={FILTER_OPTIONS.headerVariant}
+          active={filters.headerVariant}
           onToggle={toggle}
         />
         <Separator />
         <FilterGroup
-          label="Nav Style"
-          groupKey="navStyle"
-          options={FILTER_OPTIONS.navStyle}
-          active={filters.navStyle}
+          label="Module Style"
+          groupKey="moduleVariant"
+          options={FILTER_OPTIONS.moduleVariant}
+          active={filters.moduleVariant}
           onToggle={toggle}
         />
         <Separator />

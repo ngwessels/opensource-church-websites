@@ -1,26 +1,87 @@
+"use client";
+
+import dynamic from "next/dynamic";
 import { Settings, Trash2 } from "lucide-react";
 
 import { MODULE_LABELS } from "@/lib/design/admin-tokens";
 
-import { ButtonsModule } from "./ButtonsModule";
-import { CalendarModule } from "./CalendarModule";
-import { CarouselModule } from "./CarouselModule";
-import { DocumentsModule } from "./DocumentsModule";
-import { ImageModule } from "./ImageModule";
-import { LinksModule } from "./LinksModule";
-import { DailyReadingsModule } from "./DailyReadingsModule";
-import { MassTimesModule } from "./MassTimesModule";
-import { PhotoAlbumsModule } from "./PhotoAlbumsModule";
-import { PeopleModule } from "./PeopleModule";
-import { SlideshowModule } from "./SlideshowModule";
-import { TextModule } from "./TextModule";
-import { VideoModule } from "./VideoModule";
-import { ZoomModule } from "./ZoomModule";
-import { EmbedModule } from "./EmbedModule";
-import { FacebookEmbedModule } from "./FacebookEmbedModule";
-import { GoogleMapsModule } from "./GoogleMapsModule";
-import { InstagramEmbedModule } from "./InstagramEmbedModule";
-import { RssModule } from "./RssModule";
+const moduleLoading = () => (
+  <div className="mb-6 h-16 animate-pulse rounded-lg bg-muted/60" aria-hidden />
+);
+
+const TextModule = dynamic(() => import("./TextModule").then((m) => m.TextModule), {
+  loading: moduleLoading,
+});
+const LinksModule = dynamic(() => import("./LinksModule").then((m) => m.LinksModule), {
+  loading: moduleLoading,
+});
+const ImageModule = dynamic(() => import("./ImageModule").then((m) => m.ImageModule), {
+  loading: moduleLoading,
+});
+const PhotoAlbumsModule = dynamic(
+  () => import("./PhotoAlbumsModule").then((m) => m.PhotoAlbumsModule),
+  { loading: moduleLoading },
+);
+const SlideshowModule = dynamic(
+  () => import("./SlideshowModule").then((m) => m.SlideshowModule),
+  { loading: moduleLoading },
+);
+const FeatureTilesModule = dynamic(
+  () => import("./FeatureTilesModule").then((m) => m.FeatureTilesModule),
+  { loading: moduleLoading },
+);
+const CarouselModule = dynamic(() => import("./CarouselModule").then((m) => m.CarouselModule), {
+  loading: moduleLoading,
+});
+const VideoModule = dynamic(() => import("./VideoModule").then((m) => m.VideoModule), {
+  loading: moduleLoading,
+});
+const ZoomModule = dynamic(() => import("./ZoomModule").then((m) => m.ZoomModule), {
+  loading: moduleLoading,
+});
+const MassTimesModule = dynamic(
+  () => import("./MassTimesModule").then((m) => m.MassTimesModule),
+  { loading: moduleLoading },
+);
+const DailyReadingsModule = dynamic(
+  () => import("./DailyReadingsModule").then((m) => m.DailyReadingsModule),
+  { loading: moduleLoading },
+);
+const DocumentsModule = dynamic(
+  () => import("./DocumentsModule").then((m) => m.DocumentsModule),
+  { loading: moduleLoading },
+);
+const PeopleModule = dynamic(() => import("./PeopleModule").then((m) => m.PeopleModule), {
+  loading: moduleLoading,
+});
+const ButtonsModule = dynamic(() => import("./ButtonsModule").then((m) => m.ButtonsModule), {
+  loading: moduleLoading,
+});
+const CalendarModule = dynamic(
+  () => import("./CalendarModule").then((m) => m.CalendarModule),
+  { loading: moduleLoading },
+);
+const FormModule = dynamic(() => import("./FormModule").then((m) => m.FormModule), {
+  loading: moduleLoading,
+});
+const EmbedModule = dynamic(() => import("./EmbedModule").then((m) => m.EmbedModule), {
+  loading: moduleLoading,
+});
+const FacebookEmbedModule = dynamic(
+  () => import("./FacebookEmbedModule").then((m) => m.FacebookEmbedModule),
+  { loading: moduleLoading },
+);
+const GoogleMapsModule = dynamic(
+  () => import("./GoogleMapsModule").then((m) => m.GoogleMapsModule),
+  { loading: moduleLoading },
+);
+const InstagramEmbedModule = dynamic(
+  () => import("./InstagramEmbedModule").then((m) => m.InstagramEmbedModule),
+  { loading: moduleLoading },
+);
+const RssModule = dynamic(() => import("./RssModule").then((m) => m.RssModule), {
+  loading: moduleLoading,
+});
 
 const MODULE_MAP = {
   text: TextModule,
@@ -29,6 +90,7 @@ const MODULE_MAP = {
   gallery: ImageModule,
   photo_albums: PhotoAlbumsModule,
   slideshow: SlideshowModule,
+  feature_tiles: FeatureTilesModule,
   carousel: CarouselModule,
   video: VideoModule,
   zoom: ZoomModule,
@@ -38,6 +100,7 @@ const MODULE_MAP = {
   people: PeopleModule,
   buttons: ButtonsModule,
   calendar: CalendarModule,
+  form: FormModule,
   embed: EmbedModule,
   facebook: FacebookEmbedModule,
   google_maps: GoogleMapsModule,
@@ -94,12 +157,14 @@ export function ModuleRenderer({
           </button>
         </div>
       )}
-      <Component
-        module={module}
-        siteConfig={siteConfig}
-        editing={editing}
-        onSave={onSaveModule ? (config) => onSaveModule(module.id, config) : undefined}
-      />
+      <div className="site-module">
+        <Component
+          module={module}
+          siteConfig={siteConfig}
+          editing={editing}
+          onSave={onSaveModule ? (config) => onSaveModule(module.id, config) : undefined}
+        />
+      </div>
     </div>
   );
 }

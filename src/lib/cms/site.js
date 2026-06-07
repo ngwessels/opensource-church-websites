@@ -2,6 +2,7 @@ import "server-only";
 
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
+import { mergeFooterConfig } from "@/lib/site/footer-styles";
 import { mergeHeaderConfig } from "@/lib/site/header-styles";
 import { MODULE_CATEGORIES } from "@/types/firestore";
 
@@ -37,6 +38,14 @@ function mergeDesign(current = {}, patch = {}) {
     colors: { ...current.colors, ...patch.colors },
     fonts: { ...current.fonts, ...patch.fonts },
     layout: { ...current.layout, ...patch.layout },
+    structure: { ...current.structure, ...patch.structure },
+    tokens: {
+      ...current.tokens,
+      ...patch.tokens,
+      typography: { ...current.tokens?.typography, ...patch.tokens?.typography },
+      spacing: { ...current.tokens?.spacing, ...patch.tokens?.spacing },
+      shape: { ...current.tokens?.shape, ...patch.tokens?.shape },
+    },
   };
 }
 
@@ -45,11 +54,15 @@ export async function updateSiteDesignAdmin(design) {
   return updateSiteConfigAdmin({ design: mergeDesign(current.design, design) });
 }
 
-export async function updateSiteSettingsAdmin({ name, tagline, canonicalDomain }) {
+export async function updateSiteSettingsAdmin({ name, tagline, canonicalDomain, seo }) {
   const patch = {};
   if (name !== undefined) patch.name = name;
   if (tagline !== undefined) patch.tagline = tagline;
   if (canonicalDomain !== undefined) patch.canonicalDomain = canonicalDomain;
+  if (seo !== undefined) {
+    const current = await getSiteConfigAdmin();
+    patch.seo = { ...(current.seo || {}), ...seo };
+  }
   return updateSiteConfigAdmin(patch);
 }
 
@@ -65,7 +78,10 @@ export async function updateHeaderStylesAdmin(styles) {
 }
 
 export async function updateFooterConfigAdmin(footerConfig) {
-  return updateSiteConfigAdmin({ footerConfig });
+  const current = await getSiteConfigAdmin();
+  return updateSiteConfigAdmin({
+    footerConfig: mergeFooterConfig(current.footerConfig, footerConfig),
+  });
 }
 
 export async function updateMassTimesAdmin(massTimes) {
@@ -79,7 +95,7 @@ export function getBuilderCapabilities() {
     layouts: ["default", "full-width", "sidebar-left", "sidebar-right"],
     regions: {
       content: "content-N columns",
-      features: "slideshow only",
+      features: "slideshow or feature_tiles (max 1 module)",
       sidebar: "sidebar layouts only",
     },
     headerCustomization: {
@@ -99,8 +115,8 @@ export function getBuilderCapabilities() {
       ],
     },
     rules: [
-      "Slideshow modules must be placed in the features region",
-      "Only slideshow modules can be placed in the features region",
+      "Slideshow and feature_tiles modules must be placed in the features region",
+      "Only slideshow or feature_tiles modules can be placed in the features region",
       "Each region has a max module count",
     ],
     moduleConfigSchemas: {
@@ -113,11 +129,18 @@ export function getBuilderCapabilities() {
       },
       documents: {
         title: "string",
-        items: [{ label: "string", url: "string (downloadUrl from upload_media)" }],
+        items: [
+          {
+            label: "string",
+            url: "string (downloadUrl from upload_media)",
+            mediaId: "string? (required for displayMode inline)",
+            displayMode: "link | inline (inline embeds PDF on page; library PDFs only)",
+          },
+        ],
         workflow: [
           "add_module type=documents",
           "upload_media folderId=documents-root",
-          "update_module with items",
+          "update_module with items (set displayMode inline for embedded PDF viewer)",
           "publish_page",
         ],
       },
@@ -129,6 +152,59 @@ export function getBuilderCapabilities() {
         title: "string",
         albums: [{ label: "string", href: "string", imageSrc: "string", photoCount: "number?" }],
       },
+      feature_tiles: {
+        items: [{ label: "string", href: "string", imageSrc: "string" }],
+      },
+      slideshow: {
+        slides: [
+          {
+            src: "string",
+            alt: "string?",
+            caption: "string? (bottom gradient)",
+            title: "string? (centered / overlay)",
+            subtitle: "string?",
+            ctaLabel: "string?",
+            ctaHref: "string?",
+          },
+        ],
+      },
+      form: {
+        formId: "string (stable ID, auto-generated on add_module)",
+        title: "string?",
+        description: "string?",
+        submitLabel: "string",
+        successMessage: "string",
+        notificationEmails: ["string (comma-separated emails for Mailgun notifications)"],
+        fields: [
+          {
+            id: "string",
+            type: "heading | paragraph | text | email | phone | textarea | select | radio | checkbox | date | file",
+            label: "string",
+            placeholder: "string?",
+            required: "boolean?",
+            helpText: "string?",
+            options: ["string (for select/radio/checkbox groups)"],
+            accept: "string? (file field MIME/extensions)",
+            maxFileSizeMb: "number? (file field, default 10)",
+          },
+        ],
+        workflow: [
+          "add_module type=form",
+          "update_module with fields and notificationEmails",
+          "publish_page",
+          "Public submissions POST to /api/forms/submit with formId",
+        ],
+      },
+    },
+    designStructure: {
+      headerVariant: "centeredBanner | logoLeftStack | inlineNav | minimalBar | heroBand | lightLogoLeft | lightCentered",
+      navVariant: "barBelow | inlineHeader | underlineTabs | pillTabs | minimalText",
+      footerVariant: "lightColumns | darkBand | minimalCenter | accentBar",
+      moduleVariant: "classic | card | flatBar | bordered",
+      quickLinksVariant: "inline | utilityBar | boxedCta",
+      featuresVariant: "slideshow | tileGrid | none",
+      heroCaptionVariant: "bottomGradient | centered | overlayBoxLeft",
+      headerTone: "dark | light",
     },
   };
 }

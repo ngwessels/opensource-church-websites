@@ -63,7 +63,10 @@ const headerConfigSchema = z.object({
 });
 
 const siteDesignSchema = z.object({
-  themeId: z.string().optional(),
+  themeId: z
+    .string()
+    .optional()
+    .describe("Design theme id (e.g. verona, calvary, condit). Replaces legacy color-swap ids."),
   colors: z
     .object({
       primary: z.string().optional().describe("Default header background when headerBackground is unset."),
@@ -81,6 +84,58 @@ const siteDesignSchema = z.object({
     .object({
       header: z.enum(["centered", "logoLeft"]).optional(),
       nav: z.enum(["solid", "transparent"]).optional(),
+    })
+    .optional()
+    .describe("Legacy layout flags; prefer structure when setting a full theme."),
+  structure: z
+    .object({
+      headerVariant: z
+        .enum([
+          "centeredBanner",
+          "logoLeftStack",
+          "inlineNav",
+          "minimalBar",
+          "heroBand",
+          "lightLogoLeft",
+          "lightCentered",
+        ])
+        .optional(),
+      navVariant: z
+        .enum(["barBelow", "inlineHeader", "underlineTabs", "pillTabs", "minimalText"])
+        .optional(),
+      footerVariant: z
+        .enum(["lightColumns", "darkBand", "minimalCenter", "accentBar"])
+        .optional(),
+      moduleVariant: z.enum(["classic", "card", "flatBar", "bordered"]).optional(),
+      quickLinksVariant: z.enum(["inline", "utilityBar", "boxedCta"]).optional(),
+      featuresVariant: z.enum(["slideshow", "tileGrid", "none"]).optional(),
+      heroCaptionVariant: z.enum(["bottomGradient", "centered", "overlayBoxLeft"]).optional(),
+      headerTone: z.enum(["dark", "light"]).optional(),
+    })
+    .optional(),
+  tokens: z
+    .object({
+      typography: z
+        .object({
+          titleSize: z.string().optional(),
+          navUppercase: z.boolean().optional(),
+          headingWeight: z.string().optional(),
+          letterSpacing: z.string().optional(),
+        })
+        .optional(),
+      spacing: z
+        .object({
+          contentMaxWidth: z.string().optional(),
+          headerPaddingY: z.string().optional(),
+        })
+        .optional(),
+      shape: z
+        .object({
+          moduleRadius: z.string().optional(),
+          buttonRadius: z.string().optional(),
+          moduleShadow: z.string().optional(),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -117,11 +172,31 @@ export function registerMcpTools(server) {
         contentMarginX: z
           .enum(["none", "sm", "md", "lg", "xl"])
           .optional()
-          .describe("Horizontal margin for page content (none, sm, md, lg, xl)."),
+          .describe("Horizontal margin for page content (none, sm, md, lg, xl). Desktop default."),
+        contentMarginXByViewport: z
+          .object({
+            mobile: z.enum(["none", "sm", "md", "lg", "xl"]).optional(),
+            tablet: z.enum(["none", "sm", "md", "lg", "xl"]).optional(),
+            desktop: z.enum(["none", "sm", "md", "lg", "xl"]).optional(),
+          })
+          .optional()
+          .describe("Per-viewport horizontal margin overrides."),
         contentColumns: z.number().int().min(1).max(4).optional(),
+        contentColumnsByViewport: z
+          .object({
+            mobile: z.number().int().min(1).max(3).optional(),
+            tablet: z.number().int().min(1).max(3).optional(),
+            desktop: z.number().int().min(1).max(3).optional(),
+          })
+          .optional()
+          .describe("Per-viewport content column counts (regions are shared; lower counts stack)."),
         maxModulesPerRegion: z.number().int().min(1).optional(),
         seo: z.record(z.unknown()).optional(),
         regions: z.array(z.record(z.unknown())).optional(),
+        hidden: z
+          .boolean()
+          .optional()
+          .describe("When true, page is hidden from the public site and navigation."),
       },
     },
     async ({ pageId, ...updates }) => run(() => pages.updatePageAdmin(pageId, updates)),
@@ -145,7 +220,7 @@ export function registerMcpTools(server) {
     "update_module",
     {
       description:
-        "Update a module config on a page. Common types: links {title, items: [{label, href}]}; buttons {items: [{label, href}]}; photo_albums {title, albums: [{label, href, imageSrc, photoCount?}]}; documents {title, items: [{label, url}]} — upload PDFs/docs via upload_media with folderId documents-root, then set url to the returned downloadUrl; people {title, people: [{id, name, role?, email?, phone?, photoUrl?}]}. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
+        "Update a module config on a page. Common types: links {title, items: [{label, href}]}; buttons {items: [{label, href}]}; photo_albums {title, albums: [{label, href, imageSrc, photoCount?}]}; documents {title, items: [{label, url, mediaId?, displayMode?: link|inline}]} — upload PDFs via upload_media with folderId documents-root, set url to downloadUrl and mediaId to returned id; use displayMode inline to embed PDF on page (library PDFs only); people {title, people: [{id, name, role?, email?, phone?, photoUrl?}]}. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
       inputSchema: {
         pageId: z.string(),
         moduleId: z.string(),
@@ -247,11 +322,17 @@ export function registerMcpTools(server) {
   server.registerTool(
     "update_site_settings",
     {
-      description: "Update site name, tagline, or canonical domain",
+      description: "Update site name, tagline, canonical domain, or site-wide SEO settings",
       inputSchema: {
         name: z.string().optional(),
         tagline: z.string().optional(),
         canonicalDomain: z.string().optional(),
+        seo: z
+          .object({
+            description: z.string().optional(),
+            faviconUrl: z.string().optional(),
+          })
+          .optional(),
       },
     },
     async (args) => run(() => site.updateSiteSettingsAdmin(args)),
@@ -299,7 +380,8 @@ export function registerMcpTools(server) {
   server.registerTool(
     "update_footer_config",
     {
-      description: "Update footer configuration",
+      description:
+        "Update footer configuration: copyright text, columns, and styles (footerBackground, headingColor, textColor, linkColor, copyrightColor, fonts, sizes).",
       inputSchema: { footerConfig: z.record(z.unknown()) },
     },
     async ({ footerConfig }) => run(() => site.updateFooterConfigAdmin(footerConfig)),
@@ -344,7 +426,7 @@ export function registerMcpTools(server) {
     "upload_media",
     {
       description:
-        "Upload media via base64 (max ~3MB) or sourceUrl. Optional description, alt, and tags help identify the file later. For documents modules, use folderId documents-root and set item url to the returned downloadUrl.",
+        "Upload media via base64 (max ~3MB) or sourceUrl. Optional description, alt, and tags help identify the file later. For documents modules, use folderId documents-root, set item url to the returned downloadUrl and mediaId to the returned id; use displayMode inline on the item to embed PDFs on the page.",
       inputSchema: {
         folderId: z.string(),
         filename: z.string(),

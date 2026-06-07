@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ADMIN_PAGE_NAV_HEIGHT } from "@/lib/design/admin-tokens";
 import { AdminIconButton } from "./AdminIconButton";
+import { ViewportTabs } from "./ViewportTabs";
 
 function ToolbarDivider() {
   return <div className="mx-1 h-7 w-px shrink-0 bg-border" aria-hidden />;
@@ -23,6 +24,8 @@ function ToolbarDivider() {
 export function AdminPageNav({
   trayOpen,
   hideContentTray = false,
+  previewDevice = "desktop",
+  onPreviewDeviceChange,
   onAddContent,
   onAddPage,
   onDuplicate,
@@ -31,6 +34,8 @@ export function AdminPageNav({
   onRevert,
   onPreview,
   onPublish,
+  canPublish = false,
+  canRevert = false,
 }) {
   return (
     <div
@@ -78,6 +83,18 @@ export function AdminPageNav({
           />
           <AdminIconButton icon={Settings} label="Page Settings" onClick={onPageSettings} />
         </div>
+
+        {onPreviewDeviceChange && (
+          <>
+            <ToolbarDivider />
+            <ViewportTabs
+              value={previewDevice}
+              onChange={onPreviewDeviceChange}
+              size="compact"
+              className="hidden min-w-[220px] sm:flex"
+            />
+          </>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -86,6 +103,7 @@ export function AdminPageNav({
           variant="outline"
           size="sm"
           onClick={onRevert}
+          disabled={!canRevert}
           className="h-9 gap-1.5 border-border bg-card px-3 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -104,7 +122,12 @@ export function AdminPageNav({
 
         <ToolbarDivider />
 
-        <Button size="sm" className="h-9 px-4 font-medium shadow-sm" onClick={onPublish}>
+        <Button
+          size="sm"
+          className="h-9 px-4 font-medium shadow-sm"
+          onClick={onPublish}
+          disabled={!canPublish}
+        >
           Publish
         </Button>
       </div>

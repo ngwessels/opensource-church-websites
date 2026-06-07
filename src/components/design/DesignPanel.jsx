@@ -68,6 +68,12 @@ export function DesignPanel({ siteConfig }) {
       colors: { ...selectedTheme.colors },
       fonts: { ...selectedTheme.fonts },
       layout: { ...selectedTheme.layout },
+      structure: { ...selectedTheme.structure },
+      tokens: {
+        typography: { ...selectedTheme.tokens.typography },
+        spacing: { ...selectedTheme.tokens.spacing },
+        shape: { ...selectedTheme.tokens.shape },
+      },
     });
   };
 

@@ -125,7 +125,7 @@ export function TextModule({ module, editing = false, onSave }) {
     return (
       <section>
         {configTitle && (
-          <h2 className="mb-4 break-words border-b-2 border-[var(--site-primary)] pb-2 text-xl font-semibold text-zinc-900">
+          <h2 className="site-module-title break-words text-xl font-semibold">
             {configTitle}
           </h2>
         )}
@@ -146,7 +146,7 @@ export function TextModule({ module, editing = false, onSave }) {
         onBlur={handleTitleBlur}
         onKeyDown={handleTitleKeyDown}
         placeholder="Section title"
-        className="mb-4 w-full resize-none overflow-hidden break-words border-b-2 border-[var(--site-primary)] bg-transparent pb-2 text-xl font-semibold leading-snug text-zinc-900 outline-none placeholder:text-zinc-400"
+        className="site-module-title mb-4 w-full resize-none overflow-hidden break-words border-b-2 border-[var(--site-primary)] bg-transparent pb-2 text-xl font-semibold leading-snug outline-none placeholder:opacity-50"
       />
       <EditorContent editor={editor} />
     </section>

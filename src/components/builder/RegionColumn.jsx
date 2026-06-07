@@ -4,7 +4,8 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 import { ModuleRenderer } from "@/components/modules/ModuleRenderer";
-import { getRegionLabel, getRegionModules } from "@/lib/pages/regions";
+import { DonationRegionContent } from "@/components/donations/DonationRegionContent";
+import { getRegionLabel, getRegionModules, isFeaturesModuleType } from "@/lib/pages/regions";
 
 import { InsertSlot } from "./InsertSlot";
 import { SortableModule } from "./SortableModule";
@@ -21,6 +22,8 @@ export function RegionColumn({
   dragType,
   className,
   columnCount,
+  donationReturnPath = null,
+  onEditDonation,
 }) {
   const modules = getRegionModules(page, regionId);
   const label = getRegionLabel(regionId, columnCount);
@@ -31,8 +34,10 @@ export function RegionColumn({
   });
 
   const showHighlight =
-    isDragActive && dragType && dragType !== "slideshow" && regionId !== "features";
+    isDragActive && dragType && !isFeaturesModuleType(dragType) && regionId !== "features";
   const highlightClass = isOver ? "is-over" : showHighlight ? "is-drag-active" : "";
+
+  const showDonationForm = donationReturnPath && regionId === "content-1";
 
   if (!editing) {
     return (
@@ -45,6 +50,12 @@ export function RegionColumn({
             editing={false}
           />
         ))}
+        {showDonationForm && (
+          <DonationRegionContent
+            page={page}
+            returnPath={donationReturnPath}
+          />
+        )}
       </div>
     );
   }
@@ -79,6 +90,15 @@ export function RegionColumn({
       {modules.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">Drop modules here</p>
       )}
+
+        {showDonationForm && (
+          <DonationRegionContent
+            page={page}
+            returnPath={donationReturnPath}
+            editing
+            onEdit={onEditDonation}
+          />
+        )}
     </div>
   );
 }

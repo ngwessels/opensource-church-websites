@@ -24,6 +24,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { persistNavNodeChanges } from "@/lib/firestore/nav-nodes";
+import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
 import { DEFAULT_HEADER_STYLES } from "@/lib/site/header-styles";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
@@ -194,6 +195,150 @@ function HeaderStylesEditor({ styles, designColors, designFonts, onChange, focus
   );
 }
 
+function FooterStylesEditor({ styles, designColors, designFonts, onChange }) {
+  const updateStyle = (key, value) => {
+    onChange({ ...styles, [key]: value });
+  };
+
+  return (
+    <div className="space-y-6 border-t pt-4">
+      <div>
+        <h4 className="mb-3 text-sm font-semibold">Background</h4>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Leave blank to use the theme footer style (e.g. dark band uses secondary color).
+        </p>
+        <ColorField
+          label="Footer bar"
+          value={styles.footerBackground}
+          placeholder={designColors.secondary || "#1e3a5f"}
+          onChange={(v) => updateStyle("footerBackground", v)}
+        />
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold">Text colors</h4>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Leave blank to use theme defaults. Dark footers default to light text.
+        </p>
+        <div className="space-y-3">
+          <ColorField
+            label="Column titles"
+            value={styles.headingColor}
+            placeholder="Theme default"
+            onChange={(v) => updateStyle("headingColor", v)}
+          />
+          <ColorField
+            label="Body text"
+            value={styles.textColor}
+            placeholder="Theme default"
+            onChange={(v) => updateStyle("textColor", v)}
+          />
+          <ColorField
+            label="Links"
+            value={styles.linkColor}
+            placeholder="Theme default"
+            onChange={(v) => updateStyle("linkColor", v)}
+          />
+          <ColorField
+            label="Copyright"
+            value={styles.copyrightColor}
+            placeholder="Theme default"
+            onChange={(v) => updateStyle("copyrightColor", v)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold">Fonts</h4>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Leave blank to use site theme fonts from the Design panel.
+        </p>
+        <div className="space-y-3">
+          <FontField
+            id="footerHeadingFont"
+            label="Column title font"
+            value={styles.headingFont || ""}
+            allowDefault
+            defaultLabel={`Theme default (${designFonts?.heading || "Georgia, serif"})`}
+            onChange={(v) => updateStyle("headingFont", v)}
+          />
+          <FontField
+            id="footerBodyFont"
+            label="Body text font"
+            value={styles.bodyFont || ""}
+            allowDefault
+            defaultLabel={`Theme default (${designFonts?.body || "Arial, sans-serif"})`}
+            onChange={(v) => updateStyle("bodyFont", v)}
+          />
+          <FontField
+            id="footerLinkFont"
+            label="Link font"
+            value={styles.linkFont || ""}
+            allowDefault
+            defaultLabel={`Theme default (${designFonts?.body || "Arial, sans-serif"})`}
+            onChange={(v) => updateStyle("linkFont", v)}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Title weight</Label>
+              <Select
+                value={styles.headingFontWeight || "600"}
+                onValueChange={(v) => updateStyle("headingFontWeight", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="400">Regular</SelectItem>
+                  <SelectItem value="500">Medium</SelectItem>
+                  <SelectItem value="600">Semibold</SelectItem>
+                  <SelectItem value="700">Bold</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="footerHeadingFontSize">Title size</Label>
+              <Input
+                id="footerHeadingFontSize"
+                value={styles.headingFontSize || ""}
+                placeholder="0.875rem"
+                onChange={(e) => updateStyle("headingFontSize", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="footerBodyFontSize">Body text size</Label>
+            <Input
+              id="footerBodyFontSize"
+              value={styles.bodyFontSize || ""}
+              placeholder="0.875rem"
+              onChange={(e) => updateStyle("bodyFontSize", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="footerLinkFontSize">Link size</Label>
+            <Input
+              id="footerLinkFontSize"
+              value={styles.linkFontSize || ""}
+              placeholder="0.875rem"
+              onChange={(e) => updateStyle("linkFontSize", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="footerCopyrightFontSize">Copyright size</Label>
+            <Input
+              id="footerCopyrightFontSize"
+              value={styles.copyrightFontSize || ""}
+              placeholder="0.875rem"
+              onChange={(e) => updateStyle("copyrightFontSize", e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HeaderFooterSheet({
   open,
   section,
@@ -231,9 +376,44 @@ export function HeaderFooterSheet({
       ...siteConfig?.headerConfig?.styles,
     },
   }));
-  const [footerConfig, setFooterConfig] = useState(
-    siteConfig?.footerConfig || { text: "", columns: [] },
-  );
+  const [footerConfig, setFooterConfig] = useState(() => ({
+    text: "",
+    columns: [],
+    ...siteConfig?.footerConfig,
+    styles: {
+      ...DEFAULT_FOOTER_STYLES,
+      ...siteConfig?.footerConfig?.styles,
+    },
+  }));
+
+  useEffect(() => {
+    if (!open) return;
+    if (isHeader) {
+      setSiteName(siteConfig?.name || "");
+      setTagline(siteConfig?.tagline || "");
+      setHeaderConfig({
+        showTagline: true,
+        showLogo: false,
+        logoUrl: "",
+        layout: "centered",
+        ...siteConfig?.headerConfig,
+        styles: {
+          ...DEFAULT_HEADER_STYLES,
+          ...siteConfig?.headerConfig?.styles,
+        },
+      });
+    } else {
+      setFooterConfig({
+        text: "",
+        columns: [],
+        ...siteConfig?.footerConfig,
+        styles: {
+          ...DEFAULT_FOOTER_STYLES,
+          ...siteConfig?.footerConfig?.styles,
+        },
+      });
+    }
+  }, [open, isHeader, siteConfig]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -279,7 +459,7 @@ export function HeaderFooterSheet({
           <SheetDescription>
             {isHeader
               ? "Customize your parish name, quick links, colors, fonts, logo, and tagline at the top of the site."
-              : "Set the copyright line shown at the bottom of every page."}
+              : "Customize footer colors, fonts, and the copyright line at the bottom of every page."}
           </SheetDescription>
         </SheetHeader>
 
@@ -373,8 +553,15 @@ export function HeaderFooterSheet({
                   onChange={(e) => setFooterConfig((c) => ({ ...c, text: e.target.value }))}
                 />
               </div>
+              <FooterStylesEditor
+                styles={footerConfig.styles || DEFAULT_FOOTER_STYLES}
+                designColors={siteConfig?.design?.colors || {}}
+                designFonts={siteConfig?.design?.fonts || {}}
+                onChange={(styles) => setFooterConfig((c) => ({ ...c, styles }))}
+              />
               <p className="text-xs text-muted-foreground">
-                Footer columns can be configured in a future release. Use copyright text for now.
+                Footer column content is managed in site configuration. Use the fields above to style
+                how columns and links appear.
               </p>
             </>
           )}

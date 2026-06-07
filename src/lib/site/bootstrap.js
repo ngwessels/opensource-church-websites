@@ -7,9 +7,12 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
+import { normalizeDesign } from "@/lib/design/design-utils";
+import { getThemeById } from "@/lib/design/themes";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
-import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 import { generateId, generatePageId } from "@/lib/sitemap/tree";
+import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
 export async function ensureSiteBootstrapped(db, user) {
   const siteRef = doc(db, COLLECTIONS.site, SITE_CONFIG_ID);
@@ -28,13 +31,8 @@ export async function ensureSiteBootstrapped(db, user) {
     name: "My Parish",
     tagline: "",
     canonicalDomain: process.env.NEXT_PUBLIC_SITE_URL || "",
-    seo: { title: "My Parish", description: "" },
-    design: {
-      themeId: "classic",
-      colors: { primary: "#7f1d1d", secondary: "#1e3a5f", accent: "#d97706" },
-      fonts: { heading: "Georgia, serif", body: "Arial, sans-serif" },
-      layout: { header: "centered", nav: "solid" },
-    },
+    seo: { title: "My Parish", description: "", faviconUrl: "" },
+    design: normalizeDesign({ themeId: "verona" }, getThemeById("verona")),
     headerConfig: {
       showTagline: true,
       showLogo: false,
@@ -56,6 +54,9 @@ export async function ensureSiteBootstrapped(db, user) {
     },
     footerConfig: {
       text: "",
+      styles: {
+        ...DEFAULT_FOOTER_STYLES,
+      },
       columns: [
         {
           title: "Contact",
@@ -63,10 +64,8 @@ export async function ensureSiteBootstrapped(db, user) {
         },
         {
           title: "Quick Links",
-          links: [
-            { label: "Mass Times", href: "/" },
-            { label: "Contact", href: "/contact" },
-          ],
+          source: "quickLinks",
+          links: [],
         },
       ],
     },

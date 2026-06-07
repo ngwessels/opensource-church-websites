@@ -204,7 +204,6 @@
       }
     }
 
-    const moduleInner = li.querySelector(".moduleInner");
     if (moduleInner) {
       if (moduleInner.classList.contains("facebookModule")) {
         const iframe = moduleInner.querySelector("iframe");

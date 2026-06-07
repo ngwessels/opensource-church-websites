@@ -7,6 +7,8 @@ import { ModuleTray } from "./ModuleTray";
 export function AdminFooter({
   trayOpen,
   hideContentTray = false,
+  previewDevice = "desktop",
+  onPreviewDeviceChange,
   onCloseTray,
   onAddModule,
   onAddContent,
@@ -17,6 +19,8 @@ export function AdminFooter({
   onRevert,
   onPreview,
   onPublish,
+  canPublish = false,
+  canRevert = false,
   dropError,
 }) {
   return (
@@ -39,6 +43,8 @@ export function AdminFooter({
         <AdminPageNav
           trayOpen={trayOpen}
           hideContentTray={hideContentTray}
+          previewDevice={previewDevice}
+          onPreviewDeviceChange={onPreviewDeviceChange}
           onAddContent={onAddContent}
           onAddPage={onAddPage}
           onDuplicate={onDuplicate}
@@ -47,6 +53,8 @@ export function AdminFooter({
           onRevert={onRevert}
           onPreview={onPreview}
           onPublish={onPublish}
+          canPublish={canPublish}
+          canRevert={canRevert}
         />
       </div>
     </div>

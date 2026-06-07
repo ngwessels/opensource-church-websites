@@ -3,6 +3,8 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
+import { cn } from "@/lib/utils";
+
 import { NavNodeCard } from "./NavNodeCard";
 
 function NavChildren({
@@ -11,6 +13,7 @@ function NavChildren({
   depth,
   maxLevel,
   pageTypeMap,
+  pageHiddenMap,
   onRename,
   onDelete,
   onView,
@@ -19,7 +22,7 @@ function NavChildren({
   if (depth >= maxLevel) return null;
 
   return (
-    <div className="sitemap-children mt-1 space-y-0 pl-2">
+    <div className="sitemap-children mt-2 space-y-1 pl-3">
       <SortableContext items={nodes.map((n) => n.id)} strategy={verticalListSortingStrategy}>
         {nodes.map((node) => (
           <div key={node.id}>
@@ -28,6 +31,7 @@ function NavChildren({
               nodes={allNodes}
               depth={depth}
               pageType={node.pageId ? pageTypeMap?.[node.pageId] : undefined}
+              pageHidden={node.pageId ? pageHiddenMap?.[node.pageId] : false}
               onRename={onRename}
               onDelete={onDelete}
               onView={onView}
@@ -40,6 +44,7 @@ function NavChildren({
                 depth={depth + 1}
                 maxLevel={maxLevel}
                 pageTypeMap={pageTypeMap}
+                pageHiddenMap={pageHiddenMap}
                 onRename={onRename}
                 onDelete={onDelete}
                 onView={onView}
@@ -58,6 +63,7 @@ export function NavColumn({
   allNodes,
   maxLevel,
   pageTypeMap,
+  pageHiddenMap,
   onRename,
   onDelete,
   onView,
@@ -68,35 +74,45 @@ export function NavColumn({
     data: { type: "column", columnId: column.id },
   });
 
+  const childCount = column.children?.length ?? 0;
+
   return (
     <li
       ref={setNodeRef}
-      className={`sitemap-column min-w-[160px] flex-1 list-none rounded bg-card p-2 shadow-sm ${
-        isOver ? "ring-2 ring-blue-400" : ""
-      }`}
+      className={cn(
+        "sitemap-column flex w-[240px] shrink-0 list-none flex-col rounded-xl border border-border/80 bg-card p-3 shadow-sm transition-all",
+        isOver && "border-primary/50 bg-primary/5 ring-2 ring-primary/20",
+      )}
     >
       <NavNodeCard
         node={column}
         nodes={allNodes}
         depth={0}
         pageType={column.pageId ? pageTypeMap?.[column.pageId] : undefined}
+        pageHidden={column.pageId ? pageHiddenMap?.[column.pageId] : false}
         onRename={onRename}
         onDelete={onDelete}
         onView={onView}
         onSettings={onSettings}
       />
-      {column.children?.length > 0 && (
+      {childCount > 0 && (
         <NavChildren
           allNodes={allNodes}
           nodes={column.children}
           depth={1}
           maxLevel={maxLevel}
           pageTypeMap={pageTypeMap}
+          pageHiddenMap={pageHiddenMap}
           onRename={onRename}
           onDelete={onDelete}
           onView={onView}
           onSettings={onSettings}
         />
+      )}
+      {childCount === 0 && (
+        <p className="mt-3 rounded-md border border-dashed border-border/80 px-2 py-3 text-center text-xs text-muted-foreground">
+          Drop pages here
+        </p>
       )}
     </li>
   );

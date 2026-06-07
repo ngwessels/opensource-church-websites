@@ -1,8 +1,11 @@
+import { Suspense } from "react";
+
 import { DonateButton } from "@/components/donations/DonateButton";
+import { GivePageStatus } from "@/components/donations/GivePageStatus";
 
 export const metadata = {
   title: "Give",
-  description: "Support our parish with a one-time or monthly donation.",
+  description: "Support our parish with a one-time, weekly, or monthly donation.",
 };
 
 export default function GivePage() {
@@ -13,6 +16,9 @@ export default function GivePage() {
         <p className="mt-2 text-sm text-zinc-600">
           Support our parish with a secure online donation.
         </p>
+        <Suspense fallback={null}>
+          <GivePageStatus />
+        </Suspense>
         <div className="mt-8">
           <DonateButton />
         </div>

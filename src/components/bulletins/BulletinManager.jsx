@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
-import { formatBulletinDate, getBulletinLabel } from "@/lib/bulletins/schema";
+import {
+  formatBulletinDate,
+  getBulletinLabel,
+  getDefaultBulletinDate,
+} from "@/lib/bulletins/schema";
 import { uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 import { useBulletins } from "@/hooks/useBulletins";
@@ -20,7 +24,7 @@ function generateBulletinId() {
 
 export function BulletinManager() {
   const { bulletins, loading, error: loadError, refresh } = useBulletins();
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(getDefaultBulletinDate);
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -75,7 +79,7 @@ export function BulletinManager() {
         updatedAt: now,
       });
 
-      setDate("");
+      setDate(getDefaultBulletinDate());
       setTitle("");
       await refresh();
     } catch (err) {

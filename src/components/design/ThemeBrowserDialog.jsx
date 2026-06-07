@@ -45,7 +45,7 @@ export function ThemeBrowserDialog({ open, onOpenChange, selectedId, onApply }) 
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle>Browse Themes</DialogTitle>
           <DialogDescription>
-            Choose a theme for your parish website. Filters help narrow by color, layout, and style.
+            Choose a design theme for your parish website. Each theme has a distinct layout, not just colors.
           </DialogDescription>
         </DialogHeader>
 

@@ -8,6 +8,8 @@ export const CONTENT_MARGIN_X_OPTIONS = [
   { value: "xl", label: "Extra large" },
 ];
 
+const VALID_MARGIN_VALUES = new Set(CONTENT_MARGIN_X_OPTIONS.map((o) => o.value));
+
 /** Horizontal inset applied to the page content wrapper. */
 const CONTENT_MARGIN_X_STYLE = {
   none: undefined,
@@ -17,6 +19,12 @@ const CONTENT_MARGIN_X_STYLE = {
   xl: { paddingLeft: "max(6rem, 10vw)", paddingRight: "max(6rem, 10vw)" },
 };
 
+export function marginValueToCss(value) {
+  const style = CONTENT_MARGIN_X_STYLE[value];
+  if (!style) return "0";
+  return style.paddingLeft;
+}
+
 export function getContentMarginX(page) {
   const value = page?.contentMarginX;
   if (value && value in CONTENT_MARGIN_X_STYLE) return value;
@@ -25,4 +33,12 @@ export function getContentMarginX(page) {
 
 export function getContentMarginXStyle(page) {
   return CONTENT_MARGIN_X_STYLE[getContentMarginX(page)];
+}
+
+export function getContentMarginPaddingStyle(value) {
+  return CONTENT_MARGIN_X_STYLE[value] ?? CONTENT_MARGIN_X_STYLE[DEFAULT_CONTENT_MARGIN_X];
+}
+
+export function isValidContentMarginX(value) {
+  return VALID_MARGIN_VALUES.has(value);
 }
