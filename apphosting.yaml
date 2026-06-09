@@ -3,8 +3,24 @@
 #
 # Setup:
 #   1. firebase apphosting:backends:create --project <PROJECT_ID>
-#   2. firebase apphosting:secrets:set stripeSecretKey
-#   3. Copy parish-specific values into the Firebase console or override here per environment.
+#   2. Create each secret (prompts for value):
+#        firebase apphosting:secrets:set firebaseApiKey --project <PROJECT_ID>
+#        firebase apphosting:secrets:set firebaseAuthDomain --project <PROJECT_ID>
+#        firebase apphosting:secrets:set firebaseProjectId --project <PROJECT_ID>
+#        firebase apphosting:secrets:set firebaseStorageBucket --project <PROJECT_ID>
+#        firebase apphosting:secrets:set firebaseMessagingSenderId --project <PROJECT_ID>
+#        firebase apphosting:secrets:set firebaseAppId --project <PROJECT_ID>
+#        firebase apphosting:secrets:set stripeSecretKey --project <PROJECT_ID>
+#        firebase apphosting:secrets:set stripeWebhookSecret --project <PROJECT_ID>
+#        firebase apphosting:secrets:set stripePublishableKey --project <PROJECT_ID>
+#        firebase apphosting:secrets:set mcpOauthCookieSecret --project <PROJECT_ID>
+#        firebase apphosting:secrets:set mailgunApiKey --project <PROJECT_ID>
+#        firebase apphosting:secrets:set mailgunDomain --project <PROJECT_ID>
+#        firebase apphosting:secrets:set mailgunFrom --project <PROJECT_ID>
+#      MCP secret value: openssl rand -base64 32
+#   3. If a secret already exists but build says PermissionDenied, grant access:
+#        firebase apphosting:secrets:grantaccess mcpOauthCookieSecret --backend <BACKEND_ID> --project <PROJECT_ID>
+#   4. Copy parish-specific values into the Firebase console or override here per environment.
 
 runConfig:
   cpu: 1
@@ -58,32 +74,48 @@ env:
       - BUILD
       - RUNTIME
 
-  # Stripe
+  # Stripe — server secrets are runtime-only (not needed during next build).
   - variable: STRIPE_SECRET_KEY
     secret: stripeSecretKey
+    availability:
+      - RUNTIME
   - variable: STRIPE_WEBHOOK_SECRET
     secret: stripeWebhookSecret
+    availability:
+      - RUNTIME
   - variable: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
     secret: stripePublishableKey
     availability:
       - BUILD
       - RUNTIME
 
-  # MCP OAuth
+  # MCP OAuth — runtime-only; generate with: openssl rand -base64 32
   - variable: MCP_OAUTH_COOKIE_SECRET
     secret: mcpOauthCookieSecret
+    availability:
+      - RUNTIME
   - variable: MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS
     value: "3600"
+    availability:
+      - RUNTIME
   - variable: MCP_OAUTH_CODE_TTL_SECONDS
     value: "600"
+    availability:
+      - RUNTIME
 
-  # Mailgun (form notifications)
+  # Mailgun (form notifications) — runtime-only
   - variable: MAILGUN_API_KEY
     secret: mailgunApiKey
+    availability:
+      - RUNTIME
   - variable: MAILGUN_DOMAIN
     secret: mailgunDomain
+    availability:
+      - RUNTIME
   - variable: MAILGUN_FROM
     secret: mailgunFrom
+    availability:
+      - RUNTIME
 
   # Optional on App Hosting — Admin SDK uses Application Default Credentials when
   # FIREBASE_ADMIN_* is omitted. Set these secrets only if you need explicit credentials.
