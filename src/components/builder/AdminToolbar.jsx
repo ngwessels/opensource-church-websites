@@ -20,7 +20,6 @@ const TABS = [
   { href: "/builder/edit", label: "Edit Website" },
   { href: "/builder/design", label: "Design" },
   { href: "/builder/files", label: "Files" },
-  { href: "/builder/bulletins", label: "Bulletins" },
   { href: "/builder/admin", label: "Admin" },
   { href: "/builder/sitemap", label: "Site Map" },
 ];

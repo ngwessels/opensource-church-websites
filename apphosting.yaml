@@ -1,0 +1,95 @@
+# Firebase App Hosting configuration.
+# See https://firebase.google.com/docs/app-hosting/configure
+#
+# Setup:
+#   1. firebase apphosting:backends:create --project <PROJECT_ID>
+#   2. firebase apphosting:secrets:set stripeSecretKey
+#   3. Copy parish-specific values into the Firebase console or override here per environment.
+
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  maxInstances: 10
+  concurrency: 80
+
+env:
+  # Public URLs — set to your canonical domain before rollout.
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: https://www.yourparish.org
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_APP_URL
+    value: https://www.yourparish.org
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Firebase client config (also auto-populated as FIREBASE_WEBAPP_CONFIG at build time
+  # when a Firebase web app is linked to the backend — set these if not using that flow).
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: firebaseApiKey
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    secret: firebaseAuthDomain
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    secret: firebaseProjectId
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    secret: firebaseStorageBucket
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    secret: firebaseMessagingSenderId
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    secret: firebaseAppId
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Stripe
+  - variable: STRIPE_SECRET_KEY
+    secret: stripeSecretKey
+  - variable: STRIPE_WEBHOOK_SECRET
+    secret: stripeWebhookSecret
+  - variable: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    secret: stripePublishableKey
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # MCP OAuth
+  - variable: MCP_OAUTH_COOKIE_SECRET
+    secret: mcpOauthCookieSecret
+  - variable: MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS
+    value: "3600"
+  - variable: MCP_OAUTH_CODE_TTL_SECONDS
+    value: "600"
+
+  # Mailgun (form notifications)
+  - variable: MAILGUN_API_KEY
+    secret: mailgunApiKey
+  - variable: MAILGUN_DOMAIN
+    secret: mailgunDomain
+  - variable: MAILGUN_FROM
+    secret: mailgunFrom
+
+  # Optional on App Hosting — Admin SDK uses Application Default Credentials when
+  # FIREBASE_ADMIN_* is omitted. Set these secrets only if you need explicit credentials.
+  # - variable: FIREBASE_ADMIN_PROJECT_ID
+  #   secret: firebaseAdminProjectId
+  # - variable: FIREBASE_ADMIN_CLIENT_EMAIL
+  #   secret: firebaseAdminClientEmail
+  # - variable: FIREBASE_ADMIN_PRIVATE_KEY
+  #   secret: firebaseAdminPrivateKey

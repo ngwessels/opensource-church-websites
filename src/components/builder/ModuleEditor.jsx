@@ -329,7 +329,7 @@ function ImageModuleEditor({ module, onSave, onClose }) {
               <SelectTrigger id="image-size">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent style={{ zIndex: ADMIN_Z.popover }}>
                 <SelectItem value="small">Small</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="large">Large</SelectItem>

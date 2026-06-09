@@ -65,15 +65,45 @@ npx -y firebase-tools@latest deploy --only firestore:rules,storage
 
 ## Custom domain deployment
 
-Each church deploys their own copy to Vercel (or similar) with their own env vars:
+Each church deploys their own copy with their own env vars. The app runs on **Vercel** or **Firebase App Hosting** — both support the same Next.js `/api` routes (forms, Stripe, MCP/OAuth, content proxies). Firebase (Auth, Firestore, Storage) is always your backend regardless of hosting choice.
+
+Shared steps for either host:
 
 1. Fork/clone this repo and create a Firebase project for your parish.
-2. Set all `.env.local` variables; set `NEXT_PUBLIC_SITE_URL` to your canonical domain (e.g. `https://www.visitationfg.org`).
-3. Deploy to [Vercel](https://vercel.com/) and add your custom domain in project settings.
-4. Point DNS A/CNAME records per Vercel's instructions.
-5. Configure Stripe webhook to `https://yourdomain.org/api/stripe/webhook`.
+2. Deploy Firestore and Storage rules (see [Firebase setup](#firebase-setup)).
+3. Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_APP_URL` to your canonical domain (e.g. `https://www.visitationfg.org`).
+4. Configure Stripe webhook to `https://yourdomain.org/api/stripe/webhook`.
+5. Add your production domain to Firebase Auth → Settings → Authorized domains.
 
-Admin → Settings shows environment checklist and domain setup steps.
+Admin → Settings shows the environment checklist and domain setup steps.
+
+### Deploy to Vercel
+
+1. Set all variables from `.env.example` in the Vercel project settings (including `FIREBASE_ADMIN_*`).
+2. Import the repo and deploy.
+3. Add your custom domain in Vercel project settings and point DNS per Vercel's instructions.
+
+`vercel.json` configures longer timeouts for MCP routes.
+
+### Deploy to Firebase App Hosting
+
+Requires the Firebase **Blaze** (pay-as-you-go) plan.
+
+1. In the [Firebase Console](https://console.firebase.google.com/), go to **Hosting & Serverless → App Hosting** and create a backend linked to your GitHub repo.
+2. Copy values from `.env.example` into the backend environment settings, or use [`apphosting.yaml`](apphosting.yaml) with [Cloud Secret Manager](https://firebase.google.com/docs/app-hosting/configure#store-and-access-secret-parameters):
+
+```bash
+firebase apphosting:backends:create --project <PROJECT_ID>
+firebase apphosting:secrets:set stripeSecretKey
+# repeat for secrets referenced in apphosting.yaml
+```
+
+3. Update `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_APP_URL` in `apphosting.yaml` (or the console) to your canonical domain before the first rollout.
+4. Connect a custom domain in App Hosting settings and point DNS per Firebase instructions.
+
+On App Hosting, the Firebase Admin SDK can use Application Default Credentials — `FIREBASE_ADMIN_*` is optional when `FIREBASE_CONFIG` is auto-injected. Vercel deployments still need explicit service account credentials.
+
+> **Note:** This project uses Next.js 16. Firebase App Hosting officially supports Next.js through 15.x; test your rollout and watch build logs if you use App Hosting.
 
 ## Stripe setup
 

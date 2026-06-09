@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { PinchZoom } from "@/components/ui/PinchZoom";
 
 const IMAGE_SIZE_CLASSES = {
   small: "max-w-[280px] max-h-80",
@@ -13,21 +14,28 @@ const IMAGE_SIZE_CLASSES = {
 };
 
 const LIGHTBOX_DIALOG_CLASS =
-  "w-auto max-w-[calc(100vw-2rem)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(calc(100vw-2rem),1400px)]";
+  "w-full max-w-[calc(100vw-1rem)] border-0 bg-transparent p-0 shadow-none sm:max-w-[calc(100vw-1rem)] lg:w-auto lg:max-w-[min(calc(100vw-2rem),1400px)]";
+
+const LIGHTBOX_SIZE_CLASS =
+  "max-h-[calc(100dvh-3rem)] w-full max-w-[calc(100vw-1rem)] object-contain lg:max-h-[calc(100vh-4rem)] lg:w-auto lg:max-w-full";
+
+const LIGHTBOX_IMAGE_CLASS = `${LIGHTBOX_SIZE_CLASS} rounded-lg`;
 
 function ImageLightbox({ open, src, alt, onClose }) {
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
       <DialogContent className={LIGHTBOX_DIALOG_CLASS}>
         {src && (
-          <Image
-            src={src}
-            alt={alt}
-            width={1600}
-            height={1200}
-            className="max-h-[calc(100vh-4rem)] w-auto max-w-full rounded-lg object-contain"
-            unoptimized
-          />
+          <PinchZoom resetKey={src} className={LIGHTBOX_SIZE_CLASS}>
+            <Image
+              src={src}
+              alt={alt}
+              width={1600}
+              height={1200}
+              className={LIGHTBOX_IMAGE_CLASS}
+              unoptimized
+            />
+          </PinchZoom>
         )}
       </DialogContent>
     </Dialog>

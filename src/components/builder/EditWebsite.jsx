@@ -11,7 +11,6 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { doc, updateDoc } from "firebase/firestore";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -72,6 +71,7 @@ export function EditWebsite({ slug = "" }) {
   const [toast, setToast] = useState(null);
   const [moduleToRemove, setModuleToRemove] = useState(null);
   const [removingModule, setRemovingModule] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [previewDevice, setPreviewDevice] = useState("desktop");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -80,7 +80,7 @@ export function EditWebsite({ slug = "" }) {
 
   const navTree = buildNavTree(nodes);
   const quickLinks = sortQuickLinks(nodes);
-  const { bulletins } = useBulletins();
+  const { bulletins, refresh: refreshBulletins } = useBulletins();
   const isBulletinsPage = getPageType(page) === "bulletins";
   const isDonationPage = getPageType(page) === "donation";
   const canPublish = useMemo(
@@ -199,13 +199,16 @@ export function EditWebsite({ slug = "" }) {
   };
 
   const handlePublish = async () => {
-    if (!pageId || !canPublish) return;
+    if (!pageId || !canPublish || isPublishing) return;
+    setIsPublishing(true);
     try {
       await publishPage(getFirebaseFirestore(), pageId);
       await loadPage();
       showToast("Page published.");
     } catch (err) {
       showError(err instanceof Error ? err.message : "Failed to publish page.");
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -395,16 +398,6 @@ export function EditWebsite({ slug = "" }) {
           <div className="drag-dim-overlay pointer-events-none absolute inset-0 z-20 bg-black/10" />
         )}
 
-        {isBulletinsPage && (
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
-            This is a Bulletins page. Manage bulletin PDFs in the{" "}
-            <Link href="/builder/bulletins" className="font-medium underline">
-              Bulletins tab
-            </Link>
-            .
-          </div>
-        )}
-
         {isDonationPage && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
             Donors see the donation form below your page content. Click the edit button on the form
@@ -442,6 +435,7 @@ export function EditWebsite({ slug = "" }) {
               onHeaderSettings={(focus) => setSectionSheet({ section: "header", focus })}
               onFooterSettings={() => setSectionSheet("footer")}
               onEditDonation={isDonationPage ? () => setDonationSettingsOpen(true) : undefined}
+              onBulletinsRefresh={isBulletinsPage ? refreshBulletins : undefined}
             />
           </div>
         </div>
@@ -469,6 +463,7 @@ export function EditWebsite({ slug = "" }) {
         onPreview={() => window.open(slug ? `/${slug}` : "/", "_blank")}
         onPublish={handlePublish}
         canPublish={canPublish}
+        isPublishing={isPublishing}
         canRevert={canRevert}
         dropError={dropError}
       />

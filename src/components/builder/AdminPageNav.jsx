@@ -8,6 +8,7 @@ import {
   Eye,
   Plus,
   PanelBottomClose,
+  Loader2,
   RotateCcw,
 } from "lucide-react";
 
@@ -35,6 +36,7 @@ export function AdminPageNav({
   onPreview,
   onPublish,
   canPublish = false,
+  isPublishing = false,
   canRevert = false,
 }) {
   return (
@@ -124,11 +126,13 @@ export function AdminPageNav({
 
         <Button
           size="sm"
-          className="h-9 px-4 font-medium shadow-sm"
+          className="h-9 gap-1.5 px-4 font-medium shadow-sm"
           onClick={onPublish}
-          disabled={!canPublish}
+          disabled={!canPublish || isPublishing}
+          aria-busy={isPublishing}
         >
-          Publish
+          {isPublishing && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+          {isPublishing ? "Publishing…" : "Publish"}
         </Button>
       </div>
     </div>

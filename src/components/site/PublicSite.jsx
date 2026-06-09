@@ -35,6 +35,7 @@ export function PublicSite({
   onFooterSettings,
   previewViewport = null,
   onEditDonation,
+  onBulletinsRefresh,
 }) {
   const { checking: redirectingAdmin } = useAdminPublicRedirect({
     enabled: !editing && !designPreview,
@@ -116,6 +117,7 @@ export function PublicSite({
                 bulletins={bulletins}
                 editing={editing}
                 pageSlug={pageSlug}
+                onBulletinsRefresh={onBulletinsRefresh}
               />
             </Suspense>
           ) : (

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -206,11 +205,7 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
           </Select>
           {isBulletins && (
             <p className="text-xs text-muted-foreground">
-              Upload and manage bulletin PDFs in the{" "}
-              <Link href="/builder/bulletins" className="text-primary underline">
-                Bulletins tab
-              </Link>
-              .
+              Upload and manage bulletin PDFs on the page preview.
             </p>
           )}
           {isDonation && (

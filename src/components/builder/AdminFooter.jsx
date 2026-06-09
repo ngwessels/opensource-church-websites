@@ -20,6 +20,7 @@ export function AdminFooter({
   onPreview,
   onPublish,
   canPublish = false,
+  isPublishing = false,
   canRevert = false,
   dropError,
 }) {
@@ -54,6 +55,7 @@ export function AdminFooter({
           onPreview={onPreview}
           onPublish={onPublish}
           canPublish={canPublish}
+          isPublishing={isPublishing}
           canRevert={canRevert}
         />
       </div>

@@ -1,4 +1,4 @@
-import { generateId } from "@/lib/sitemap/tree";
+import { generateId } from "../sitemap/tree.js";
 
 /** @typedef {'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday'} ZoomDay */
 
@@ -35,7 +35,7 @@ const JS_DAY = {
 };
 
 export const ZOOM_JOIN_LEAD_MINUTES = 15;
-export const ZOOM_STREAM_DURATION_MINUTES = 90;
+export const ZOOM_STREAM_DURATION_MINUTES = 60;
 
 /** @returns {string} */
 export function generateScheduleId() {
@@ -118,12 +118,13 @@ export function formatScheduleEntry(entry) {
 }
 
 /**
- * This week's local occurrence of a recurring schedule entry.
+ * Local occurrence of a recurring schedule entry on a specific calendar day offset.
  * @param {ZoomScheduleEntry} entry
- * @param {Date} [now]
+ * @param {Date} now
+ * @param {number} weekOffset - 0 = this week, -1 = previous, 1 = next
  * @returns {Date | null}
  */
-export function getScheduleOccurrence(entry, now = new Date()) {
+function getScheduleOccurrenceAtWeekOffset(entry, now, weekOffset) {
   const targetDay = JS_DAY[entry.day];
   if (targetDay === undefined) return null;
 
@@ -138,10 +139,30 @@ export function getScheduleOccurrence(entry, now = new Date()) {
   occurrence.setSeconds(0, 0);
   occurrence.setHours(hours, minutes, 0, 0);
 
-  const dayDiff = targetDay - occurrence.getDay();
+  const dayDiff = targetDay - occurrence.getDay() + weekOffset * 7;
   occurrence.setDate(occurrence.getDate() + dayDiff);
 
   return occurrence;
+}
+
+/**
+ * Nearest local occurrence of a recurring schedule entry (this week or adjacent).
+ * @param {ZoomScheduleEntry} entry
+ * @param {Date} [now]
+ * @returns {Date | null}
+ */
+export function getScheduleOccurrence(entry, now = new Date()) {
+  const candidates = [-1, 0, 1]
+    .map((offset) => getScheduleOccurrenceAtWeekOffset(entry, now, offset))
+    .filter(Boolean);
+
+  if (!candidates.length) return null;
+
+  return candidates.reduce((closest, candidate) => {
+    const closestDelta = Math.abs(closest.getTime() - now.getTime());
+    const candidateDelta = Math.abs(candidate.getTime() - now.getTime());
+    return candidateDelta < closestDelta ? candidate : closest;
+  });
 }
 
 /**
@@ -153,13 +174,16 @@ export function getScheduleOccurrence(entry, now = new Date()) {
 export function isScheduleEntryJoinOpen(entry, now = new Date(), options = {}) {
   const leadMinutes = options.leadMinutes ?? ZOOM_JOIN_LEAD_MINUTES;
   const durationMinutes = options.durationMinutes ?? ZOOM_STREAM_DURATION_MINUTES;
-  const occurrence = getScheduleOccurrence(entry, now);
-  if (!occurrence) return false;
 
-  const windowStart = new Date(occurrence.getTime() - leadMinutes * 60 * 1000);
-  const windowEnd = new Date(occurrence.getTime() + durationMinutes * 60 * 1000);
+  return [-1, 0, 1].some((weekOffset) => {
+    const occurrence = getScheduleOccurrenceAtWeekOffset(entry, now, weekOffset);
+    if (!occurrence) return false;
 
-  return now >= windowStart && now <= windowEnd;
+    const windowStart = new Date(occurrence.getTime() - leadMinutes * 60 * 1000);
+    const windowEnd = new Date(occurrence.getTime() + durationMinutes * 60 * 1000);
+
+    return now >= windowStart && now <= windowEnd;
+  });
 }
 
 /**

@@ -40,7 +40,11 @@ function DocumentInlineItem({ item }) {
         <h3 className="text-base font-semibold text-zinc-900">{item.label}</h3>
       )}
       <div className="overflow-hidden rounded-lg border border-zinc-200 shadow-sm">
-        <PdfViewer fetchUrl={fetchUrl} title={item.label || "Document"} />
+        <PdfViewer
+          fetchUrl={fetchUrl}
+          title={item.label || "Document"}
+          downloadUrl={item.url}
+        />
       </div>
       <a
         href={item.url}

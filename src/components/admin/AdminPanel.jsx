@@ -160,10 +160,17 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
             </Card>
             <Section title="Custom domain setup">
               <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                <li>Deploy to Vercel and add your domain in project settings.</li>
-                <li>Point DNS A/CNAME records per Vercel instructions.</li>
-                <li>Set <code>NEXT_PUBLIC_SITE_URL</code> to your canonical domain.</li>
+                <li>
+                  Deploy to <strong>Vercel</strong> or <strong>Firebase App Hosting</strong> and add
+                  your domain in the host&apos;s settings.
+                </li>
+                <li>Point DNS A/CNAME records per your host&apos;s instructions.</li>
+                <li>
+                  Set <code>NEXT_PUBLIC_SITE_URL</code> and <code>NEXT_PUBLIC_APP_URL</code> to your
+                  canonical domain.
+                </li>
                 <li>Configure Stripe webhook to <code>/api/stripe/webhook</code>.</li>
+                <li>Add your domain to Firebase Auth → Authorized domains.</li>
               </ol>
             </Section>
           </div>

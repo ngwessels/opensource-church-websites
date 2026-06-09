@@ -126,7 +126,8 @@ export function ZoomModule({ module }) {
 
       {joinUrl && !joinVisible && schedule.length > 0 && (
         <p className="mt-5 text-sm text-zinc-500">
-          Join opens 15 minutes before each scheduled stream.
+          Join opens 15 minutes before each scheduled stream and stays available for 1 hour
+          after.
         </p>
       )}
     </section>
