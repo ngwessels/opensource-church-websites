@@ -88,7 +88,13 @@ export function getDefaultConfig(type) {
     case "documents":
       return { title: "Documents", items: [] };
     case "calendar":
-      return { title: "Upcoming Events", source: "manual", events: [], maxEvents: 15 };
+      return {
+        title: "Upcoming Events",
+        source: "manual",
+        events: [],
+        maxEvents: 15,
+        previewCount: 5,
+      };
     case "form":
       return {
         formId: generateId(),

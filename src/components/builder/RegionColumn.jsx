@@ -14,6 +14,7 @@ export function RegionColumn({
   regionId,
   page,
   siteConfig,
+  calendarEventsByModuleId = null,
   editing,
   onEditModule,
   onSaveModule,
@@ -47,6 +48,7 @@ export function RegionColumn({
             key={mod.id}
             module={mod}
             siteConfig={siteConfig}
+            calendarEvents={calendarEventsByModuleId?.[mod.id]}
             editing={false}
           />
         ))}
@@ -77,6 +79,7 @@ export function RegionColumn({
               module={mod}
               regionId={regionId}
               siteConfig={siteConfig}
+              calendarEventsByModuleId={calendarEventsByModuleId}
               editing={editing}
               onEditModule={onEditModule}
               onSaveModule={onSaveModule}

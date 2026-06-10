@@ -1,5 +1,6 @@
 import "server-only";
 
+import { revalidateAfterPagePublish } from "@/lib/cache/revalidate-public";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { normalizeButtonsConfig } from "@/lib/buttons/schema";
@@ -175,6 +176,7 @@ export async function publishPageAdmin(pageId) {
     scheduledPublishAt: null,
     updatedAt: ts,
   });
+  revalidateAfterPagePublish(data.slug ?? "");
   const updated = await ref.get();
   return { id: updated.id, ...updated.data() };
 }

@@ -23,6 +23,7 @@
 # import scripts
 scripts/.bulletin-manifest.json
 scripts/.visitation-content-manifest.json
+scripts/.ecatholic-migration-*.json
 scripts/.ecatholic-storage.json
 scripts/.chrome-profile/
 
@@ -39,10 +40,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 .env.local
+.env.local*
+.env.local.*
 !.env.example
 
 # firebase
 .firebase/
+.firebase-keys/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log

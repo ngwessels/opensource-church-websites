@@ -4,6 +4,8 @@ import { doc, updateDoc } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 
 import { FontField } from "@/components/design/FontField";
+import { useAuth } from "@/hooks/useAuth";
+import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { Button } from "@/components/ui/button";
 import { ColorInput } from "@/components/ui/color-input";
 import { Input } from "@/components/ui/input";
@@ -31,6 +33,8 @@ import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { applyQuickLinksDraft, quickLinksToDraftItems } from "@/lib/sitemap/tree";
 
 import { HeaderQuickLinksEditor } from "./HeaderQuickLinksEditor";
+import { SocialMediaEditor } from "./SocialMediaEditor";
+import { DEFAULT_SOCIAL_MEDIA, sanitizeSocialMediaConfig } from "@/lib/site/social-media";
 
 function ColorField({ label, value, onChange, placeholder }) {
   return (
@@ -348,6 +352,7 @@ export function HeaderFooterSheet({
   onClose,
   onSaved,
 }) {
+  const { user } = useAuth();
   const isHeader = section === "header";
   const [saving, setSaving] = useState(false);
   const [siteName, setSiteName] = useState(siteConfig?.name || "");
@@ -385,6 +390,10 @@ export function HeaderFooterSheet({
       ...siteConfig?.footerConfig?.styles,
     },
   }));
+  const [socialMedia, setSocialMedia] = useState(() => ({
+    ...DEFAULT_SOCIAL_MEDIA,
+    ...siteConfig?.socialMedia,
+  }));
 
   useEffect(() => {
     if (!open) return;
@@ -401,6 +410,10 @@ export function HeaderFooterSheet({
           ...DEFAULT_HEADER_STYLES,
           ...siteConfig?.headerConfig?.styles,
         },
+      });
+      setSocialMedia({
+        ...DEFAULT_SOCIAL_MEDIA,
+        ...siteConfig?.socialMedia,
       });
     } else {
       setFooterConfig({
@@ -438,11 +451,16 @@ export function HeaderFooterSheet({
             name: siteName,
             tagline,
             headerConfig,
+            socialMedia: sanitizeSocialMediaConfig(socialMedia),
           }
         : { footerConfig };
       await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), {
         ...patch,
         updatedAt: now,
+      });
+      await requestPublicRevalidate({
+        getIdToken: () => user?.getIdToken(),
+        scope: "site",
       });
       onSaved?.();
       onClose();
@@ -458,7 +476,7 @@ export function HeaderFooterSheet({
           <SheetTitle>{isHeader ? "Header Settings" : "Footer Settings"}</SheetTitle>
           <SheetDescription>
             {isHeader
-              ? "Customize your parish name, quick links, colors, fonts, logo, and tagline at the top of the site."
+              ? "Customize your parish name, quick links, social media, colors, fonts, logo, and tagline at the top of the site."
               : "Customize footer colors, fonts, and the copyright line at the bottom of every page."}
           </SheetDescription>
         </SheetHeader>
@@ -533,6 +551,8 @@ export function HeaderFooterSheet({
               </div>
 
               <HeaderQuickLinksEditor items={quickLinkItems} onChange={setQuickLinkItems} />
+
+              <SocialMediaEditor value={socialMedia} onChange={setSocialMedia} />
 
               <HeaderStylesEditor
                 styles={headerConfig.styles || DEFAULT_HEADER_STYLES}

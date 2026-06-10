@@ -21,6 +21,7 @@ export function PublicSite({
   page,
   pageId,
   bulletins = [],
+  calendarEventsByModuleId = null,
   editing = false,
   designPreview = false,
   isDragActive = false,
@@ -126,6 +127,7 @@ export function PublicSite({
               siteConfig={siteConfig}
               navNodes={navNodes}
               pageId={pageId}
+              calendarEventsByModuleId={calendarEventsByModuleId}
               editing={editing}
               heroCaptionVariant={structure.heroCaptionVariant}
               isDragActive={isDragActive}

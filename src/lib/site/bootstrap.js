@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 
 import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
+import { DEFAULT_SOCIAL_MEDIA } from "@/lib/site/social-media";
 import { normalizeDesign } from "@/lib/design/design-utils";
 import { getThemeById } from "@/lib/design/themes";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
@@ -52,6 +53,7 @@ export async function ensureSiteBootstrapped(db, user) {
         navFontSize: "",
       },
     },
+    socialMedia: { ...DEFAULT_SOCIAL_MEDIA },
     footerConfig: {
       text: "",
       styles: {

@@ -21,6 +21,7 @@ export function PageContent({
   navNodes = [],
   pageId,
   hiddenPageIds = null,
+  calendarEventsByModuleId = null,
   editing = false,
   onEditModule,
   onSaveModule,
@@ -66,6 +67,7 @@ export function PageContent({
       regionId={id}
       page={page}
       siteConfig={siteConfig}
+      calendarEventsByModuleId={calendarEventsByModuleId}
       editing={editing}
       onEditModule={onEditModule}
       onSaveModule={onSaveModule}
@@ -102,6 +104,7 @@ export function PageContent({
       dragType={dragType}
       trayOpen={trayOpen}
       heroCaptionVariant={heroCaptionVariant}
+      previewViewport={previewViewport}
       onRemoveSlideshow={onRemoveSlideshow}
       onEditSlideshow={onEditSlideshow}
     />
@@ -122,6 +125,7 @@ export function PageContent({
           regionId={SIDEBAR_REGION_ID}
           page={page}
           siteConfig={siteConfig}
+          calendarEventsByModuleId={calendarEventsByModuleId}
           editing={editing}
           onEditModule={onEditModule}
           onSaveModule={onSaveModule}

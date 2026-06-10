@@ -19,6 +19,7 @@ export function DroppableFeatures({
   isDragActive,
   dragType,
   heroCaptionVariant = "bottomGradient",
+  previewViewport = null,
   onRemoveSlideshow,
   onEditSlideshow,
 }) {
@@ -93,6 +94,7 @@ export function DroppableFeatures({
           module={featureModule}
           editing={editing}
           captionLayout={heroCaptionVariant}
+          previewViewport={previewViewport}
         />
       )}
     </div>

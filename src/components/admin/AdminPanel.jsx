@@ -5,6 +5,7 @@ import { CheckCircle2, Circle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
+import { SocialMediaEditor } from "@/components/builder/SocialMediaEditor";
 import { MassTimesForm } from "@/components/mass-times/MassTimesForm";
 import { DonationsManager } from "@/components/donations/DonationsManager";
 import { MediaPicker } from "@/components/media/MediaPicker";
@@ -17,6 +18,7 @@ import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { formatBytes, uploadMediaFile } from "@/lib/media/upload";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { normalizeMassTimes } from "@/lib/mass-times/schema";
+import { sanitizeSocialMediaConfig } from "@/lib/site/social-media";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
 export function AdminPanel({ siteConfig, pageCount = 0 }) {
@@ -150,6 +152,25 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
               seo={config.seo || {}}
               onSave={(seoPatch) => saveConfig({ seo: seoPatch })}
             />
+            <Card className="p-4">
+              <SocialMediaEditor
+                value={config.socialMedia}
+                onChange={(socialMedia) => {
+                  setConfig((prev) => ({ ...prev, socialMedia }));
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() =>
+                  saveConfig({ socialMedia: sanitizeSocialMediaConfig(config.socialMedia) })
+                }
+              >
+                Save social media
+              </Button>
+            </Card>
             <Card className="p-4">
               <h3 className="mb-3 font-medium text-foreground">Environment checklist</h3>
               <ul className="space-y-2 text-sm">

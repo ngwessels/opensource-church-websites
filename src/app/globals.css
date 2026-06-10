@@ -497,6 +497,25 @@
   }
 }
 
+.hero-slide-position .hero-slide-image {
+  object-position: var(--hero-pos-mobile, center);
+}
+
+@media (min-width: 768px) {
+  .hero-slide-position .hero-slide-image {
+    object-position: var(--hero-pos-tablet, var(--hero-pos-mobile, center));
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-slide-position .hero-slide-image {
+    object-position: var(
+      --hero-pos-desktop,
+      var(--hero-pos-tablet, var(--hero-pos-mobile, center))
+    );
+  }
+}
+
 .page-content-columns {
   display: grid;
   gap: 2rem;

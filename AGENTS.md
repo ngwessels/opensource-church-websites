@@ -31,7 +31,7 @@ When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools 
 
 **Site settings & design**
 
-- `get_site_config`, `update_site_settings` — name, tagline, canonical domain
+- `get_site_config`, `update_site_settings` — name, tagline, canonical domain, social media
 - `update_site_design` — theme, colors, fonts, layout
 - `get_header_config`, `update_header_config`, `update_header_styles` — header layout, logo, tagline, colors, fonts
 - `update_footer_config`, `update_mass_times` — footer and mass times schedule
@@ -61,6 +61,16 @@ Config shape: `{ title, items: [{ label, url }] }`. Items use `url` (not `href`)
 4. `publish_page`
 
 External URLs can be used directly in `url` without uploading. Call `get_builder_capabilities` for full schema details.
+
+**Slideshow module (hero)**
+
+Config shape: `{ slides: [{ src, alt, caption, title, subtitle, ctaLabel, ctaHref, objectPositionByViewport }] }`.
+
+Per-slide `objectPositionByViewport` controls image crop on different screen sizes: `{ mobile, tablet, desktop }` each set to a 9-point preset (`top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`). Unset viewports fall back: tablet → mobile, desktop → tablet → mobile (default `center`).
+
+**Social media (global)**
+
+Config shape on `site/config`: `{ showInHeader, showInFooter, items: [{ platform, url }] }`. Platforms: `facebook`, `instagram`, `youtube`, `x`. Icon links appear in the site header and footer when URLs are set. Use `update_site_settings` with a `socialMedia` object, or edit in the builder Header Settings sheet / Admin Settings tab.
 
 **Forms module**
 

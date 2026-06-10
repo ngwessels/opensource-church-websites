@@ -4,10 +4,53 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { ObjectPositionGrid } from "@/components/builder/ObjectPositionGrid";
+import { ViewportTabs } from "@/components/builder/ViewportTabs";
 import { Button } from "@/components/ui/button";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import {
+  resolveObjectPositionCss,
+  resolveObjectPositionPreset,
+} from "@/lib/media/object-position";
 import { uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
+
+function SlideHeroPositionEditor({ slide, onPositionChange }) {
+  const [viewport, setViewport] = useState("mobile");
+  const activePreset = resolveObjectPositionPreset(slide.objectPositionByViewport, viewport);
+  const previewPosition = resolveObjectPositionCss(slide.objectPositionByViewport, viewport);
+
+  return (
+    <div className="space-y-2 rounded border border-dashed border-border/80 bg-muted/30 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Image focus</span>
+        <ViewportTabs
+          value={viewport}
+          onChange={setViewport}
+          size="compact"
+          className="min-w-0 flex-1"
+        />
+      </div>
+      <ObjectPositionGrid
+        value={activePreset}
+        onChange={(preset) => onPositionChange(viewport, preset)}
+      />
+      {slide.src && (
+        <div className="overflow-hidden rounded border border-border">
+          <Image
+            src={slide.src}
+            alt={slide.alt || "Slide preview"}
+            width={400}
+            height={200}
+            className="h-32 w-full object-cover"
+            style={{ objectPosition: previewPosition }}
+            unoptimized
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function filenameToAlt(name) {
   return name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
@@ -35,6 +78,23 @@ export function SlideListEditor({
   const updateSlide = (index, field, value) => {
     setSlides((prev) => {
       const next = prev.map((s, i) => (i === index ? { ...s, [field]: value } : s));
+      onChange?.({ slides: next, title });
+      return next;
+    });
+  };
+
+  const updateObjectPosition = (index, viewport, preset) => {
+    setSlides((prev) => {
+      const next = prev.map((s, i) => {
+        if (i !== index) return s;
+        return {
+          ...s,
+          objectPositionByViewport: {
+            ...(s.objectPositionByViewport || {}),
+            [viewport]: preset,
+          },
+        };
+      });
       onChange?.({ slides: next, title });
       return next;
     });
@@ -148,7 +208,7 @@ export function SlideListEditor({
               </button>
             )}
           </div>
-          {slide.src && (
+          {slide.src && !showHeroFields && (
             <div className="overflow-hidden rounded border border-border">
               <Image
                 src={slide.src}
@@ -194,6 +254,10 @@ export function SlideListEditor({
           />
           {showHeroFields && (
             <>
+              <SlideHeroPositionEditor
+                slide={slide}
+                onPositionChange={(viewport, preset) => updateObjectPosition(i, viewport, preset)}
+              />
               <input
                 value={slide.title || ""}
                 onChange={(e) => updateSlide(i, "title", e.target.value)}

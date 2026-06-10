@@ -22,6 +22,7 @@
  * @property {CalendarEvent[]} [events]
  * @property {string} [googleCalendarId]
  * @property {number} [maxEvents]
+ * @property {number} [previewCount] - events shown before "Show more"
  */
 
 export {};

@@ -46,14 +46,6 @@ function DocumentInlineItem({ item }) {
           downloadUrl={item.url}
         />
       </div>
-      <a
-        href={item.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 text-sm text-[var(--site-primary)] hover:underline"
-      >
-        Download PDF
-      </a>
     </div>
   );
 }

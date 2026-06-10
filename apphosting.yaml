@@ -3,7 +3,7 @@
 #
 # Setup:
 #   1. firebase apphosting:backends:create --project <PROJECT_ID>
-#   2. Create each secret (prompts for value):
+#   2. Required secrets (create each — prompts for value):
 #        firebase apphosting:secrets:set firebaseApiKey --project <PROJECT_ID>
 #        firebase apphosting:secrets:set firebaseAuthDomain --project <PROJECT_ID>
 #        firebase apphosting:secrets:set firebaseProjectId --project <PROJECT_ID>
@@ -13,14 +13,10 @@
 #        firebase apphosting:secrets:set stripeSecretKey --project <PROJECT_ID>
 #        firebase apphosting:secrets:set stripeWebhookSecret --project <PROJECT_ID>
 #        firebase apphosting:secrets:set stripePublishableKey --project <PROJECT_ID>
-#        firebase apphosting:secrets:set mcpOauthCookieSecret --project <PROJECT_ID>
-#        firebase apphosting:secrets:set mailgunApiKey --project <PROJECT_ID>
-#        firebase apphosting:secrets:set mailgunDomain --project <PROJECT_ID>
-#        firebase apphosting:secrets:set mailgunFrom --project <PROJECT_ID>
-#      MCP secret value: openssl rand -base64 32
-#   3. If a secret already exists but build says PermissionDenied, grant access:
-#        firebase apphosting:secrets:grantaccess mcpOauthCookieSecret --backend <BACKEND_ID> --project <PROJECT_ID>
-#   4. Copy parish-specific values into the Firebase console or override here per environment.
+#   3. Optional secrets (MCP OAuth, Mailgun) — see commented blocks below in env:.
+#   4. If build says PermissionDenied, grant access:
+#        firebase apphosting:secrets:grantaccess <secretName> --backend <BACKEND_ID> --project <PROJECT_ID>
+#   5. Remove duplicate env vars from the Firebase Console that reference secrets you have not created.
 
 runConfig:
   cpu: 1
@@ -89,33 +85,43 @@ env:
       - BUILD
       - RUNTIME
 
-  # MCP OAuth — runtime-only; generate with: openssl rand -base64 32
-  - variable: MCP_OAUTH_COOKIE_SECRET
-    secret: mcpOauthCookieSecret
-    availability:
-      - RUNTIME
-  - variable: MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS
-    value: "3600"
-    availability:
-      - RUNTIME
-  - variable: MCP_OAUTH_CODE_TTL_SECONDS
-    value: "600"
-    availability:
-      - RUNTIME
+  # MCP OAuth (optional — Cursor MCP login). Uncomment after creating the secret:
+  #   openssl rand -base64 32
+  #   firebase apphosting:secrets:set mcpOauthCookieSecret --project <PROJECT_ID>
+  #   firebase apphosting:secrets:grantaccess mcpOauthCookieSecret --backend <BACKEND_ID> --project <PROJECT_ID>
+  # Also remove any duplicate MCP_OAUTH_COOKIE_SECRET from the Firebase Console backend env.
+  # - variable: MCP_OAUTH_COOKIE_SECRET
+  #   secret: mcpOauthCookieSecret
+  #   availability:
+  #     - RUNTIME
+  # - variable: MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS
+  #   value: "3600"
+  #   availability:
+  #     - RUNTIME
+  # - variable: MCP_OAUTH_CODE_TTL_SECONDS
+  #   value: "600"
+  #   availability:
+  #     - RUNTIME
 
-  # Mailgun (form notifications) — runtime-only
-  - variable: MAILGUN_API_KEY
-    secret: mailgunApiKey
-    availability:
-      - RUNTIME
-  - variable: MAILGUN_DOMAIN
-    secret: mailgunDomain
-    availability:
-      - RUNTIME
-  - variable: MAILGUN_FROM
-    secret: mailgunFrom
-    availability:
-      - RUNTIME
+  # Mailgun (optional — form notification emails). Uncomment after creating secrets:
+  #   firebase apphosting:secrets:set mailgunApiKey --project <PROJECT_ID>
+  #   firebase apphosting:secrets:set mailgunDomain --project <PROJECT_ID>
+  #   firebase apphosting:secrets:set mailgunFrom --project <PROJECT_ID>
+  #   firebase apphosting:secrets:grantaccess mailgunApiKey --backend <BACKEND_ID> --project <PROJECT_ID>
+  #   (repeat grantaccess for mailgunDomain and mailgunFrom)
+  # Also remove any duplicate MAILGUN_* vars from the Firebase Console backend env.
+  # - variable: MAILGUN_API_KEY
+  #   secret: mailgunApiKey
+  #   availability:
+  #     - RUNTIME
+  # - variable: MAILGUN_DOMAIN
+  #   secret: mailgunDomain
+  #   availability:
+  #     - RUNTIME
+  # - variable: MAILGUN_FROM
+  #   secret: mailgunFrom
+  #   availability:
+  #     - RUNTIME
 
   # Optional on App Hosting — Admin SDK uses Application Default Credentials when
   # FIREBASE_ADMIN_* is omitted. Set these secrets only if you need explicit credentials.

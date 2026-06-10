@@ -2,6 +2,7 @@ import "server-only";
 
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
+import { ensureHomeNavInList, isHomeNode } from "@/lib/sitemap/tree";
 
 export async function getSiteConfigServer() {
   const db = getFirebaseAdminFirestore();
@@ -14,7 +15,18 @@ export async function getNavNodesServer() {
   const db = getFirebaseAdminFirestore();
   if (!db) return [];
   const snap = await db.collection(COLLECTIONS.navNodes).orderBy("order").get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  let nodes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  if (!nodes.some((n) => isHomeNode(n))) {
+    const homeSnap = await db.collection(COLLECTIONS.pages).where("slug", "==", "").limit(1).get();
+    if (!homeSnap.empty) {
+      nodes = ensureHomeNavInList(nodes, homeSnap.docs[0].id);
+    }
+  } else {
+    nodes = ensureHomeNavInList(nodes, null);
+  }
+
+  return nodes;
 }
 
 export async function getPageBySlugServer(slug) {

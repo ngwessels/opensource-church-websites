@@ -1,9 +1,10 @@
 import "server-only";
 
+import { revalidatePublicSite } from "@/lib/cache/revalidate-public";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { serializeNavNode } from "@/lib/firestore/serialize";
-import { buildNavTree, flattenNavTree, syncPageSlugs } from "@/lib/sitemap/tree";
+import { buildNavTree, ensureHomeNavInList, flattenNavTree, isHomeNode, syncPageSlugs } from "@/lib/sitemap/tree";
 
 function getDb() {
   const db = getFirebaseAdminFirestore();
@@ -16,8 +17,20 @@ function now() {
 }
 
 export async function listNavNodesAdmin() {
-  const snap = await getDb().collection(COLLECTIONS.navNodes).get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const db = getDb();
+  const snap = await db.collection(COLLECTIONS.navNodes).get();
+  let nodes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  if (!nodes.some((n) => isHomeNode(n))) {
+    const homeSnap = await db.collection(COLLECTIONS.pages).where("slug", "==", "").limit(1).get();
+    if (!homeSnap.empty) {
+      nodes = ensureHomeNavInList(nodes, homeSnap.docs[0].id);
+    }
+  } else {
+    nodes = ensureHomeNavInList(nodes, null);
+  }
+
+  return nodes;
 }
 
 export async function getNavTreeAdmin() {
@@ -74,6 +87,7 @@ export async function saveSitemapAdmin(flatNodes, existingNodeIds = [], existing
   }
 
   await batch.commit();
+  revalidatePublicSite();
   return listNavNodesAdmin();
 }
 

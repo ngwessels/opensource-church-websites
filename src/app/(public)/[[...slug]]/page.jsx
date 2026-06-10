@@ -1,23 +1,44 @@
 import { Suspense } from "react";
 
 import { PublicPageClient } from "../PublicPageClient";
+import { PublicPageGate } from "../PublicPageGate";
 import { PublicSite } from "@/components/site/PublicSite";
 import {
-  getHiddenPagesServer,
-  getNavNodesServer,
-  getPageBySlugServer,
-  getSiteConfigServer,
-  listBulletinsServer,
-} from "@/lib/firestore/server";
+  getCachedBulletins,
+  getCachedHiddenPages,
+  getCachedNavNodes,
+  getCachedPageBySlug,
+  getCachedPublishedPageSlugs,
+  getCachedSiteConfig,
+} from "@/lib/cache/public-site-data";
 import { getPageType } from "@/lib/bulletins/schema";
+import { prefetchPageCalendarEvents } from "@/lib/calendar/prefetch";
+import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
   filterNavTreeForPublic,
   filterQuickLinksForPublic,
   filterSiteConfigForPublic,
   isPageHidden,
 } from "@/lib/pages/visibility";
+import { resolvePublishedPageView } from "@/lib/pages/publish";
 import { buildNavTree, sortQuickLinks } from "@/lib/sitemap/tree";
-import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
+
+/** Cache until publish triggers on-demand revalidation. */
+export const revalidate = false;
+
+/** Pre-render published pages at build time; new slugs still work at runtime. */
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  if (!isFirebaseAdminConfigured()) return [];
+
+  const slugs = await getCachedPublishedPageSlugs();
+  return slugs.map((slug) => {
+    const normalized = (slug || "").replace(/^\/+|\/+$/g, "");
+    if (!normalized) return { slug: undefined };
+    return { slug: normalized.split("/") };
+  });
+}
 
 export async function generateMetadata({ params }) {
   const { slug: slugParts } = await params;
@@ -27,25 +48,25 @@ export async function generateMetadata({ params }) {
     return { title: "Parish Website" };
   }
 
-  const page = await getPageBySlugServer(slug);
-  if (isPageHidden(page)) {
+  const page = await getCachedPageBySlug(slug);
+  const publicPage = resolvePublishedPageView(page);
+  if (isPageHidden(publicPage)) {
     return { title: "Page not found" };
   }
-  const site = await getSiteConfigServer();
+  const site = await getCachedSiteConfig();
   const faviconUrl = site?.seo?.faviconUrl;
   return {
-    title: page?.seo?.title || page?.title || site?.name || "Parish",
-    description: page?.seo?.description || site?.seo?.description,
+    title: publicPage?.seo?.title || publicPage?.title || site?.name || "Parish",
+    description: publicPage?.seo?.description || site?.seo?.description,
     ...(faviconUrl ? { icons: { icon: faviconUrl } } : {}),
   };
 }
 
-export default async function PublicPage({ params, searchParams }) {
+export default async function PublicPage({ params }) {
   const { slug: slugParts } = await params;
   const slug = slugParts?.join("/") || "";
-  const { designPreview } = await searchParams;
 
-  if (designPreview === "1" || !isFirebaseAdminConfigured()) {
+  if (!isFirebaseAdminConfigured()) {
     return (
       <Suspense
         fallback={
@@ -59,13 +80,15 @@ export default async function PublicPage({ params, searchParams }) {
 
   const [siteConfig, nodes, page, { pageIds: hiddenPageIds, slugs: hiddenSlugs }] =
     await Promise.all([
-      getSiteConfigServer(),
-      getNavNodesServer(),
-      getPageBySlugServer(slug),
-      getHiddenPagesServer(),
+      getCachedSiteConfig(),
+      getCachedNavNodes(),
+      getCachedPageBySlug(slug),
+      getCachedHiddenPages(),
     ]);
 
-  if (!page || isPageHidden(page)) {
+  const publicPage = resolvePublishedPageView(page);
+
+  if (!publicPage || isPageHidden(publicPage)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
         <h1 className="text-xl font-semibold">Page not found</h1>
@@ -78,19 +101,24 @@ export default async function PublicPage({ params, searchParams }) {
 
   const navTree = filterNavTreeForPublic(buildNavTree(nodes), hiddenPageIds);
   const quickLinks = filterQuickLinksForPublic(sortQuickLinks(nodes), hiddenPageIds);
-  const bulletins =
-    getPageType(page) === "bulletins" ? await listBulletinsServer() : [];
+  const [bulletins, calendarEventsByModuleId] = await Promise.all([
+    getPageType(publicPage) === "bulletins" ? getCachedBulletins() : Promise.resolve([]),
+    prefetchPageCalendarEvents(publicPage),
+  ]);
 
   return (
-    <PublicSite
-      siteConfig={filterSiteConfigForPublic(siteConfig, hiddenSlugs)}
-      navTree={navTree}
-      navNodes={nodes}
-      quickLinks={quickLinks}
-      hiddenPageIds={hiddenPageIds}
-      page={page}
-      pageId={page.id}
-      bulletins={bulletins}
-    />
+    <PublicPageGate slug={slug}>
+      <PublicSite
+        siteConfig={filterSiteConfigForPublic(siteConfig, hiddenSlugs)}
+        navTree={navTree}
+        navNodes={nodes}
+        quickLinks={quickLinks}
+        hiddenPageIds={hiddenPageIds}
+        page={publicPage}
+        pageId={page.id}
+        bulletins={bulletins}
+        calendarEventsByModuleId={calendarEventsByModuleId}
+      />
+    </PublicPageGate>
   );
 }

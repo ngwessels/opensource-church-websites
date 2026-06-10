@@ -1,0 +1,10 @@
+{
+  "projects": {
+    "default": "visitation-fg-site",
+    "visitationfg": "visitation-fg-site",
+    "stedwardnp": "st-edward-np-site",
+    "sfaroy": "sfa-roy-parish-site"
+  },
+  "targets": {},
+  "etags": {}
+}

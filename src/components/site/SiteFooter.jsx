@@ -4,6 +4,8 @@ import { toBuilderHref } from "@/lib/builder/navigation";
 import { resolveFooterStyles } from "@/lib/site/footer-styles";
 import { isExternalHref, resolveFooterColumns } from "@/lib/sitemap/tree";
 
+import { SocialMediaLinks } from "./SocialMediaLinks";
+
 const FOOTER_CLASS = {
   lightColumns: "site-footer--lightColumns",
   darkBand: "site-footer--darkBand",
@@ -126,6 +128,13 @@ export function SiteFooter({
             </div>
           ))}
         </div>
+      )}
+      {siteConfig?.socialMedia?.showInFooter !== false && (
+        <SocialMediaLinks
+          socialMedia={siteConfig.socialMedia}
+          variant="footer"
+          color={styles.linkColor || styles.textColor}
+        />
       )}
       <div
         className="border-t border-current/10 px-4 py-6 text-center text-sm opacity-75"

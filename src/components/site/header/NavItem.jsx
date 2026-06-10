@@ -73,10 +73,13 @@ export function NavItem({
   const href = toBuilderHref(resolveNavHref(navNodes, node), editing);
   const isExternal = node.type === "link" && isExternalHref(href);
   const isActive = isNavLinkActive(pathname, href);
+  const childCount = node.children?.length ?? 0;
+  const hasDropdown =
+    childCount > 0 &&
+    (node.type === "group" || node.type === "page" || node.type === "secure_page");
 
-  if (node.type === "group") {
-    const hasLanding = node.pageId && href !== "#";
-    const childCount = node.children?.length ?? 0;
+  if (hasDropdown) {
+    const isGroupClickable = href !== "#";
 
     const groupLinkStyle = mobile
       ? { className: cn("site-mobile-nav-link", "site-mobile-nav-link--group") }
@@ -89,7 +92,7 @@ export function NavItem({
       return (
         <li className="site-mobile-nav-item">
           <div className="site-mobile-nav-group-header">
-            {hasLanding ? (
+            {isGroupClickable ? (
               <MobileNavLink
                 href={href}
                 className={cn(groupLinkStyle.className, isActive && "site-mobile-nav-link--active")}
@@ -135,7 +138,7 @@ export function NavItem({
 
     return (
       <li className="group relative">
-        {hasLanding ? (
+        {isGroupClickable ? (
           <Link href={href} className={groupLinkStyle.className} style={groupLinkStyle.style}>
             {node.title}
           </Link>

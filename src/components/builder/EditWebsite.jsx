@@ -16,7 +16,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PublicSite } from "@/components/site/PublicSite";
 import { getPageType } from "@/lib/bulletins/schema";
+import { useAuth } from "@/hooks/useAuth";
 import { useBulletins } from "@/hooks/useBulletins";
+import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { getDefaultConfig } from "@/lib/modules/defaults";
@@ -55,6 +57,7 @@ import { PageSettingsSheet } from "./PageSettingsSheet";
 import { RemoveModuleDialog } from "./RemoveModuleDialog";
 export function EditWebsite({ slug = "" }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { config } = useSiteConfig();
   const { nodes } = useNavNodes();
   const [page, setPage] = useState(null);
@@ -203,6 +206,10 @@ export function EditWebsite({ slug = "" }) {
     setIsPublishing(true);
     try {
       await publishPage(getFirebaseFirestore(), pageId);
+      await requestPublicRevalidate({
+        getIdToken: () => user?.getIdToken(),
+        slug,
+      });
       await loadPage();
       showToast("Page published.");
     } catch (err) {

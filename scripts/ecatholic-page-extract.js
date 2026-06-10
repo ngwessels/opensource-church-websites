@@ -1,7 +1,7 @@
 /**
  * Paste this in the browser console on any eCatholic page (after the page loads normally).
- * Copies a manifest entry to the clipboard — save to scripts/.visitation-content-manifest.json
- * or run: node scripts/migrate-visitation-content.mjs --import-json /tmp/page.json --apply
+ * Copies a manifest entry to the clipboard — save to the migration manifest, or run:
+ *   node scripts/migrate-ecatholic-content.mjs --domain www.yourparish.org --import-json /tmp/page.json --apply
  */
 (() => {
   const SKIP_MODULE =
@@ -395,7 +395,22 @@
   }
 
   const path = window.location.pathname.replace(/\/$/, "") || "/";
-  const entry = { path, title, modules };
+
+  const metaContent = (selector) =>
+    document.querySelector(selector)?.getAttribute("content")?.trim() || "";
+  const description =
+    metaContent('meta[name="description"]') ||
+    metaContent('meta[property="og:description"]') ||
+    metaContent('meta[name="twitter:description"]');
+  const docTitle = document.title.replace(/\s*\|\s*.+$/, "").trim();
+  const seoTitle =
+    metaContent('meta[name="twitter:title"]') ||
+    metaContent('meta[property="og:title"]') ||
+    docTitle;
+  const seo =
+    seoTitle || description ? { title: seoTitle || title, description } : null;
+
+  const entry = { path, title, modules, ...(seo ? { seo } : {}) };
   const json = JSON.stringify(entry, null, 2);
 
   if (typeof copy === "function") {

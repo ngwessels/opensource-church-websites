@@ -10,6 +10,7 @@ export function SortableModule({
   module,
   regionId,
   siteConfig,
+  calendarEventsByModuleId = null,
   editing,
   onEditModule,
   onSaveModule,
@@ -47,6 +48,7 @@ export function SortableModule({
       <ModuleRenderer
         module={module}
         siteConfig={siteConfig}
+        calendarEvents={calendarEventsByModuleId?.[module.id]}
         editing={editing}
         onEdit={onEditModule}
         onSaveModule={onSaveModule}

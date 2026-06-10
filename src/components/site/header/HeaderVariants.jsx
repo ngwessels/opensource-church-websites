@@ -1,10 +1,22 @@
 "use client";
 
 import { SectionOverlay } from "@/components/builder/SectionOverlay";
+import { SocialMediaLinks } from "@/components/site/SocialMediaLinks";
 
 import { HeaderBrand } from "./HeaderBrand";
 import { NavBar } from "./NavBar";
 import { QuickLinks } from "./QuickLinks";
+
+function HeaderSocialMedia({ socialMedia, headerStyles }) {
+  if (socialMedia?.showInHeader === false) return null;
+  return (
+    <SocialMediaLinks
+      socialMedia={socialMedia}
+      variant="header"
+      color={headerStyles.titleColor}
+    />
+  );
+}
 
 function HeaderTitleSection({
   siteConfig,
@@ -113,6 +125,7 @@ export function CenteredBannerHeader(props) {
             editing={editing}
             quickLinksVariant={quickLinksVariant}
           />
+          <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
           <HeaderTitleSection
             siteConfig={siteConfig}
             headerStyles={headerStyles}
@@ -150,6 +163,7 @@ export function LogoLeftStackHeader(props) {
           headerStyles={headerStyles}
           editing={editing}
         />
+        <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
         <HeaderTitleSection
           siteConfig={siteConfig}
           headerStyles={headerStyles}
@@ -184,6 +198,7 @@ export function InlineNavHeader(props) {
         headerStyles={headerStyles}
         editing={editing}
       />
+      <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
       <div
         className="site-header-band site-header-inline relative px-4"
         style={{
@@ -240,6 +255,7 @@ export function MinimalBarHeader(props) {
           headerStyles={headerStyles}
           editing={editing}
         />
+        <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
         <HeaderTitleSection
           siteConfig={siteConfig}
           headerStyles={headerStyles}
@@ -278,6 +294,7 @@ export function HeroBandHeader(props) {
           headerStyles={headerStyles}
           editing={editing}
         />
+        <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
         <HeaderTitleSection
           siteConfig={siteConfig}
           headerStyles={headerStyles}
@@ -332,6 +349,7 @@ export function LightLogoLeftHeader(props) {
             editing={editing}
             quickLinksVariant={quickLinksVariant}
           />
+          <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
           <HeaderTitleSection
             siteConfig={siteConfig}
             headerStyles={headerStyles}
@@ -386,6 +404,7 @@ export function LightCenteredHeader(props) {
             editing={editing}
             quickLinksVariant={quickLinksVariant}
           />
+          <HeaderSocialMedia socialMedia={siteConfig?.socialMedia} headerStyles={headerStyles} />
           <HeaderTitleSection
             siteConfig={siteConfig}
             headerStyles={headerStyles}

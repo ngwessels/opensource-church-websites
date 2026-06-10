@@ -1,6 +1,7 @@
 import { generateId } from "@/lib/sitemap/tree";
 
 const DEFAULT_MAX_EVENTS = 15;
+const DEFAULT_PREVIEW_COUNT = 5;
 
 /** @returns {string} */
 export function generateEventId() {
@@ -50,6 +51,7 @@ export function normalizeCalendarConfig(raw) {
       source: "manual",
       events: [],
       maxEvents: DEFAULT_MAX_EVENTS,
+      previewCount: DEFAULT_PREVIEW_COUNT,
     };
   }
   const c = /** @type {Record<string, unknown>} */ (raw);
@@ -58,11 +60,16 @@ export function normalizeCalendarConfig(raw) {
     typeof c.maxEvents === "number" && c.maxEvents > 0
       ? Math.min(c.maxEvents, 50)
       : DEFAULT_MAX_EVENTS;
+  const previewCount =
+    typeof c.previewCount === "number" && c.previewCount > 0
+      ? Math.min(c.previewCount, maxEvents)
+      : Math.min(DEFAULT_PREVIEW_COUNT, maxEvents);
 
   const base = {
     title: typeof c.title === "string" ? c.title : "Upcoming Events",
     source,
     maxEvents,
+    previewCount,
   };
 
   if (source === "google") {

@@ -4,6 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import {
+  getObjectPositionInline,
+  getObjectPositionStyleVars,
+} from "@/lib/media/object-position";
+
 function SlideCaption({ slide, captionLayout }) {
   if (captionLayout === "centered") {
     const title = slide.title || slide.caption;
@@ -46,7 +51,12 @@ function SlideCaption({ slide, captionLayout }) {
   );
 }
 
-export function HeroSlideshow({ module, editing = false, captionLayout = "bottomGradient" }) {
+export function HeroSlideshow({
+  module,
+  editing = false,
+  captionLayout = "bottomGradient",
+  previewViewport = null,
+}) {
   const slides = module?.config?.slides || [];
   const [index, setIndex] = useState(0);
   const layout = captionLayout || "bottomGradient";
@@ -74,24 +84,35 @@ export function HeroSlideshow({ module, editing = false, captionLayout = "bottom
 
   return (
     <div className={`relative h-[480px] w-full overflow-hidden bg-zinc-900 ${wrapperClass}`}>
-      {slides.map((slide, i) => (
-        <div
-          key={i}
-          className={`absolute inset-0 transition-opacity duration-1000 ${
-            i === index ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <Image
-            src={slide.src}
-            alt={slide.alt || ""}
-            fill
-            className="object-cover"
-            unoptimized
-            priority={i === 0}
-          />
-          <SlideCaption slide={slide} captionLayout={layout} />
-        </div>
-      ))}
+      {slides.map((slide, i) => {
+        const positionVars = previewViewport
+          ? undefined
+          : getObjectPositionStyleVars(slide.objectPositionByViewport);
+        const imageStyle = previewViewport
+          ? { objectPosition: getObjectPositionInline(slide.objectPositionByViewport, previewViewport) }
+          : undefined;
+
+        return (
+          <div
+            key={i}
+            className={`absolute inset-0 transition-opacity duration-1000 ${
+              i === index ? "opacity-100" : "opacity-0"
+            } ${previewViewport ? "" : "hero-slide-position"}`}
+            style={positionVars}
+          >
+            <Image
+              src={slide.src}
+              alt={slide.alt || ""}
+              fill
+              className="hero-slide-image object-cover"
+              style={imageStyle}
+              unoptimized
+              priority={i === 0}
+            />
+            <SlideCaption slide={slide} captionLayout={layout} />
+          </div>
+        );
+      })}
       {slides.length > 1 && (
         <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
           {slides.map((_, i) => (

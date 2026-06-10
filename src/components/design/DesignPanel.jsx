@@ -14,7 +14,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/hooks/useAuth";
 import { sendDesignPreview, useDesignPreviewSender } from "@/hooks/useDesignPreviewBridge";
+import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { designEquals, normalizeDesign } from "@/lib/design/design-utils";
 import { getThemeById } from "@/lib/design/themes";
 import { DEFAULT_HEADER_STYLES } from "@/lib/site/header-styles";
@@ -25,6 +27,7 @@ import { ColorFontEditor } from "./ColorFontEditor";
 import { ThemeGallery } from "./ThemeGallery";
 
 export function DesignPanel({ siteConfig }) {
+  const { user } = useAuth();
   const [tab, setTab] = useState("themes");
   const [device, setDevice] = useState("desktop");
   const [design, setDesign] = useState(() => {
@@ -96,6 +99,10 @@ export function DesignPanel({ siteConfig }) {
         },
       };
       await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), patch);
+      await requestPublicRevalidate({
+        getIdToken: () => user?.getIdToken(),
+        scope: "site",
+      });
       setPublishMessage("Design published successfully.");
     } catch {
       setPublishMessage("Failed to publish. Please try again.");

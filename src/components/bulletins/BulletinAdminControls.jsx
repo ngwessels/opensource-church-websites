@@ -7,6 +7,8 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/useAuth";
+import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getDefaultBulletinDate } from "@/lib/bulletins/schema";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
@@ -23,6 +25,7 @@ export async function deleteBulletin(bulletinId) {
 }
 
 export function BulletinAdminControls({ onChange }) {
+  const { user } = useAuth();
   const [date, setDate] = useState(getDefaultBulletinDate);
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -80,6 +83,10 @@ export function BulletinAdminControls({ onChange }) {
 
       setDate(getDefaultBulletinDate());
       setTitle("");
+      await requestPublicRevalidate({
+        getIdToken: () => user?.getIdToken(),
+        scope: "site",
+      });
       await onChange?.();
     } catch (err) {
       setError(err.message || "Failed to upload bulletin.");

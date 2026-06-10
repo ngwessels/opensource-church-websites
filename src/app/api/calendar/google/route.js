@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fetchGoogleCalendarEvents } from "@/lib/calendar/google";
+import { getCachedGoogleCalendarEvents } from "@/lib/calendar/cached";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -16,7 +16,7 @@ export async function GET(request) {
   }
 
   try {
-    const events = await fetchGoogleCalendarEvents(calendarId, max);
+    const events = await getCachedGoogleCalendarEvents(calendarId, max);
     return NextResponse.json({ events });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch calendar.";

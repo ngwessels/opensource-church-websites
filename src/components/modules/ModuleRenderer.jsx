@@ -113,6 +113,7 @@ const INLINE_EDIT_TYPES = new Set(["text"]);
 export function ModuleRenderer({
   module,
   siteConfig,
+  calendarEvents,
   editing = false,
   onEdit,
   onSaveModule,
@@ -161,6 +162,7 @@ export function ModuleRenderer({
         <Component
           module={module}
           siteConfig={siteConfig}
+          prefetchedEvents={module.type === "calendar" ? calendarEvents : undefined}
           editing={editing}
           onSave={onSaveModule ? (config) => onSaveModule(module.id, config) : undefined}
         />

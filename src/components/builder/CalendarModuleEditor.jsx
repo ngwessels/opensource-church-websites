@@ -26,6 +26,7 @@ export function CalendarModuleEditor({ module, onSave, onClose }) {
   const [events, setEvents] = useState(initial.events || []);
   const [googleCalendarId, setGoogleCalendarId] = useState(initial.googleCalendarId || "");
   const [maxEvents, setMaxEvents] = useState(initial.maxEvents || 15);
+  const [previewCount, setPreviewCount] = useState(initial.previewCount || 5);
 
   const handleSave = () => {
     onSave(
@@ -35,6 +36,7 @@ export function CalendarModuleEditor({ module, onSave, onClose }) {
         events: source === "manual" ? events : undefined,
         googleCalendarId: source === "google" ? googleCalendarId : undefined,
         maxEvents,
+        previewCount,
       }),
     );
   };
@@ -97,11 +99,34 @@ export function CalendarModuleEditor({ module, onSave, onClose }) {
                   min={1}
                   max={50}
                   value={maxEvents}
-                  onChange={(e) => setMaxEvents(Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 15)))}
+                  onChange={(e) => {
+                    const next = Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 15));
+                    setMaxEvents(next);
+                    if (previewCount > next) setPreviewCount(next);
+                  }}
                 />
               </div>
             </TabsContent>
           </Tabs>
+
+          <div className="mt-4 space-y-2 border-t pt-4">
+            <Label htmlFor="preview-count">Events shown before &quot;Show more&quot;</Label>
+            <Input
+              id="preview-count"
+              type="number"
+              min={1}
+              max={50}
+              value={previewCount}
+              onChange={(e) =>
+                setPreviewCount(
+                  Math.min(maxEvents, Math.max(1, parseInt(e.target.value, 10) || 5)),
+                )
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Visitors can expand the list to see up to {maxEvents} upcoming events.
+            </p>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 border-t px-4 py-3">

@@ -15,7 +15,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageSettingsSheet } from "@/components/builder/PageSettingsSheet";
 import { getPageType } from "@/lib/bulletins/schema";
+import { useAuth } from "@/hooks/useAuth";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
+import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
@@ -128,6 +130,7 @@ function resolveDropParent(nodes, overData, overId) {
 
 export function SitemapEditor({ initialNodes }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { config } = useSiteConfig();
   const [nodes, setNodes] = useState(initialNodes);
   const [maxLevel, setMaxLevel] = useState(4);
@@ -549,6 +552,10 @@ export function SitemapEditor({ initialNodes }) {
       }
 
       await batch.commit();
+      await requestPublicRevalidate({
+        getIdToken: () => user?.getIdToken(),
+        scope: "site",
+      });
       setNodes(syncedNodes);
       router.refresh();
     } catch (err) {

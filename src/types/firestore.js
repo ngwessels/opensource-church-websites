@@ -39,6 +39,21 @@
  * @property {string} [faviconUrl] - Site favicon URL (site config only)
  */
 
+/** @typedef {'facebook' | 'instagram' | 'youtube' | 'x'} SocialPlatform */
+
+/**
+ * @typedef {object} SocialMediaItem
+ * @property {SocialPlatform} platform
+ * @property {string} url
+ */
+
+/**
+ * @typedef {object} SocialMediaConfig
+ * @property {boolean} [showInHeader]
+ * @property {boolean} [showInFooter]
+ * @property {SocialMediaItem[]} [items]
+ */
+
 /**
  * @typedef {object} ResponsiveContentMarginX
  * @property {ContentMarginX} [mobile]

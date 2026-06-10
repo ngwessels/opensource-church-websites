@@ -16,6 +16,27 @@ function appendLayoutFieldsToSnapshot(snapshot, data) {
   return snapshot;
 }
 
+/** Public view of a page: published snapshot when live, otherwise editor state. */
+export function resolvePublishedPageView(page) {
+  if (!page) return null;
+
+  if (page.status !== "published" || !page.publishedSnapshot) {
+    return normalizePageRegions(page);
+  }
+
+  const snapshot = page.publishedSnapshot;
+  return normalizePageRegions({
+    ...page,
+    regions: snapshot.regions,
+    layout: snapshot.layout ?? page.layout,
+    title: snapshot.title ?? page.title,
+    seo: snapshot.seo ?? page.seo,
+    contentMarginX: snapshot.contentMarginX ?? page.contentMarginX,
+    contentMarginXByViewport: snapshot.contentMarginXByViewport ?? page.contentMarginXByViewport,
+    contentColumnsByViewport: snapshot.contentColumnsByViewport ?? page.contentColumnsByViewport,
+  });
+}
+
 export function buildPublishedSnapshot(data) {
   const snapshot = {
     regions: data.regions,

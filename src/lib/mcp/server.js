@@ -62,6 +62,19 @@ const headerConfigSchema = z.object({
   styles: headerStylesSchema.optional(),
 });
 
+const socialMediaSchema = z.object({
+  showInHeader: z.boolean().optional().describe("Show social icon links in the site header."),
+  showInFooter: z.boolean().optional().describe("Show social icon links in the site footer."),
+  items: z
+    .array(
+      z.object({
+        platform: z.enum(["facebook", "instagram", "youtube", "x"]),
+        url: z.string().describe("Profile or page URL."),
+      }),
+    )
+    .optional(),
+});
+
 const siteDesignSchema = z.object({
   themeId: z
     .string()
@@ -322,7 +335,8 @@ export function registerMcpTools(server) {
   server.registerTool(
     "update_site_settings",
     {
-      description: "Update site name, tagline, canonical domain, or site-wide SEO settings",
+      description:
+        "Update site name, tagline, canonical domain, site-wide SEO settings, or global social media links",
       inputSchema: {
         name: z.string().optional(),
         tagline: z.string().optional(),
@@ -333,6 +347,7 @@ export function registerMcpTools(server) {
             faviconUrl: z.string().optional(),
           })
           .optional(),
+        socialMedia: socialMediaSchema.optional(),
       },
     },
     async (args) => run(() => site.updateSiteSettingsAdmin(args)),

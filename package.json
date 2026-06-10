@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/pages/visibility.test.js src/lib/pages/viewports.test.js src/lib/seo/site-url.test.js src/lib/donations/schema.test.js src/lib/forms/schema.test.js src/lib/zoom/parse.test.js",
+    "test": "node --test src/lib/pages/visibility.test.js src/lib/pages/viewports.test.js src/lib/media/object-position.test.js src/lib/seo/site-url.test.js src/lib/donations/schema.test.js src/lib/forms/schema.test.js src/lib/zoom/parse.test.js",
     "import:bulletins": "node scripts/import-ecatholic-bulletins.mjs",
     "import:bulletins:dry": "node scripts/import-ecatholic-bulletins.mjs --dry-run"
   },

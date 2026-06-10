@@ -1,9 +1,11 @@
 import "server-only";
 
+import { revalidatePublicSite } from "@/lib/cache/revalidate-public";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { mergeFooterConfig } from "@/lib/site/footer-styles";
 import { mergeHeaderConfig } from "@/lib/site/header-styles";
+import { mergeSocialMedia } from "@/lib/site/social-media";
 import { MODULE_CATEGORIES } from "@/types/firestore";
 
 function getDb() {
@@ -28,6 +30,7 @@ export async function getSiteConfigAdmin() {
 
 export async function updateSiteConfigAdmin(partial) {
   await configRef().update({ ...partial, updatedAt: now() });
+  revalidatePublicSite();
   return getSiteConfigAdmin();
 }
 
@@ -54,7 +57,7 @@ export async function updateSiteDesignAdmin(design) {
   return updateSiteConfigAdmin({ design: mergeDesign(current.design, design) });
 }
 
-export async function updateSiteSettingsAdmin({ name, tagline, canonicalDomain, seo }) {
+export async function updateSiteSettingsAdmin({ name, tagline, canonicalDomain, seo, socialMedia }) {
   const patch = {};
   if (name !== undefined) patch.name = name;
   if (tagline !== undefined) patch.tagline = tagline;
@@ -63,7 +66,18 @@ export async function updateSiteSettingsAdmin({ name, tagline, canonicalDomain, 
     const current = await getSiteConfigAdmin();
     patch.seo = { ...(current.seo || {}), ...seo };
   }
+  if (socialMedia !== undefined) {
+    const current = await getSiteConfigAdmin();
+    patch.socialMedia = mergeSocialMedia(current.socialMedia, socialMedia);
+  }
   return updateSiteConfigAdmin(patch);
+}
+
+export async function updateSocialMediaAdmin(socialMedia) {
+  const current = await getSiteConfigAdmin();
+  return updateSiteConfigAdmin({
+    socialMedia: mergeSocialMedia(current.socialMedia, socialMedia),
+  });
 }
 
 export async function updateHeaderConfigAdmin(headerConfig) {
@@ -97,6 +111,12 @@ export function getBuilderCapabilities() {
       content: "content-N columns",
       features: "slideshow or feature_tiles (max 1 module)",
       sidebar: "sidebar layouts only",
+    },
+    socialMedia: {
+      showInHeader: "boolean?",
+      showInFooter: "boolean?",
+      items: [{ platform: "facebook | instagram | youtube | x", url: "string" }],
+      tools: ["update_site_settings"],
     },
     headerCustomization: {
       tools: ["get_header_config", "update_header_config", "update_header_styles", "update_site_settings", "update_site_design"],
@@ -165,6 +185,11 @@ export function getBuilderCapabilities() {
             subtitle: "string?",
             ctaLabel: "string?",
             ctaHref: "string?",
+            objectPositionByViewport: {
+              mobile: "top-left | top | top-right | left | center | right | bottom-left | bottom | bottom-right",
+              tablet: "same presets (falls back to mobile)",
+              desktop: "same presets (falls back to tablet, then mobile)",
+            },
           },
         ],
       },

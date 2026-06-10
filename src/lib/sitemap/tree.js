@@ -246,6 +246,44 @@ export function isHomeNode(node) {
 }
 
 /**
+ * Ensure the bootstrap Home page nav item exists (migration replaces all nav nodes).
+ * Removes mistaken root Home link groups that have no landing page.
+ * @param {object[]} nodes
+ * @param {string | null | undefined} homePageId
+ */
+export function ensureHomeNavInList(nodes, homePageId) {
+  let result = nodes.filter(
+    (n) =>
+      !(
+        (n.parentId ?? null) === null &&
+        n.type === "group" &&
+        /^home$/i.test(n.title || "") &&
+        !n.pageId
+      ),
+  );
+
+  if (!homePageId) return result;
+  if (result.some((n) => isHomeNode(n))) return result;
+
+  result = result.map((n) =>
+    (n.parentId ?? null) === null ? { ...n, order: (n.order ?? 0) + 1 } : n,
+  );
+
+  result.unshift({
+    id: generateId(),
+    type: "page",
+    title: "Home",
+    slug: "",
+    parentId: null,
+    order: 0,
+    pageId: homePageId,
+    isQuickLink: false,
+  });
+
+  return result;
+}
+
+/**
  * Whether a template type can be created at the given parent.
  * Root allows only link groups (Home is the sole root page, created at bootstrap).
  * @param {import('@/types/firestore').NavNodeType} type
@@ -277,13 +315,40 @@ export function getFullSlug(nodes, nodeId) {
   return segments.join("/");
 }
 
+/** @param {object[]} nodes @param {string} parentId */
+function resolveFirstChildNavHref(nodes, parentId) {
+  for (const child of getSiblings(nodes, parentId)) {
+    if (child.type === "link") {
+      const href = child.externalUrl;
+      if (href && href !== "#") return href;
+      continue;
+    }
+    if (child.type === "page" || child.type === "secure_page") {
+      if (child.pageId) {
+        const full = getFullSlug(nodes, child.id);
+        return full === "" ? "/" : `/${full}`;
+      }
+      continue;
+    }
+    if (child.type === "group") {
+      if (child.pageId) {
+        const full = getFullSlug(nodes, child.id);
+        return full === "" ? "/" : `/${full}`;
+      }
+      const nested = resolveFirstChildNavHref(nodes, child.id);
+      if (nested && nested !== "#") return nested;
+    }
+  }
+  return null;
+}
+
 /** @param {object[]} nodes @param {import('@/types/firestore').NavNode} node */
 export function resolveNavHref(nodes, node) {
   if (node.type === "link") {
     return node.externalUrl || "#";
   }
   if (node.type === "group" && !node.pageId) {
-    return "#";
+    return resolveFirstChildNavHref(nodes, node.id) || "#";
   }
   const full = getFullSlug(nodes, node.id);
   if (full === "") return "/";

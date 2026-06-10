@@ -129,6 +129,31 @@ export async function createFirestoreRest(credentials) {
 
   function collection(name) {
     return {
+      async listAll() {
+        const docs = [];
+        let pageToken;
+
+        do {
+          const url = new URL(
+            `https://firestore.googleapis.com/v1/projects/${credentials.projectId}/databases/(default)/documents/${name}`,
+          );
+          if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+          const body = await request(url.toString());
+          for (const doc of body.documents || []) {
+            const id = doc.name.split("/").pop();
+            const data = {};
+            for (const [key, value] of Object.entries(doc.fields || {})) {
+              data[key] = fromFirestoreValue(value);
+            }
+            docs.push({ id, data });
+          }
+          pageToken = body.nextPageToken;
+        } while (pageToken);
+
+        return docs;
+      },
+
       doc(id) {
         const docPath = `projects/${credentials.projectId}/databases/(default)/documents/${name}/${id}`;
 
@@ -185,6 +210,10 @@ export async function createFirestoreRest(credentials) {
                 body: JSON.stringify({ fields: encodedFields }),
               },
             );
+          },
+
+          async delete() {
+            await request(`https://firestore.googleapis.com/v1/${docPath}`, { method: "DELETE" });
           },
         };
       },

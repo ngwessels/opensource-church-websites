@@ -1,4 +1,7 @@
-import { Calendar, ExternalLink, MapPin } from "lucide-react";
+"use client";
+
+import { Calendar, ChevronDown, ChevronUp, ExternalLink, MapPin } from "lucide-react";
+import { useState } from "react";
 
 import {
   formatEventBadgeTime,
@@ -18,10 +21,37 @@ function plainText(text = "") {
  * @param {Object} props
  * @param {string} [props.title]
  * @param {import('@/lib/calendar/types').CalendarEvent[]} props.events
+ * @param {number} [props.previewCount]
  * @param {boolean} [props.loading]
+ * @param {boolean} [props.loadingMore]
  * @param {string} [props.error]
+ * @param {boolean} [props.hasMoreToLoad]
+ * @param {() => void} [props.onLoadMore]
  */
-export function EventsList({ title = "Upcoming Events", events = [], loading = false, error = "" }) {
+export function EventsList({
+  title = "Upcoming Events",
+  events = [],
+  previewCount = 5,
+  loading = false,
+  loadingMore = false,
+  error = "",
+  hasMoreToLoad = false,
+  onLoadMore,
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const effectivePreview = Math.max(1, previewCount);
+  const canExpand = events.length > effectivePreview || hasMoreToLoad;
+  const visibleEvents = expanded || !canExpand ? events : events.slice(0, effectivePreview);
+  const hiddenCount = Math.max(0, events.length - effectivePreview);
+
+  const handleToggle = () => {
+    if (!expanded && hasMoreToLoad && onLoadMore) {
+      onLoadMore();
+    }
+    setExpanded((value) => !value);
+  };
+
   if (loading) {
     return (
       <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
@@ -70,7 +100,7 @@ export function EventsList({ title = "Upcoming Events", events = [], loading = f
       )}
 
       <ul className="divide-y divide-zinc-100">
-        {events.map((event) => {
+        {visibleEvents.map((event) => {
           const badge = formatEventDateBadge(event.date);
           const badgeTime = formatEventBadgeTime(event);
           const timeLabel = formatEventTime(event);
@@ -128,6 +158,33 @@ export function EventsList({ title = "Upcoming Events", events = [], loading = f
           );
         })}
       </ul>
+
+      {loadingMore && (
+        <p className="mt-2 text-sm text-zinc-500">Loading more events…</p>
+      )}
+
+      {canExpand && (
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={loadingMore}
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[var(--site-primary)] hover:underline disabled:opacity-50"
+        >
+          {expanded ? (
+            <>
+              Show less
+              <ChevronUp className="h-4 w-4" />
+            </>
+          ) : (
+            <>
+              {hasMoreToLoad
+                ? "Show more events"
+                : `Show ${hiddenCount} more event${hiddenCount === 1 ? "" : "s"}`}
+              <ChevronDown className="h-4 w-4" />
+            </>
+          )}
+        </button>
+      )}
     </section>
   );
 }
