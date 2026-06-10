@@ -2,6 +2,9 @@
 /**
  * Backward-compatible wrapper for Visitation FG migration.
  * Prefer: node scripts/migrate-ecatholic-content.mjs --domain www.visitationfg.org ...
+ *
+ * Full transfer (pages + nav + bulletin PDFs):
+ *   node scripts/migrate-visitation-content.mjs --connect 9222 --apply-all --apply --upload-images --publish
  */
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";

@@ -211,7 +211,8 @@ export function scrapeEcatholicNavInBrowser() {
       if (u.host !== location.host) return null;
       if (u.pathname.startsWith("/admin")) return null;
       if (/\.(pdf|jpe?g|png|gif|webp|docx?|xlsx?|pptx?)($|\?)/i.test(u.pathname)) return null;
-      if (u.pathname.startsWith("/photoalbums/") || u.pathname.startsWith("/bulletins")) return null;
+      if (u.pathname.startsWith("/photoalbums/")) return null;
+      if (u.pathname.startsWith("/bulletins/")) return null;
       return u.pathname.replace(/\/$/, "") || "/";
     } catch {
       return null;
@@ -324,7 +325,7 @@ export async function discoverEcatholicPaths(page, base) {
         if (/\.(pdf|jpe?g|png|gif|webp|docx?|xlsx?|pptx?)($|\?)/i.test(u.pathname)) return;
         let path = u.pathname.replace(/\/$/, "") || "/";
         if (path.startsWith("/photoalbums/")) return;
-        if (path.startsWith("/bulletins")) return;
+        if (path.startsWith("/bulletins/")) return;
         found.add(path);
       } catch {
         /* ignore bad URLs */
@@ -341,6 +342,45 @@ export async function discoverEcatholicPaths(page, base) {
   }, url);
 
   return paths;
+}
+
+/**
+ * Map an eCatholic path or same-site absolute URL to the migrated public path.
+ * @param {string} href
+ * @param {ReturnType<typeof createMigrationContext>} ctx
+ */
+export function resolveMigratedHref(href, ctx) {
+  if (!href || typeof href !== "string") return href || "/";
+  const trimmed = href.trim();
+  if (!trimmed) return "/";
+
+  let path = trimmed;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const base = new URL(ctx.base);
+      const u = new URL(trimmed);
+      const baseHost = base.hostname.replace(/^www\./, "");
+      const linkHost = u.hostname.replace(/^www\./, "");
+      if (linkHost !== baseHost) return trimmed;
+      path = `${u.pathname}${u.search}${u.hash}`;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (path.startsWith("#") || path.startsWith("mailto:") || path.startsWith("tel:")) {
+    return path;
+  }
+
+  const queryHash = path.match(/([?#].*)$/)?.[1] || "";
+  let pathname = path.slice(0, path.length - queryHash.length);
+  pathname = pathname.replace(/\/$/, "") || "/";
+
+  if (ctx.publicHrefByEcPath?.[pathname]) {
+    return ctx.publicHrefByEcPath[pathname] + queryHash;
+  }
+
+  return pathname === "/" ? "/" : `${pathname}${queryHash}`;
 }
 
 export function createMigrationContext({
@@ -366,6 +406,7 @@ export function createMigrationContext({
     defaultLayoutPageIds: pageMapConfig?.defaultLayoutPageIds || new Set(),
     homePageId: pageMapConfig?.homePageId || pageMap["/"] || pageMap[""] || null,
     firestorePageMap: null,
+    publicHrefByEcPath: null,
     get ecatholicCdn() {
       return ecatholicCdnUrl(this.parishId);
     },

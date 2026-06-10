@@ -32,19 +32,23 @@ const DOCUMENTS_FOLDER = "documents-root";
 const COLLECTIONS = { bulletins: "bulletins", media: "media" };
 
 function parseArgs(argv) {
+  const connectIdx = argv.indexOf("--connect");
   const options = {
     dryRun: false,
     headed: false,
+    connect: connectIdx >= 0 ? argv[connectIdx + 1] : null,
     fromManifest: null,
     limit: null,
     sourceUrl: DEFAULT_SOURCE_URL,
     manifestPath: DEFAULT_MANIFEST_PATH,
+    writeManifest: true,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--headed") options.headed = true;
+    else if (arg === "--no-manifest") options.writeManifest = false;
     else if (arg === "--from-manifest") {
       options.fromManifest = argv[i + 1] ?? DEFAULT_MANIFEST_PATH;
       i += 1;
@@ -75,8 +79,10 @@ function printHelp() {
 
 Options:
   --dry-run                 List bulletins without writing to Firebase
+  --connect <port|url>      Attach to Chrome with remote debugging (best for Cloudflare)
   --headed                  Show browser window (helps pass Cloudflare)
   --from-manifest <path>    Import from JSON instead of scraping
+  --no-manifest             Skip writing scraped manifest JSON
   --limit <n>               Import only the first N bulletins
   --source-url <url>        eCatholic bulletins page (default: ${DEFAULT_SOURCE_URL})
   --manifest-path <path>    Where to write scraped manifest (default: scripts/.bulletin-manifest.json)
@@ -183,8 +189,74 @@ function readManifest(path) {
   return dedupeBulletins(parsed);
 }
 
-async function scrapeBulletins(sourceUrl, { headed }) {
+export async function scrapeBulletinsFromPage(page, sourceUrl, { headed = false } = {}) {
+  console.log(`Scraping ${sourceUrl} ...`);
+  await page.goto(sourceUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
+
+  if (headed) {
+    console.log("If Cloudflare appears, complete the challenge in the browser window.");
+  }
+
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll("a")].some((anchor) =>
+          /files\.ecatholic\.com\/\d+\/bulletins\/\d{8}\.pdf/i.test(anchor.href),
+        ),
+      { timeout: headed ? 180_000 : 60_000 },
+    )
+    .catch(() => {});
+
+  const yearHeaders = page
+    .locator('#background a, .bulletinArchive a, [class*="archive"] a, li a')
+    .filter({ hasText: /^\d{4}$/ });
+  const yearCount = await yearHeaders.count();
+  for (let i = 0; i < yearCount; i += 1) {
+    await yearHeaders.nth(i).click({ timeout: 5_000 }).catch(() => {});
+  }
+
+  await page.waitForTimeout(1_500);
+
+  const entries = await page.evaluate(() =>
+    [...document.querySelectorAll('a[href*="files.ecatholic.com"][href*="/bulletins/"]')]
+      .filter((anchor) => /\.pdf/i.test(anchor.href))
+      .map((anchor) => ({
+        title: anchor.textContent.trim(),
+        url: anchor.href,
+      })),
+  );
+
+  const title = await page.title();
+  if (entries.length === 0) {
+    const hint =
+      /just a moment/i.test(title) || /challenge/i.test(await page.content())
+        ? "Cloudflare blocked headless scraping."
+        : "No bulletin PDF links were found on the page.";
+    throw new Error(
+      `${hint} Try --connect 9222, --headed, or create a manifest with the browser console snippet in the script header.`,
+    );
+  }
+
+  return dedupeBulletins(entries);
+}
+
+async function scrapeBulletins(sourceUrl, { headed, connect }) {
   const { chromium } = await import("playwright");
+
+  if (connect) {
+    const endpoint = connect.startsWith("http") ? connect : `http://127.0.0.1:${connect}`;
+    const browser = await chromium.connectOverCDP(endpoint, { timeout: 15_000 });
+    const context = browser.contexts()[0];
+    if (!context) {
+      throw new Error(`No browser context at ${endpoint} — open Chrome with remote debugging first`);
+    }
+    const page = context.pages()[0] || (await context.newPage());
+    try {
+      return await scrapeBulletinsFromPage(page, sourceUrl, { headed });
+    } finally {
+      await browser.close().catch(() => {});
+    }
+  }
 
   const browser = await chromium.launch({ headless: !headed });
   const context = await browser.newContext({
@@ -194,54 +266,7 @@ async function scrapeBulletins(sourceUrl, { headed }) {
   const page = await context.newPage();
 
   try {
-    console.log(`Scraping ${sourceUrl} ...`);
-    await page.goto(sourceUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
-
-    if (headed) {
-      console.log("If Cloudflare appears, complete the challenge in the browser window.");
-    }
-
-    await page
-      .waitForFunction(
-        () =>
-          [...document.querySelectorAll("a")].some((anchor) =>
-            /files\.ecatholic\.com\/\d+\/bulletins\/\d{8}\.pdf/i.test(anchor.href),
-          ),
-        { timeout: headed ? 180_000 : 60_000 },
-      )
-      .catch(() => {});
-
-    const yearHeaders = page.locator(
-      '#background a, .bulletinArchive a, [class*="archive"] a, li a',
-    ).filter({ hasText: /^\d{4}$/ });
-    const yearCount = await yearHeaders.count();
-    for (let i = 0; i < yearCount; i += 1) {
-      await yearHeaders.nth(i).click({ timeout: 5_000 }).catch(() => {});
-    }
-
-    await page.waitForTimeout(1_500);
-
-    const entries = await page.evaluate(() =>
-      [...document.querySelectorAll('a[href*="files.ecatholic.com"][href*="/bulletins/"]')]
-        .filter((anchor) => /\.pdf/i.test(anchor.href))
-        .map((anchor) => ({
-          title: anchor.textContent.trim(),
-          url: anchor.href,
-        })),
-    );
-
-    const title = await page.title();
-    if (entries.length === 0) {
-      const hint =
-        /just a moment/i.test(title) || /challenge/i.test(await page.content())
-          ? "Cloudflare blocked headless scraping."
-          : "No bulletin PDF links were found on the page.";
-      throw new Error(
-        `${hint} Try --headed or create a manifest with the browser console snippet in the script header.`,
-      );
-    }
-
-    return dedupeBulletins(entries);
+    return await scrapeBulletinsFromPage(page, sourceUrl, { headed });
   } finally {
     await browser.close();
   }
@@ -286,7 +311,7 @@ async function uploadBulletinPdf(db, storage, bucketName, buffer, date) {
   return { mediaId, downloadUrl, now };
 }
 
-async function importBulletins(bulletins, { dryRun, limit, db, storage, bucketName }) {
+export async function importBulletins(bulletins, { dryRun, limit, db, storage, bucketName }) {
   const selected = limit ? bulletins.slice(0, limit) : bulletins;
   const summary = { imported: 0, skipped: 0, failed: 0 };
 
@@ -342,8 +367,8 @@ async function importBulletins(bulletins, { dryRun, limit, db, storage, bucketNa
   return summary;
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
+/** @param {ReturnType<typeof parseArgs>} options */
+export async function runEcatholicBulletinImport(options) {
   let bulletins;
 
   if (options.fromManifest) {
@@ -351,9 +376,14 @@ async function main() {
     console.log(`Loading manifest from ${manifestPath}`);
     bulletins = readManifest(manifestPath);
   } else {
-    bulletins = await scrapeBulletins(options.sourceUrl, { headed: options.headed });
-    writeFileSync(options.manifestPath, `${JSON.stringify(bulletins, null, 2)}\n`);
-    console.log(`Wrote manifest (${bulletins.length} bulletins) to ${options.manifestPath}`);
+    bulletins = await scrapeBulletins(options.sourceUrl, {
+      headed: options.headed,
+      connect: options.connect,
+    });
+    if (options.writeManifest !== false) {
+      writeFileSync(options.manifestPath, `${JSON.stringify(bulletins, null, 2)}\n`);
+      console.log(`Wrote manifest (${bulletins.length} bulletins) to ${options.manifestPath}`);
+    }
   }
 
   console.log(`Found ${bulletins.length} unique bulletin dates.`);
@@ -375,12 +405,20 @@ async function main() {
     `\nDone. imported=${summary.imported} skipped=${summary.skipped} failed=${summary.failed}`,
   );
 
+  return summary;
+}
+
+async function main() {
+  const summary = await runEcatholicBulletinImport(parseArgs(process.argv.slice(2)));
   if (summary.failed > 0) {
     process.exitCode = 1;
   }
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exit(1);
-});
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
+  });
+}

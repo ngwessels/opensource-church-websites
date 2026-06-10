@@ -3,14 +3,14 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-import { PublicPageClient } from "./PublicPageClient";
+import { DesignPreviewClient } from "./DesignPreviewClient";
 
 function PublicPageGateInner({ slug, children }) {
   const searchParams = useSearchParams();
   const designPreview = searchParams.get("designPreview") === "1";
 
   if (designPreview) {
-    return <PublicPageClient slug={slug} />;
+    return <DesignPreviewClient slug={slug} />;
   }
 
   return children;

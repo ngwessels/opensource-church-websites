@@ -9,6 +9,7 @@ import { SocialMediaEditor } from "@/components/builder/SocialMediaEditor";
 import { MassTimesForm } from "@/components/mass-times/MassTimesForm";
 import { DonationsManager } from "@/components/donations/DonationsManager";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { UsersAdmin } from "@/components/admin/UsersAdmin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -199,31 +200,7 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
 
         {tab === "donations" && <DonationsManager />}
 
-        {tab === "users" && (
-          <div className="mx-auto max-w-2xl">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="py-2">Email</th>
-                  <th className="py-2">Role</th>
-                  <th className="py-2">Name</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b">
-                    <td className="py-2">{u.email}</td>
-                    <td className="py-2 capitalize">{u.role}</td>
-                    <td className="py-2">{u.displayName}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-4 text-xs text-muted-foreground">
-              New users sign up at /signup. First user becomes admin automatically.
-            </p>
-          </div>
-        )}
+        {tab === "users" && <UsersAdmin users={users} />}
 
         {tab === "mass" && (
           <MassTimesEditor

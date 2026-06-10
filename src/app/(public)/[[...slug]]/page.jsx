@@ -1,6 +1,3 @@
-import { Suspense } from "react";
-
-import { PublicPageClient } from "../PublicPageClient";
 import { PublicPageGate } from "../PublicPageGate";
 import { PublicSite } from "@/components/site/PublicSite";
 import {
@@ -69,13 +66,12 @@ export default async function PublicPage({ params }) {
 
   if (!isFirebaseAdminConfigured()) {
     return (
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center text-zinc-500">Loading…</div>
-        }
-      >
-        <PublicPageClient slug={slug} />
-      </Suspense>
+      <div className="flex min-h-screen items-center justify-center bg-muted p-4">
+        <div className="max-w-md rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+          Firebase Admin is not configured. Add <code>FIREBASE_ADMIN_*</code> credentials to{" "}
+          <code>.env.local</code> to serve public pages.
+        </div>
+      </div>
     );
   }
 

@@ -1,18 +1,72 @@
-rules_version='2'
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 7, 9);
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc().data.role == 'admin';
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
+    }
+
+    match /users/{uid}/mcpConnections/{connectionId} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /site/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /pages/{pageId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /navNodes/{nodeId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /media/{mediaId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /mediaFolders/{folderId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /bulletins/{bulletinId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /formSubmissions/{submissionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /donations/{donationId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /mcpOAuthClients/{clientId} {
+      allow read, write: if false;
+    }
+
+    match /mcpOAuthCodes/{codeId} {
+      allow read, write: if false;
+    }
+
+    match /mcpTokenLookup/{tokenHash} {
+      allow read, write: if false;
     }
   }
 }

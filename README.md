@@ -28,9 +28,11 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign up at `/signup` — the first user becomes admin and bootstraps the site with a Home page.
+Open [http://localhost:3000](http://localhost:3000). Sign up at `/signup` — the **first** user becomes admin and bootstraps the site with a Home page. After that, public signup is closed; additional users must be invited by an admin (Builder → Admin → Admin Users).
 
-Builder: [http://localhost:3000/builder/edit](http://localhost:3000/builder/edit)
+Builder: [http://localhost:3000/builder/edit](http://localhost:3000/builder/edit) (admin role required)
+
+**Security:** Deploy Firestore and Storage rules before going to production (see [Firebase setup](#firebase-setup)). CMS data is writable only by users with the `admin` role in Firestore `users/{uid}`.
 
 ## Firebase setup
 
@@ -43,13 +45,15 @@ Builder: [http://localhost:3000/builder/edit](http://localhost:3000/builder/edit
    - **Authentication → Settings → Authorized domains** — add `127.0.0.1` and your production domain (needed for reCAPTCHA).
    - **Local dev:** Phone MFA does **not** work on `http://localhost:3000`. Use `http://127.0.0.1:3000` instead, or add [test phone numbers](https://firebase.google.com/docs/auth/web/phone-auth#test-with-fictional-phone-numbers) in the Firebase Console.
 5. Create a **service account** and add `FIREBASE_ADMIN_*` credentials (escape newlines in private key as `\n`).
-6. Deploy security rules:
+6. Deploy security rules (required — the repo ships role-based rules that restrict CMS writes to admins):
 
 ```bash
 npx -y firebase-tools@latest login
 npx -y firebase-tools@latest use --add <PROJECT_ID>
 npx -y firebase-tools@latest deploy --only firestore:rules,storage
 ```
+
+If you previously had open/temporary rules and unauthorized accounts gained admin access, demote them in Firestore (`users/{uid}.role = "member"`) before or after deploying.
 
 ## Firestore schema (single-tenant)
 

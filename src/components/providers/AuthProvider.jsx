@@ -15,13 +15,40 @@ import {
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { ensureUserProfile } from "@/lib/site/bootstrap";
+import { ensureUserProfileClientFallback } from "@/lib/site/bootstrap";
 
 export const AuthContext = createContext(null);
+
+async function ensureProfileViaApi(user) {
+  const token = await user.getIdToken();
+  const res = await fetch("/api/auth/ensure-profile", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (res.status === 403) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.message || "This site is closed to new signups. Contact your administrator.");
+    err.code = "site_initialized";
+    throw err;
+  }
+
+  if (res.status === 503) {
+    return { fallback: true };
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Profile bootstrap failed");
+  }
+
+  return res.json();
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
   // null until client mount — avoids SSR/client env mismatch hydration errors
   const [configured, setConfigured] = useState(null);
 
@@ -45,15 +72,27 @@ export function AuthProvider({ children }) {
       const auth = getFirebaseAuth();
 
       unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
-        setUser(nextUser);
+        setAuthError(null);
         if (nextUser) {
           try {
-            const db = getFirebaseFirestore();
-            await ensureUserProfile(db, nextUser);
+            const result = await ensureProfileViaApi(nextUser);
+            if (result?.fallback) {
+              console.warn("[auth] Admin SDK unavailable — using client fallback for profile bootstrap");
+              const db = getFirebaseFirestore();
+              await ensureUserProfileClientFallback(db, nextUser);
+            }
           } catch (err) {
             console.error("[auth] profile bootstrap failed", err);
+            if (err?.code === "site_initialized" || err?.message?.includes("closed to new signups")) {
+              setAuthError(err.message);
+              await signOut(auth);
+              setUser(null);
+              setLoading(false);
+              return;
+            }
           }
         }
+        setUser(nextUser);
         setLoading(false);
       });
     }
@@ -83,6 +122,7 @@ export function AuthProvider({ children }) {
 
   const logOut = useCallback(async () => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
+    setAuthError(null);
     await signOut(getFirebaseAuth());
   }, []);
 
@@ -114,11 +154,15 @@ export function AuthProvider({ children }) {
     setUser(auth.currentUser);
   }, []);
 
+  const clearAuthError = useCallback(() => setAuthError(null), []);
+
   const value = useMemo(
     () => ({
       user,
       loading,
       configured,
+      authError,
+      clearAuthError,
       signInWithEmail,
       signUpWithEmail,
       signInWithGoogle,
@@ -132,6 +176,8 @@ export function AuthProvider({ children }) {
       user,
       loading,
       configured,
+      authError,
+      clearAuthError,
       signInWithEmail,
       signUpWithEmail,
       signInWithGoogle,

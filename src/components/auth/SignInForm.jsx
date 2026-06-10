@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { MfaSignInChallenge } from "@/components/account/MfaSignInChallenge";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,61 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { getMfaResolver, isMfaError } from "@/lib/firebase/mfa";
 
+const QUERY_ERRORS = {
+  signup_closed: "Public signup is closed. Contact your site administrator for an invitation.",
+  admin_required: "You do not have permission to access the website builder. Contact your administrator.",
+};
+
 export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
   const router = useRouter();
-  const { configured, signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+  const searchParams = useSearchParams();
+  const {
+    configured,
+    authError,
+    clearAuthError,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+  } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [mfaResolver, setMfaResolver] = useState(null);
+  const [siteInitialized, setSiteInitialized] = useState(null);
 
   const isSignup = mode === "signup";
+  const queryError = searchParams.get("error");
+  const queryMessage = queryError ? QUERY_ERRORS[queryError] : null;
+
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+      clearAuthError?.();
+    }
+  }, [authError, clearAuthError]);
+
+  useEffect(() => {
+    if (queryMessage) {
+      setError(queryMessage);
+    }
+  }, [queryMessage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/site-status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setSiteInitialized(Boolean(data.initialized));
+      })
+      .catch(() => {
+        if (!cancelled) setSiteInitialized(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -30,6 +74,10 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
 
     try {
       if (isSignup) {
+        if (siteInitialized) {
+          setError(QUERY_ERRORS.signup_closed);
+          return;
+        }
         await signUpWithEmail(email, password, displayName || undefined);
       } else {
         await signInWithEmail(email, password);
@@ -73,7 +121,7 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
     setError(null);
   }
 
-  if (configured === null) {
+  if (configured === null || siteInitialized === null) {
     return (
       <div className="w-full max-w-md space-y-6">
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -101,6 +149,8 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
       />
     );
   }
+
+  const showSignupLink = !isSignup && !siteInitialized;
 
   return (
     <div className="w-full max-w-md space-y-6">
@@ -158,7 +208,7 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
         )}
 
-        <Button type="submit" disabled={submitting} className="w-full">
+        <Button type="submit" disabled={submitting || (isSignup && siteInitialized)} className="w-full">
           {submitting ? "Please wait…" : isSignup ? "Create account" : "Sign in"}
         </Button>
       </form>
@@ -190,13 +240,15 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
               Sign in
             </Link>
           </>
-        ) : (
+        ) : showSignupLink ? (
           <>
             Need an account?{" "}
             <Link href="/signup" className="font-medium text-foreground hover:underline">
               Sign up
             </Link>
           </>
+        ) : (
+          <>Contact your administrator for an invitation.</>
         )}
       </p>
     </div>

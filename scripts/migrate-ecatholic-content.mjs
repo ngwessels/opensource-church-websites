@@ -6,6 +6,10 @@
  *   node scripts/migrate-ecatholic-content.mjs --domain www.yourparish.org --apply-all --apply --upload-images --publish
  *   node scripts/migrate-ecatholic-content.mjs --domain www.yourparish.org --connect 9222 --apply-all --apply
  *
+ * Full transfer (--apply-all, --apply-only, or --from-manifest --apply) also scrapes bulletin
+ * PDFs and uploads them to Firebase Storage when /bulletins is in the page map.
+ * Pass --skip-import-bulletins to omit bulletin import.
+ *
  * Cloudflare blocks headless Playwright — use headed mode (default) or connect to real Chrome:
  *
  *   /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
@@ -37,6 +41,7 @@ import {
   readManifestFile,
   resolveEntryTitle,
   resolvePageId,
+  resolveMigratedHref,
   scrapeEcatholicNavInBrowser,
   slugifyNavTitle,
   linkGroupSlug,
@@ -109,6 +114,11 @@ function parseArgs(argv) {
     uploadImages: argv.includes("--upload-images"),
     applyOnly: argv.includes("--apply-only"),
     importNavOnly: argv.includes("--import-nav-only"),
+    importBulletinsOnly: argv.includes("--import-bulletins-only"),
+    importBulletins:
+      argv.includes("--import-bulletins") ||
+      argv.includes("--import-bulletins-only"),
+    skipImportBulletins: argv.includes("--skip-import-bulletins"),
     skipImportNav: argv.includes("--skip-import-nav"),
     /** Keep going when a page times out (default for --apply-all). */
     continueOnError:
@@ -140,6 +150,9 @@ Options:
   --manifest <file>      Manifest file path (default: scripts/.ecatholic-migration-<domain>.json)
   --apply-only           Skip scrape; apply + publish from manifest only
   --import-nav-only      Re-import eCatholic navigation only (requires --connect)
+  --import-bulletins-only  Import bulletin PDFs only (no page content)
+  --skip-import-bulletins  Skip bulletin PDF import during batch apply
+  --import-bulletins     Force bulletin PDF import (also runs automatically on batch apply)
   --import-json <file>   Merge one manual console extract into manifest
   --page-map <file>      JSON mapping eCatholic paths to Firestore page IDs
   --parish-id <id>       eCatholic parish ID (auto-detected from page HTML if omitted)
@@ -167,7 +180,9 @@ Cloudflare workaround — start Chrome separately, then connect:
 
 Open your parish site in that window, pass Cloudflare once, then:
 
-  node scripts/migrate-ecatholic-content.mjs --domain www.yourparish.org --connect 9222 --apply-all --apply
+  node scripts/migrate-ecatholic-content.mjs --domain www.yourparish.org --connect 9222 --apply-all --apply --upload-images --publish
+
+Batch apply also imports bulletin PDFs when /bulletins is in the page map (use --skip-import-bulletins to skip).
 
 Manual fallback: paste scripts/ecatholic-page-extract.js in the browser console on each page.
 `);
@@ -1762,7 +1777,7 @@ async function scrapedToFirestoreModules(
           title: mod.title || "Links",
           items: (mod.items || []).map((item) => ({
             label: item.label,
-            href: item.href || item.url || "/",
+            href: resolveMigratedHref(item.href || item.url || "/", migrationCtx),
           })),
         },
       });
@@ -2059,8 +2074,132 @@ function appendSpecialModules(pageId, modules) {
   return modules;
 }
 
+const BULLETINS_PAGE_ID = "page_mig_bulletins";
+
+async function ensureBulletinsPage(db) {
+  const pagesSnap = await db.collection("pages").listAll();
+  let bulletinsPageId = null;
+  for (const { id, data } of pagesSnap) {
+    if (data.pageType === "bulletins") {
+      bulletinsPageId = id;
+      break;
+    }
+  }
+
+  const pageId = bulletinsPageId || BULLETINS_PAGE_ID;
+  const now = new Date().toISOString();
+
+  if (!bulletinsPageId) {
+    const pageData = {
+      slug: "bulletins",
+      title: "Bulletins",
+      pageType: "bulletins",
+      status: "published",
+      layout: "default",
+      contentColumns: 1,
+      maxModulesPerRegion: 15,
+      contentMarginX: "md",
+      regions: [{ id: "content-1", modules: [] }],
+      seo: { title: "Bulletins" },
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: now,
+      publishedSnapshot: {
+        slug: "bulletins",
+        layout: "default",
+        title: "Bulletins",
+        seo: { title: "Bulletins" },
+        regions: [{ id: "content-1", modules: [] }],
+      },
+    };
+    await db.collection("pages").doc(pageId).set(pageData);
+    logProgress(`[migrate] Created bulletins page (${pageId}).`);
+  }
+
+  ctx().pageMap["/bulletins"] = pageId;
+  notePageInContext("/bulletins", pageId);
+  return pageId;
+}
+
+async function buildPublicHrefByEcPath(db) {
+  const map = {};
+  const ecPaths = new Set([...Object.keys(ctx().pageMap), "/bulletins"]);
+
+  for (const ecPath of ecPaths) {
+    const pageId =
+      ctx().pageMap[ecPath] ||
+      ctx().firestorePageMap?.byPath?.[ecPath] ||
+      null;
+    if (!pageId) continue;
+
+    const snap = await db.collection("pages").doc(pageId).get();
+    if (!snap.exists) continue;
+
+    const slug = snap.data().slug ?? "";
+    map[ecPath] = slug === "" ? "/" : `/${slug}`;
+  }
+
+  migrationCtx.publicHrefByEcPath = map;
+  return map;
+}
+
+async function rewriteInternalLinkHrefs(db) {
+  if (!migrationCtx.publicHrefByEcPath || !Object.keys(migrationCtx.publicHrefByEcPath).length) {
+    await buildPublicHrefByEcPath(db);
+  }
+
+  const pages = await db.collection("pages").listAll();
+  const now = new Date().toISOString();
+  let updatedCount = 0;
+
+  for (const { id, data } of pages) {
+    const regions = JSON.parse(JSON.stringify(data.regions || []));
+    let changed = false;
+
+    for (const region of regions) {
+      for (const mod of region.modules || []) {
+        if (mod.type === "links" && mod.config?.items) {
+          for (const item of mod.config.items) {
+            const href = item.href || item.url || "";
+            const next = resolveMigratedHref(href, migrationCtx);
+            if (next && next !== href) {
+              if (item.href !== undefined) item.href = next;
+              else item.url = next;
+              changed = true;
+            }
+          }
+        }
+        if (mod.type === "buttons" && mod.config?.items) {
+          for (const item of mod.config.items) {
+            const href = item.href || "/";
+            const next = resolveMigratedHref(href, migrationCtx);
+            if (next && next !== href) {
+              item.href = next;
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (!changed) continue;
+
+    const patch = { regions, updatedAt: now };
+    if (data.status === "published" && data.publishedSnapshot) {
+      patch.publishedSnapshot = { ...data.publishedSnapshot, regions };
+    }
+    await db.collection("pages").doc(id).update(patch);
+    updatedCount += 1;
+  }
+
+  if (updatedCount) {
+    logProgress(`[migrate] Rewrote internal link hrefs on ${updatedCount} page(s).`);
+  }
+}
+
 async function importEcatholicNav(db, sessionOpts) {
   logProgress("[migrate] Importing navigation from eCatholic…");
+  await ensureBulletinsPage(db);
 
   return withBrowser([], sessionOpts, async (page) => {
     await page.goto(ctx().base, { waitUntil: "domcontentloaded", timeout: 30_000 });
@@ -2380,9 +2519,38 @@ async function importEcatholicNav(db, sessionOpts) {
       }
     }
 
+    await buildPublicHrefByEcPath(db);
+    await rewriteInternalLinkHrefs(db);
+
     logProgress(`[migrate] Navigation imported (${nodesToWrite.length} nodes, page slugs synced).`);
     return nodesToWrite.length;
   });
+}
+
+async function importEcatholicBulletinPdfs(opts, sessionOpts) {
+  const { runEcatholicBulletinImport } = await import("./import-ecatholic-bulletins.mjs");
+  const sourceUrl = `${ctx().base.replace(/\/$/, "")}/bulletins`;
+  const manifestPath = join(
+    __dirname,
+    `.bulletin-manifest-${ctx().hostname.replace(/\./g, "-")}.json`,
+  );
+
+  logProgress("[migrate] Importing bulletin PDFs from eCatholic…");
+  const summary = await runEcatholicBulletinImport({
+    dryRun: opts.dryRun,
+    headed: opts.headed,
+    connect: opts.connect ?? sessionOpts.connect,
+    sourceUrl,
+    manifestPath,
+    fromManifest: null,
+    limit: null,
+    writeManifest: true,
+  });
+
+  if (summary.failed > 0) {
+    console.warn(`[migrate] Bulletin import finished with ${summary.failed} failure(s).`);
+  }
+  return summary;
 }
 
 /** @param {object[]} nodes @param {string} homePageId */
@@ -2660,6 +2828,20 @@ async function resolveScrapePathList(opts) {
   return null;
 }
 
+/** Batch apply (full transfer): all pages, not a single --path run. */
+function isBatchApply(opts) {
+  return Boolean(
+    opts.apply && !opts.path && (opts.applyAll || opts.applyOnly || opts.fromManifest),
+  );
+}
+
+function shouldRunBulletinImport(opts) {
+  if (opts.skipImportBulletins || opts.dryRun || !opts.apply) return false;
+  if (!ctx().pageMap["/bulletins"]) return false;
+  if (opts.importBulletins) return true;
+  return isBatchApply(opts);
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   await bootstrapMigrationContext(opts);
@@ -2694,6 +2876,21 @@ async function main() {
     );
   }
 
+  if (opts.importBulletinsOnly) {
+    if (!opts.connect && opts.headless) {
+      console.error(
+        "[migrate] --import-bulletins-only requires --connect or headed Chrome (omit --headless).",
+      );
+      process.exit(1);
+    }
+    const { db } = await initFirebase();
+    migrationCtx.setFirestorePageMap(await loadFirestorePageMap(db));
+    await ensureBulletinsPage(db);
+    await importEcatholicBulletinPdfs(opts, sessionOpts);
+    logProgress("[migrate] Done.");
+    return;
+  }
+
   if (opts.importNavOnly) {
     if (!opts.connect) {
       console.error("[migrate] --import-nav-only requires --connect (Chrome with eCatholic site open).");
@@ -2713,7 +2910,9 @@ async function main() {
     const { entries: manifestEntries } = readManifestFile(manifestFile);
     entries = manifestEntries;
     if (opts.path) entries = entries.filter((e) => e.path === opts.path);
-    logProgress(`[migrate] Loaded ${entries.length} entries from manifest`);
+    logProgress(
+      `[migrate] Loaded ${entries.length} entries from manifest${shouldRunBulletinImport(opts) ? " (bulletin PDFs will be imported after apply)" : ""}`,
+    );
   } else {
     const paths = await resolveScrapePathList(opts);
     if (!paths) {
@@ -2722,7 +2921,7 @@ async function main() {
     }
 
     logProgress(
-      `[migrate] Will scrape ${paths.length} page(s)${opts.apply ? ", then apply to Firestore" : ""}${opts.publish ? " and publish" : ""}`,
+      `[migrate] Will scrape ${paths.length} page(s)${opts.apply ? ", then apply to Firestore" : ""}${opts.publish ? " and publish" : ""}${shouldRunBulletinImport(opts) ? ", import bulletins" : ""}`,
     );
     entries = await scrapePaths(paths, sessionOpts);
   }
@@ -2777,6 +2976,15 @@ async function main() {
       await importEcatholicNav(db, sessionOpts);
     } catch (err) {
       console.warn(`[migrate] Navigation import failed: ${err.message}`);
+    }
+  }
+
+  if (shouldRunBulletinImport(opts) && db) {
+    try {
+      await ensureBulletinsPage(db);
+      await importEcatholicBulletinPdfs(opts, sessionOpts);
+    } catch (err) {
+      console.warn(`[migrate] Bulletin import failed: ${err.message}`);
     }
   }
 

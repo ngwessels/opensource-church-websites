@@ -5,9 +5,11 @@ import { useEffect } from "react";
 
 import { BuilderShell } from "@/components/builder/BuilderShell";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export default function BuilderLayout({ children }) {
   const { user, loading, configured } = useAuth();
+  const { isAdmin, loading: profileLoading } = useUserProfile();
   const router = useRouter();
 
   useEffect(() => {
@@ -16,7 +18,13 @@ export default function BuilderLayout({ children }) {
     }
   }, [user, loading, configured, router]);
 
-  if (loading || configured === null) {
+  useEffect(() => {
+    if (!loading && !profileLoading && configured && user && !isAdmin) {
+      router.replace("/login?error=admin_required");
+    }
+  }, [user, loading, profileLoading, configured, isAdmin, router]);
+
+  if (loading || configured === null || (user && profileLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted text-muted-foreground">
         Loading…
@@ -34,7 +42,7 @@ export default function BuilderLayout({ children }) {
     );
   }
 
-  if (!user) return null;
+  if (!user || !isAdmin) return null;
 
   return <BuilderShell>{children}</BuilderShell>;
 }
