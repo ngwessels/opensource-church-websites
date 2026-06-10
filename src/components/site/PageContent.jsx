@@ -7,13 +7,93 @@ import {
   isSidebarLayout,
   SIDEBAR_REGION_ID,
 } from "@/lib/pages/regions";
-import { getResponsiveLayoutStyle } from "@/lib/pages/viewports";
+import {
+  usesStackedContentLayout,
+} from "@/lib/pages/stack-layout";
+import {
+  getResponsiveContentColumns,
+  getResponsiveLayoutStyle,
+} from "@/lib/pages/viewports";
 import { filterSectionNavItems } from "@/lib/pages/visibility";
 import { getSectionNavContext } from "@/lib/sitemap/tree";
 
 import { RegionColumn } from "@/components/builder/RegionColumn";
+import { StackedContentColumn } from "@/components/builder/StackedContentColumn";
 import { DroppableFeatures } from "./DroppableFeatures";
 import { SectionNav } from "./SectionNav";
+
+function ContentRegionGrid({
+  page,
+  siteConfig,
+  calendarEventsByModuleId,
+  editing,
+  onEditModule,
+  onSaveModule,
+  onRemoveModule,
+  isDragActive,
+  dragType,
+  columnCount,
+  contentIds,
+  donationReturnPath,
+  onEditDonation,
+  className,
+  style,
+  visibilityClass = "",
+}) {
+  const contentColumns = contentIds.map((id) => (
+    <RegionColumn
+      key={id}
+      regionId={id}
+      page={page}
+      siteConfig={siteConfig}
+      calendarEventsByModuleId={calendarEventsByModuleId}
+      editing={editing}
+      onEditModule={onEditModule}
+      onSaveModule={onSaveModule}
+      onRemoveModule={onRemoveModule}
+      isDragActive={isDragActive}
+      dragType={dragType}
+      columnCount={columnCount}
+      className="min-w-0"
+      donationReturnPath={id === "content-1" ? donationReturnPath : null}
+      onEditDonation={id === "content-1" ? onEditDonation : null}
+    />
+  ));
+
+  return (
+    <div className={`${visibilityClass} ${className || ""}`.trim()} style={style}>
+      {contentColumns}
+    </div>
+  );
+}
+
+function ResponsiveStackedContent({
+  page,
+  siteConfig,
+  calendarEventsByModuleId,
+  viewport,
+  visibilityClass,
+  donationReturnPath,
+}) {
+  return (
+    <div className={visibilityClass}>
+      <StackedContentColumn
+        page={page}
+        siteConfig={siteConfig}
+        calendarEventsByModuleId={calendarEventsByModuleId}
+        previewViewport={viewport}
+        editing={false}
+        donationReturnPath={donationReturnPath}
+      />
+    </div>
+  );
+}
+
+function resolvePublicContentLayouts(page) {
+  const mobileStack = usesStackedContentLayout(page, "mobile");
+  const tabletStack = usesStackedContentLayout(page, "tablet");
+  return { mobileStack, tabletStack };
+}
 
 export function PageContent({
   page,
@@ -42,6 +122,7 @@ export function PageContent({
   const layoutOptions = previewViewport ? { previewViewport } : {};
   const responsiveStyle = getResponsiveLayoutStyle(page, layoutOptions);
   const useResponsiveClasses = !previewViewport;
+  const builderStackMode = editing && previewViewport && usesStackedContentLayout(page, previewViewport);
 
   const sectionNavContext = getSectionNavContext(navNodes, {
     slug: page?.slug,
@@ -61,29 +142,111 @@ export function PageContent({
   const showSidebarModules =
     hasSidebarLayout || (hasSectionNav && (editing || sidebarModules.length > 0));
 
-  const contentColumns = contentIds.map((id) => (
-    <RegionColumn
-      key={id}
-      regionId={id}
-      page={page}
-      siteConfig={siteConfig}
-      calendarEventsByModuleId={calendarEventsByModuleId}
-      editing={editing}
-      onEditModule={onEditModule}
-      onSaveModule={onSaveModule}
-      onRemoveModule={onRemoveModule}
-      isDragActive={isDragActive}
-      dragType={dragType}
-      columnCount={columnCount}
-      className="min-w-0"
-      donationReturnPath={id === "content-1" ? donationReturnPath : null}
-      onEditDonation={id === "content-1" ? onEditDonation : null}
-    />
-  ));
+  const { mobileStack, tabletStack } = resolvePublicContentLayouts(page);
+  const showResponsiveStacks = !editing && !previewViewport && (mobileStack || tabletStack);
+
+  const renderMainContent = ({ className, style, gridClassName, gridStyle } = {}) => {
+    if (builderStackMode) {
+      return (
+        <StackedContentColumn
+          page={page}
+          siteConfig={siteConfig}
+          calendarEventsByModuleId={calendarEventsByModuleId}
+          previewViewport={previewViewport}
+          editing={editing}
+          onEditModule={onEditModule}
+          onSaveModule={onSaveModule}
+          onRemoveModule={onRemoveModule}
+          isDragActive={isDragActive}
+          dragType={dragType}
+          className={className}
+          donationReturnPath={donationReturnPath}
+          onEditDonation={onEditDonation}
+        />
+      );
+    }
+
+    if (showResponsiveStacks) {
+      const desktopGridCols = getResponsiveContentColumns(page, "desktop");
+      const responsiveGridClass =
+        mobileStack && tabletStack
+          ? "hidden gap-8 lg:grid"
+          : mobileStack
+            ? "hidden gap-8 md:grid"
+            : tabletStack
+              ? "grid gap-8 max-lg:hidden"
+              : "grid gap-8";
+      const responsiveGridStyle = {
+        gridTemplateColumns: `repeat(${desktopGridCols}, minmax(0, 1fr))`,
+      };
+
+      return (
+        <>
+          {mobileStack && (
+            <ResponsiveStackedContent
+              page={page}
+              siteConfig={siteConfig}
+              calendarEventsByModuleId={calendarEventsByModuleId}
+              viewport="mobile"
+              visibilityClass="block md:hidden"
+              donationReturnPath={donationReturnPath}
+            />
+          )}
+          {tabletStack && (
+            <ResponsiveStackedContent
+              page={page}
+              siteConfig={siteConfig}
+              calendarEventsByModuleId={calendarEventsByModuleId}
+              viewport="tablet"
+              visibilityClass="hidden md:block lg:hidden"
+              donationReturnPath={donationReturnPath}
+            />
+          )}
+          <ContentRegionGrid
+            page={page}
+            siteConfig={siteConfig}
+            calendarEventsByModuleId={calendarEventsByModuleId}
+            editing={editing}
+            onEditModule={onEditModule}
+            onSaveModule={onSaveModule}
+            onRemoveModule={onRemoveModule}
+            isDragActive={isDragActive}
+            dragType={dragType}
+            columnCount={columnCount}
+            contentIds={contentIds}
+            donationReturnPath={donationReturnPath}
+            onEditDonation={onEditDonation}
+            className={responsiveGridClass}
+            style={responsiveGridStyle}
+          />
+        </>
+      );
+    }
+
+    return (
+      <ContentRegionGrid
+        page={page}
+        siteConfig={siteConfig}
+        calendarEventsByModuleId={calendarEventsByModuleId}
+        editing={editing}
+        onEditModule={onEditModule}
+        onSaveModule={onSaveModule}
+        onRemoveModule={onRemoveModule}
+        isDragActive={isDragActive}
+        dragType={dragType}
+        columnCount={columnCount}
+        contentIds={contentIds}
+        donationReturnPath={donationReturnPath}
+        onEditDonation={onEditDonation}
+        className={className}
+        style={style}
+      />
+    );
+  };
 
   const marginClass = useResponsiveClasses ? "page-content-responsive" : "";
   const columnsClass = useResponsiveClasses ? "page-content-columns" : "grid gap-8";
-  const columnsStyle = previewViewport
+  const columnsStyle = previewViewport && !builderStackMode
     ? {
         gridTemplateColumns: `repeat(${responsiveStyle["--cols-mobile"]}, minmax(0, 1fr))`,
       }
@@ -153,10 +316,15 @@ export function PageContent({
           {sidebarColumn}
           <div
             id="content1"
-            className={`min-w-0 lg:w-2/3 ${columnsClass}`}
-            style={columnsStyle}
+            className={`min-w-0 lg:w-2/3 ${builderStackMode || showResponsiveStacks ? "" : columnsClass}`}
+            style={builderStackMode || showResponsiveStacks ? undefined : columnsStyle}
           >
-            {contentColumns}
+            {renderMainContent({
+              className: builderStackMode || showResponsiveStacks ? undefined : "grid gap-8",
+              style: columnsStyle,
+              gridClassName: `grid gap-8 ${columnsClass}`,
+              gridStyle: columnsStyle,
+            })}
           </div>
         </div>
       </div>
@@ -167,10 +335,19 @@ export function PageContent({
     <div>
       {features}
       <div
-        className={`py-8 ${columnsClass} ${coreClass} ${marginClass}`}
-        style={{ ...responsiveStyle, ...columnsStyle }}
+        className={`py-8 ${builderStackMode || showResponsiveStacks ? "" : columnsClass} ${coreClass} ${marginClass}`}
+        style={
+          builderStackMode || showResponsiveStacks
+            ? responsiveStyle
+            : { ...responsiveStyle, ...columnsStyle }
+        }
       >
-        {contentColumns}
+        {renderMainContent({
+          className: builderStackMode || showResponsiveStacks ? undefined : undefined,
+          style: columnsStyle,
+          gridClassName: `grid gap-8 ${columnsClass}`,
+          gridStyle: { ...responsiveStyle, ...columnsStyle },
+        })}
       </div>
     </div>
   );

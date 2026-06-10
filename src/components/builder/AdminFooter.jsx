@@ -23,6 +23,7 @@ export function AdminFooter({
   isPublishing = false,
   canRevert = false,
   dropError,
+  stackLayoutActive = false,
 }) {
   return (
     <div
@@ -57,6 +58,7 @@ export function AdminFooter({
           canPublish={canPublish}
           isPublishing={isPublishing}
           canRevert={canRevert}
+          stackLayoutActive={stackLayoutActive}
         />
       </div>
     </div>

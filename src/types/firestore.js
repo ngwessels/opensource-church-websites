@@ -69,6 +69,14 @@
  */
 
 /**
+ * Per-viewport module order when a viewport uses a single content column.
+ * Desktop column placement remains in `regions`.
+ * @typedef {object} ResponsiveContentStackOrder
+ * @property {string[]} [mobile]
+ * @property {string[]} [tablet]
+ */
+
+/**
  * @typedef {object} Bulletin
  * @property {string} date - ISO date YYYY-MM-DD (Sunday publish date)
  * @property {string} [title] - Optional display title; defaults to formatted date

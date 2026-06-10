@@ -13,6 +13,9 @@ function appendLayoutFieldsToSnapshot(snapshot, data) {
   if (data.contentColumnsByViewport !== undefined) {
     snapshot.contentColumnsByViewport = data.contentColumnsByViewport;
   }
+  if (data.contentStackOrderByViewport !== undefined) {
+    snapshot.contentStackOrderByViewport = data.contentStackOrderByViewport;
+  }
   return snapshot;
 }
 
@@ -34,6 +37,8 @@ export function resolvePublishedPageView(page) {
     contentMarginX: snapshot.contentMarginX ?? page.contentMarginX,
     contentMarginXByViewport: snapshot.contentMarginXByViewport ?? page.contentMarginXByViewport,
     contentColumnsByViewport: snapshot.contentColumnsByViewport ?? page.contentColumnsByViewport,
+    contentStackOrderByViewport:
+      snapshot.contentStackOrderByViewport ?? page.contentStackOrderByViewport,
   });
 }
 
@@ -81,6 +86,7 @@ function snapshotFromPublishedRecord(page, publishedSnapshot) {
     contentMarginX: publishedSnapshot.contentMarginX,
     contentMarginXByViewport: publishedSnapshot.contentMarginXByViewport,
     contentColumnsByViewport: publishedSnapshot.contentColumnsByViewport,
+    contentStackOrderByViewport: publishedSnapshot.contentStackOrderByViewport,
   });
 }
 
@@ -143,6 +149,7 @@ export async function revertPageDraft(db, pageId) {
     contentMarginX: data.publishedSnapshot.contentMarginX,
     contentMarginXByViewport: data.publishedSnapshot.contentMarginXByViewport,
     contentColumnsByViewport: data.publishedSnapshot.contentColumnsByViewport,
+    contentStackOrderByViewport: data.publishedSnapshot.contentStackOrderByViewport,
     title: data.publishedSnapshot.title,
     seo: data.publishedSnapshot.seo,
     updatedAt: new Date().toISOString(),

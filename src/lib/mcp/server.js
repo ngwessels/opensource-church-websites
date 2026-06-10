@@ -202,7 +202,18 @@ export function registerMcpTools(server) {
             desktop: z.number().int().min(1).max(3).optional(),
           })
           .optional()
-          .describe("Per-viewport content column counts (regions are shared; lower counts stack)."),
+          .describe(
+            "Per-viewport content column counts. When a viewport has 1 column, module order is controlled by contentStackOrderByViewport.",
+          ),
+        contentStackOrderByViewport: z
+          .object({
+            mobile: z.array(z.string()).optional(),
+            tablet: z.array(z.string()).optional(),
+          })
+          .optional()
+          .describe(
+            "Per-viewport module order for single-column viewports (mobile/tablet). Desktop placement uses regions. move_module edits regions only.",
+          ),
         maxModulesPerRegion: z.number().int().min(1).optional(),
         seo: z.record(z.unknown()).optional(),
         regions: z.array(z.record(z.unknown())).optional(),

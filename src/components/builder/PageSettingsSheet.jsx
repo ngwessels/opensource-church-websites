@@ -269,8 +269,8 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
           <div className="space-y-2">
             <Label>Content columns</Label>
             <p className="text-xs text-muted-foreground">
-              Column regions are shared across screen sizes — lower counts stack columns on smaller
-              screens.
+              Column regions are shared when a viewport uses multiple columns. On single-column
+              viewports (typically mobile), module order is edited separately in the builder preview.
             </p>
             <div className="flex gap-2">
               {[1, 2, 3].map((n) => (

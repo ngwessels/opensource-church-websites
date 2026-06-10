@@ -38,6 +38,7 @@ export function AdminPageNav({
   canPublish = false,
   isPublishing = false,
   canRevert = false,
+  stackLayoutActive = false,
 }) {
   return (
     <div
@@ -89,12 +90,19 @@ export function AdminPageNav({
         {onPreviewDeviceChange && (
           <>
             <ToolbarDivider />
-            <ViewportTabs
-              value={previewDevice}
-              onChange={onPreviewDeviceChange}
-              size="compact"
-              className="hidden min-w-[220px] sm:flex"
-            />
+            <div className="hidden min-w-0 flex-col gap-1 sm:flex">
+              <ViewportTabs
+                value={previewDevice}
+                onChange={onPreviewDeviceChange}
+                size="compact"
+                className="min-w-[220px]"
+              />
+              {stackLayoutActive && (
+                <p className="max-w-[220px] text-center text-[10px] leading-tight text-muted-foreground">
+                  Reordering applies to this screen size only
+                </p>
+              )}
+            </div>
           </>
         )}
       </div>

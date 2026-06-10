@@ -158,6 +158,9 @@ function buildPublishedSnapshot(data) {
   if (data.contentColumnsByViewport !== undefined) {
     snapshot.contentColumnsByViewport = data.contentColumnsByViewport;
   }
+  if (data.contentStackOrderByViewport !== undefined) {
+    snapshot.contentStackOrderByViewport = data.contentStackOrderByViewport;
+  }
   return snapshot;
 }
 
@@ -196,6 +199,7 @@ export async function revertPageAdmin(pageId) {
     contentMarginX: data.publishedSnapshot.contentMarginX,
     contentMarginXByViewport: data.publishedSnapshot.contentMarginXByViewport,
     contentColumnsByViewport: data.publishedSnapshot.contentColumnsByViewport,
+    contentStackOrderByViewport: data.publishedSnapshot.contentStackOrderByViewport,
     title: data.publishedSnapshot.title,
     seo: data.publishedSnapshot.seo,
     updatedAt: now(),

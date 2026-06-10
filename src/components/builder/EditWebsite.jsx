@@ -10,7 +10,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { doc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -43,6 +43,16 @@ import {
   removeModuleById,
 } from "@/lib/pages/regions";
 import { MODULE_LABELS } from "@/lib/design/admin-tokens";
+import {
+  CONTENT_STACK_REGION_ID,
+  getContentStackOrder,
+  getStackedContentModules,
+  insertIntoContentStack,
+  reconcileContentStackOrders,
+  removeFromContentStackOrders,
+  reorderContentStack,
+  usesStackedContentLayout,
+} from "@/lib/pages/stack-layout";
 import { PAGE_VIEWPORT_PREVIEW_WIDTHS } from "@/lib/pages/viewports";
 import { buildNavTree, generateId, sortQuickLinks } from "@/lib/sitemap/tree";
 import { useNavNodes } from "@/hooks/useNavNodes";
@@ -144,14 +154,27 @@ export function EditWebsite({ slug = "" }) {
   const updatePage = async (updates) => {
     if (!pageId) return;
     const db = getFirebaseFirestore();
-    await updateDoc(doc(db, COLLECTIONS.pages, pageId), {
-      ...updates,
-      updatedAt: new Date().toISOString(),
+    const payload = { ...updates, updatedAt: new Date().toISOString() };
+    if (
+      "contentStackOrderByViewport" in updates &&
+      updates.contentStackOrderByViewport === undefined
+    ) {
+      payload.contentStackOrderByViewport = deleteField();
+    }
+    await updateDoc(doc(db, COLLECTIONS.pages, pageId), payload);
+    setPage((prev) => {
+      const next = { ...prev, ...updates };
+      if (
+        "contentStackOrderByViewport" in updates &&
+        updates.contentStackOrderByViewport === undefined
+      ) {
+        delete next.contentStackOrderByViewport;
+      }
+      return next;
     });
-    setPage((prev) => ({ ...prev, ...updates }));
   };
 
-  const handleAddModule = async (type, region = "content-1", insertIndex) => {
+  const handleAddModule = async (type, region = "content-1", insertIndex, stackOptions = null) => {
     const mod = {
       id: generateId(),
       type,
@@ -160,8 +183,28 @@ export function EditWebsite({ slug = "" }) {
       config: getDefaultConfig(type),
     };
 
-    const regions = insertModuleAt(page?.regions || [], region, mod, insertIndex);
-    const updates = { regions };
+    const regionInsertIndex =
+      stackOptions != null
+        ? getRegionModules(page, region).length
+        : insertIndex;
+    const regions = insertModuleAt(page?.regions || [], region, mod, regionInsertIndex);
+
+    let nextPage = { ...page, regions };
+    if (stackOptions?.viewport) {
+      nextPage = insertIntoContentStack(
+        nextPage,
+        stackOptions.viewport,
+        mod.id,
+        stackOptions.index ?? getContentStackOrder(nextPage, stackOptions.viewport).length,
+      );
+    } else {
+      nextPage = reconcileContentStackOrders(nextPage);
+    }
+
+    const updates = {
+      regions: nextPage.regions,
+      contentStackOrderByViewport: nextPage.contentStackOrderByViewport,
+    };
     if (isFeaturesModuleType(type) && region === FEATURES_REGION_ID) {
       updates.heroSlideshowEnabled = type === "slideshow";
     }
@@ -239,6 +282,8 @@ export function EditWebsite({ slug = "" }) {
   const resolveDropTarget = (over) => {
     if (!over?.data?.current) return null;
     const data = over.data.current;
+    const stackMode = usesStackedContentLayout(page, previewDevice);
+
     if (data.kind === "features") {
       return { regionId: FEATURES_REGION_ID, index: 0 };
     }
@@ -251,7 +296,10 @@ export function EditWebsite({ slug = "" }) {
     if (data.moduleId) {
       const regionId = data.regionId ?? findModuleRegionId(page, data.moduleId);
       if (!regionId) return null;
-      const modules = getRegionModules(page, regionId);
+      const modules =
+        stackMode && regionId === CONTENT_STACK_REGION_ID
+          ? getStackedContentModules(page, previewDevice)
+          : getRegionModules(page, regionId);
       const idx = modules.findIndex((m) => m.id === data.moduleId);
       if (idx >= 0) return { regionId, index: idx + 1 };
     }
@@ -278,19 +326,60 @@ export function EditWebsite({ slug = "" }) {
 
     const { regionId, index } = target;
     const type = activeData?.type;
+    const stackMode = usesStackedContentLayout(page, previewDevice);
 
     if (activeData?.fromTray) {
-      const error = getDropValidationError(type, regionId, page);
+      const validationRegion =
+        stackMode && regionId === CONTENT_STACK_REGION_ID ? "content-1" : regionId;
+      const error = getDropValidationError(type, validationRegion, page);
       if (error) {
         showError(error);
         return;
       }
-      await handleAddModule(type, regionId, index);
+      if (stackMode && regionId === CONTENT_STACK_REGION_ID) {
+        await handleAddModule(type, "content-1", undefined, {
+          viewport: previewDevice,
+          index,
+        });
+      } else {
+        await handleAddModule(type, regionId, index);
+      }
       return;
     }
 
     const moduleId = activeData?.moduleId;
     if (!moduleId) return;
+
+    if (stackMode && regionId === CONTENT_STACK_REGION_ID) {
+      const order = getContentStackOrder(page, previewDevice);
+      const oldIndex = order.indexOf(moduleId);
+      if (oldIndex < 0) return;
+
+      const overModuleId = over.data.current?.moduleId;
+      const overRegionId = over.data.current?.regionId ?? findModuleRegionId(page, overModuleId);
+
+      if (overModuleId && overRegionId === CONTENT_STACK_REGION_ID && moduleId !== overModuleId) {
+        const newIndex = order.indexOf(overModuleId);
+        if (newIndex >= 0 && oldIndex !== newIndex) {
+          const reordered = arrayMove([...order], oldIndex, newIndex);
+          const nextPage = reorderContentStack(page, previewDevice, reordered);
+          await updatePage({
+            contentStackOrderByViewport: nextPage.contentStackOrderByViewport,
+          });
+          return;
+        }
+      }
+
+      const reordered = [...order];
+      reordered.splice(oldIndex, 1);
+      const targetIndex = oldIndex < index ? index - 1 : index;
+      reordered.splice(Math.max(0, Math.min(targetIndex, reordered.length)), 0, moduleId);
+      const nextPage = reorderContentStack(page, previewDevice, reordered);
+      await updatePage({
+        contentStackOrderByViewport: nextPage.contentStackOrderByViewport,
+      });
+      return;
+    }
 
     const sourceRegionId = activeData.regionId ?? findModuleRegionId(page, moduleId);
     const overModuleId = over.data.current?.moduleId;
@@ -319,7 +408,11 @@ export function EditWebsite({ slug = "" }) {
               }
             : r,
         );
-        await updatePage({ regions });
+        const nextPage = reconcileContentStackOrders({ ...page, regions });
+        await updatePage({
+          regions,
+          contentStackOrderByViewport: nextPage.contentStackOrderByViewport,
+        });
         return;
       }
     }
@@ -331,7 +424,11 @@ export function EditWebsite({ slug = "" }) {
     }
 
     const regions = moveModule(page.regions, moduleId, regionId, index);
-    await updatePage({ regions });
+    const nextPage = reconcileContentStackOrders({ ...page, regions });
+    await updatePage({
+      regions,
+      contentStackOrderByViewport: nextPage.contentStackOrderByViewport,
+    });
   };
 
   const handleDragCancel = () => {
@@ -343,11 +440,17 @@ export function EditWebsite({ slug = "" }) {
     if (!module?.id) return;
     try {
       let regions = removeModuleById(page.regions, module.id);
-      const updates = { regions };
+      let nextPage = removeFromContentStackOrders({ ...page, regions }, module.id);
+      const updates = {
+        regions: nextPage.regions,
+        contentStackOrderByViewport: nextPage.contentStackOrderByViewport,
+      };
 
       if (isFeaturesModuleType(module.type) && findModuleRegionId(page, module.id) === FEATURES_REGION_ID) {
         regions = clearFeaturesRegion(regions);
+        nextPage = removeFromContentStackOrders({ ...page, regions }, module.id);
         updates.regions = regions;
+        updates.contentStackOrderByViewport = nextPage.contentStackOrderByViewport;
         updates.heroSlideshowEnabled = false;
       }
 
@@ -459,6 +562,7 @@ export function EditWebsite({ slug = "" }) {
         hideContentTray={isBulletinsPage}
         previewDevice={previewDevice}
         onPreviewDeviceChange={setPreviewDevice}
+        stackLayoutActive={usesStackedContentLayout(page, previewDevice)}
         onCloseTray={() => setTrayOpen(false)}
         onAddModule={handleTrayAdd}
         onAddContent={() => setTrayOpen((o) => !o)}
