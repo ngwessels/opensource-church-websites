@@ -11,8 +11,18 @@ export function emptyMassTimes() {
     weekly: { saturday: [], sunday: [], weekday: [] },
     holidays: [],
     special: [],
+    holyDays: [],
+    adoration: [],
     confession: [],
   };
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function normalizeStringList(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 
 /**
@@ -91,7 +101,9 @@ export function normalizeMassTimes(raw) {
       },
       holidays: Array.isArray(data.holidays) ? data.holidays.map(normalizeHolidayEntry) : [],
       special: Array.isArray(data.special) ? data.special.map(normalizeSpecialEntry) : [],
-      confession: Array.isArray(data.confession) ? data.confession : [],
+      holyDays: normalizeStringList(data.holyDays),
+      adoration: normalizeStringList(data.adoration),
+      confession: normalizeStringList(data.confession),
     };
   }
 
@@ -103,7 +115,9 @@ export function normalizeMassTimes(raw) {
     },
     holidays: Array.isArray(data.holidays) ? data.holidays.map(normalizeHolidayEntry) : [],
     special: Array.isArray(data.special) ? data.special.map(normalizeSpecialEntry) : [],
-    confession: Array.isArray(data.confession) ? data.confession : [],
+    holyDays: normalizeStringList(data.holyDays),
+    adoration: normalizeStringList(data.adoration),
+    confession: normalizeStringList(data.confession),
   };
 }
 

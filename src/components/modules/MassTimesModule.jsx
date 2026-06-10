@@ -34,6 +34,14 @@ export function MassTimesModule({ module, siteConfig }) {
       notes: s.notes,
     }));
 
+  const holyDaysSection = times.holyDays?.length
+    ? [{ label: "Holy Days & Feast Days", items: times.holyDays }]
+    : [];
+
+  const adorationSection = times.adoration?.length
+    ? [{ label: "Adoration", items: times.adoration }]
+    : [];
+
   const confessionSection = times.confession?.length
     ? [{ label: "Confession", items: times.confession }]
     : [];
@@ -57,8 +65,10 @@ export function MassTimesModule({ module, siteConfig }) {
 
   const hasContent =
     weeklySections.length ||
+    holyDaysSection.length ||
     holidaySections.length ||
     specialSections.length ||
+    adorationSection.length ||
     confessionSection.length;
 
   if (!hasContent) return null;
@@ -72,6 +82,7 @@ export function MassTimesModule({ module, siteConfig }) {
       <table className="w-full text-sm text-zinc-700">
         <tbody>
           {weeklySections.map(renderSection)}
+          {holyDaysSection.map(renderSection)}
           {holidaySections.length > 0 && (
             <tr className="border-t border-zinc-100">
               <td colSpan={2} className="py-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
@@ -88,6 +99,7 @@ export function MassTimesModule({ module, siteConfig }) {
             </tr>
           )}
           {specialSections.map(renderSection)}
+          {adorationSection.map(renderSection)}
           {confessionSection.map(renderSection)}
         </tbody>
       </table>

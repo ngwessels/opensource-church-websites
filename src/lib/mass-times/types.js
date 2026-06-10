@@ -16,6 +16,8 @@
  * @property {{ saturday: string[], sunday: string[], weekday: string[] }} weekly
  * @property {MassHolidayEntry[]} holidays
  * @property {MassSpecialEntry[]} special
+ * @property {string[]} holyDays
+ * @property {string[]} adoration
  * @property {string[]} confession
  */
 

@@ -406,7 +406,7 @@ export function registerMcpTools(server) {
     "update_mass_times",
     {
       description:
-        "Update mass times: { weekly: { saturday, sunday, weekday }, holidays: [{ name, date, times, notes }], special: [{ name, date, endDate?, times, notes }], confession }",
+        "Update mass times: { weekly: { saturday, sunday, weekday }, holidays: [{ name, date, times, notes }], special: [{ name, date, endDate?, times, notes }], holyDays: string[], adoration: string[], confession: string[] }",
       inputSchema: { massTimes: z.record(z.unknown()) },
     },
     async ({ massTimes }) => run(() => site.updateMassTimesAdmin(massTimes)),

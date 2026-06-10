@@ -33,10 +33,10 @@ export function MassTimesForm({ value, onChange, readOnly = false }) {
     });
   };
 
-  const updateConfession = (text) => {
+  const updateStringList = (field, text) => {
     onChange({
       ...times,
-      confession: text.split("\n").filter(Boolean),
+      [field]: text.split("\n").filter(Boolean),
     });
   };
 
@@ -75,19 +75,13 @@ export function MassTimesForm({ value, onChange, readOnly = false }) {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <TabsList className="mb-4 w-full">
-        <TabsTrigger value="weekly" className="flex-1">
-          Weekly
-        </TabsTrigger>
-        <TabsTrigger value="holidays" className="flex-1">
-          Holidays
-        </TabsTrigger>
-        <TabsTrigger value="special" className="flex-1">
-          Special
-        </TabsTrigger>
-        <TabsTrigger value="confession" className="flex-1">
-          Confession
-        </TabsTrigger>
+      <TabsList className="mb-4 w-full justify-start overflow-x-auto">
+        <TabsTrigger value="weekly">Weekly</TabsTrigger>
+        <TabsTrigger value="holyDays">Holy Days</TabsTrigger>
+        <TabsTrigger value="holidays">Holidays</TabsTrigger>
+        <TabsTrigger value="special">Special</TabsTrigger>
+        <TabsTrigger value="adoration">Adoration</TabsTrigger>
+        <TabsTrigger value="confession">Confession</TabsTrigger>
       </TabsList>
 
       <TabsContent value="weekly" className="space-y-4">
@@ -105,6 +99,21 @@ export function MassTimesForm({ value, onChange, readOnly = false }) {
             />
           </label>
         ))}
+      </TabsContent>
+
+      <TabsContent value="holyDays">
+        <label className="block text-sm">
+          Holy days &amp; feast days
+          <textarea
+            value={(times.holyDays || []).join("\n")}
+            onChange={(e) => updateStringList("holyDays", e.target.value)}
+            rows={4}
+            readOnly={readOnly}
+            disabled={readOnly}
+            className={textareaClass}
+            placeholder="One time per line"
+          />
+        </label>
       </TabsContent>
 
       <TabsContent value="holidays">
@@ -136,12 +145,27 @@ export function MassTimesForm({ value, onChange, readOnly = false }) {
         />
       </TabsContent>
 
+      <TabsContent value="adoration">
+        <label className="block text-sm">
+          Adoration times
+          <textarea
+            value={(times.adoration || []).join("\n")}
+            onChange={(e) => updateStringList("adoration", e.target.value)}
+            rows={4}
+            readOnly={readOnly}
+            disabled={readOnly}
+            className={textareaClass}
+            placeholder="One time per line"
+          />
+        </label>
+      </TabsContent>
+
       <TabsContent value="confession">
         <label className="block text-sm">
           Confession times
           <textarea
             value={(times.confession || []).join("\n")}
-            onChange={(e) => updateConfession(e.target.value)}
+            onChange={(e) => updateStringList("confession", e.target.value)}
             rows={4}
             readOnly={readOnly}
             disabled={readOnly}

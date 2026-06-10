@@ -76,6 +76,8 @@ export function buildSiteBootstrapData() {
         },
       ],
       special: [],
+      holyDays: ["When observed on weekday: 9:00 AM & 7:00 PM"],
+      adoration: [],
       confession: ["Saturday 4:00 PM – 4:30 PM or by appointment"],
     },
     createdAt: now,
