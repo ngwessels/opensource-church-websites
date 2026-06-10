@@ -13,10 +13,11 @@ import { toBuilderHref } from "@/lib/builder/navigation";
 export function useAdminPublicRedirect({ enabled, pageSlug }) {
   const router = useRouter();
   const { user, loading: authLoading, configured } = useAuth();
-  const { isAdmin, loading: profileLoading } = useUserProfile();
+  const { isAdmin, profileReady } = useUserProfile();
 
-  const checking = enabled && (authLoading || configured === null || (user && profileLoading));
-  const shouldRedirect = enabled && !checking && Boolean(user && isAdmin);
+  const authResolved = !authLoading && configured !== null;
+  const shouldRedirect =
+    enabled && authResolved && Boolean(user) && profileReady && isAdmin;
 
   useEffect(() => {
     if (!shouldRedirect) return;
@@ -25,5 +26,6 @@ export function useAdminPublicRedirect({ enabled, pageSlug }) {
     router.replace(toBuilderHref(publicPath, true));
   }, [shouldRedirect, pageSlug, router]);
 
-  return { checking: checking || shouldRedirect };
+  // Only hide the public page once we know an admin is being redirected.
+  return { checking: shouldRedirect };
 }

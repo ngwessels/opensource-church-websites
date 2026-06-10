@@ -1,4 +1,4 @@
-import { PublicPageGate } from "../PublicPageGate";
+import { DesignPreviewGate } from "../DesignPreviewGate";
 import { PublicSite } from "@/components/site/PublicSite";
 import {
   getCachedBulletins,
@@ -104,7 +104,7 @@ export default async function PublicPage({ params }) {
   ]);
 
   return (
-    <PublicPageGate slug={slug}>
+    <DesignPreviewGate slug={slug}>
       <PublicSite
         siteConfig={filterSiteConfigForPublic(siteConfig, hiddenSlugs)}
         navTree={navTree}
@@ -116,6 +116,6 @@ export default async function PublicPage({ params }) {
         bulletins={bulletins}
         calendarEventsByModuleId={calendarEventsByModuleId}
       />
-    </PublicPageGate>
+    </DesignPreviewGate>
   );
 }

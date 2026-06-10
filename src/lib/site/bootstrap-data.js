@@ -172,13 +172,15 @@ export function buildSiteBootstrapData() {
 /**
  * @param {{ email?: string, displayName?: string }} user
  * @param {"admin" | "member"} role
+ * @param {{ isFounder?: boolean }} [options]
  */
-export function buildUserProfileData(user, role) {
+export function buildUserProfileData(user, role, options = {}) {
   const now = new Date().toISOString();
   return {
     email: user.email || "",
     displayName: user.displayName || "",
     role,
+    ...(options.isFounder ? { isFounder: true } : {}),
     createdAt: now,
     updatedAt: now,
   };

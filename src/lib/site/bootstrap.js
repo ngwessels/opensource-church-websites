@@ -53,7 +53,7 @@ export async function ensureUserProfileClientFallback(db, user) {
       throw new Error("This site is closed to new signups. Contact your administrator.");
     }
 
-    await setDoc(userRef, buildUserProfileData(user, "admin"));
+    await setDoc(userRef, buildUserProfileData(user, "admin", { isFounder: true }));
     await ensureSiteBootstrapped(db);
   }
 }

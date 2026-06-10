@@ -120,6 +120,7 @@ function parseArgs(argv) {
       argv.includes("--import-bulletins-only"),
     skipImportBulletins: argv.includes("--skip-import-bulletins"),
     skipImportNav: argv.includes("--skip-import-nav"),
+    backfillMediaOnly: argv.includes("--backfill-media-only"),
     /** Keep going when a page times out (default for --apply-all). */
     continueOnError:
       argv.includes("--continue-on-error") ||
@@ -152,6 +153,7 @@ Options:
   --import-nav-only      Re-import eCatholic navigation only (requires --connect)
   --import-bulletins-only  Import bulletin PDFs only (no page content)
   --skip-import-bulletins  Skip bulletin PDF import during batch apply
+  --backfill-media-only    Create Firestore media records for uploaded Storage files already on pages
   --import-bulletins     Force bulletin PDF import (also runs automatically on batch apply)
   --import-json <file>   Merge one manual console extract into manifest
   --page-map <file>      JSON mapping eCatholic paths to Firestore page IDs
@@ -482,7 +484,7 @@ async function importPhotoAlbum(
     images.push({
       src: await resolveUploadedFileUrl(
         img.src,
-        { dryRun, storage, uploadImages: true, page: browserPage, folder: PICTURES_FOLDER },
+        { dryRun, storage, uploadImages: true, page: browserPage, folder: PICTURES_FOLDER, db },
         urlCache,
       ),
       alt: img.alt || title,
@@ -662,6 +664,108 @@ function mimeFromFilename(filename) {
   return types[ext] || null;
 }
 
+function parseStoragePathFromUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  if (!url.includes("firebasestorage.googleapis.com") && !url.includes("storage.googleapis.com")) {
+    return null;
+  }
+
+  let storagePath = null;
+  if (url.includes("firebasestorage.googleapis.com")) {
+    const match = url.match(/\/o\/([^?]+)/);
+    if (!match) return null;
+    storagePath = decodeURIComponent(match[1]);
+  } else {
+    const match = url.match(/storage\.googleapis\.com\/[^/]+\/(.+?)(?:\?|$)/);
+    if (!match) return null;
+    storagePath = decodeURIComponent(match[1]);
+  }
+
+  const parts = storagePath.match(/^media\/([^/]+)\/(media_\d+_[a-z0-9]+)_(.+)$/i);
+  if (!parts) return null;
+
+  return {
+    folderId: parts[1],
+    mediaId: parts[2],
+    name: decodeURIComponent(parts[3]),
+    storagePath,
+    downloadUrl: url,
+  };
+}
+
+async function backfillMediaRecords(db) {
+  const [pages, existingMediaDocs, bulletinDocs] = await Promise.all([
+    db.collection("pages").listAll(),
+    db.collection("media").listAll(),
+    db.collection("bulletins").listAll(),
+  ]);
+
+  const existingIds = new Set(existingMediaDocs.map(({ id }) => id));
+  const pending = new Map();
+
+  const considerUrl = (url, alt) => {
+    const parsed = parseStoragePathFromUrl(url);
+    if (!parsed || existingIds.has(parsed.mediaId) || pending.has(parsed.mediaId)) return;
+    pending.set(parsed.mediaId, { ...parsed, alt: alt?.trim() || undefined });
+  };
+
+  const scan = (value, altHint) => {
+    if (typeof value === "string") {
+      considerUrl(value, altHint);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) scan(item, altHint);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+
+    if (typeof value.src === "string") considerUrl(value.src, value.alt || altHint);
+    if (typeof value.url === "string") considerUrl(value.url, value.label || altHint);
+    if (typeof value.downloadUrl === "string") considerUrl(value.downloadUrl, value.title || altHint);
+    if (typeof value.photoUrl === "string") considerUrl(value.photoUrl, value.name || altHint);
+    if (typeof value.imageSrc === "string") considerUrl(value.imageSrc, value.label || altHint);
+
+    for (const [key, nested] of Object.entries(value)) {
+      if (["src", "url", "downloadUrl", "photoUrl", "imageSrc"].includes(key)) continue;
+      scan(nested, altHint);
+    }
+  };
+
+  for (const { data } of pages) {
+    scan(data.regions, undefined);
+    scan(data.publishedSnapshot?.regions, undefined);
+  }
+
+  for (const { data } of bulletinDocs) {
+    if (data.downloadUrl) considerUrl(data.downloadUrl, data.title);
+  }
+
+  if (!pending.size) {
+    logProgress("[migrate] Media backfill: all Storage files already have Firestore records.");
+    return 0;
+  }
+
+  const now = new Date().toISOString();
+  for (const [mediaId, info] of pending) {
+    const record = {
+      name: info.name,
+      folderId: info.folderId,
+      mimeType: mimeFromFilename(info.name) || "application/octet-stream",
+      sizeBytes: 0,
+      storagePath: info.storagePath,
+      downloadUrl: info.downloadUrl,
+      usedOnPageIds: [],
+      createdAt: now,
+    };
+    if (info.alt) record.alt = info.alt.slice(0, 200);
+    await db.collection("media").doc(mediaId).set(record);
+  }
+
+  logProgress(`[migrate] Media backfill: created ${pending.size} Firestore media record(s).`);
+  return pending.size;
+}
+
 async function downloadFileBytes(sourceUrl, { page } = {}) {
   const url = resolveImageUrl(sourceUrl) || sourceUrl;
   if (page) {
@@ -705,7 +809,7 @@ async function downloadFileBytes(sourceUrl, { page } = {}) {
   };
 }
 
-async function uploadFile(storage, sourceUrl, { page, folder = PICTURES_FOLDER } = {}) {
+async function uploadFile(storage, sourceUrl, { page, folder = PICTURES_FOLDER, db, alt } = {}) {
   const { buffer, contentType, url } = await downloadFileBytes(sourceUrl, { page });
   if (buffer.length > 10 * 1024 * 1024) throw new Error(`File too large: ${url}`);
 
@@ -715,17 +819,33 @@ async function uploadFile(storage, sourceUrl, { page, folder = PICTURES_FOLDER }
   const storagePath = `media/${folder}/${mediaId}_${filename}`;
   const downloadUrl = await storage.uploadPublicObject(storagePath, buffer, mimeType);
 
-  return { downloadUrl, filename };
+  if (db) {
+    const now = new Date().toISOString();
+    const record = {
+      name: decodeURIComponent(filename),
+      folderId: folder,
+      mimeType,
+      sizeBytes: buffer.length,
+      storagePath,
+      downloadUrl,
+      usedOnPageIds: [],
+      createdAt: now,
+    };
+    if (alt?.trim()) record.alt = alt.trim().slice(0, 200);
+    await db.collection("media").doc(mediaId).set(record);
+  }
+
+  return { downloadUrl, filename, mediaId, storagePath, mimeType, sizeBytes: buffer.length };
 }
 
-async function uploadImage(storage, sourceUrl, alt, { page } = {}) {
-  const uploaded = await uploadFile(storage, sourceUrl, { page, folder: PICTURES_FOLDER });
+async function uploadImage(storage, sourceUrl, alt, { page, db } = {}) {
+  const uploaded = await uploadFile(storage, sourceUrl, { page, folder: PICTURES_FOLDER, db, alt });
   return { ...uploaded, alt: alt || "" };
 }
 
 async function resolveUploadedFileUrl(
   sourceUrl,
-  { dryRun, storage, uploadImages, page, folder = PICTURES_FOLDER },
+  { dryRun, storage, uploadImages, page, folder = PICTURES_FOLDER, db, alt },
   urlCache,
 ) {
   const source = sourceUrl?.startsWith("http") ? sourceUrl : resolveImageUrl(sourceUrl) || sourceUrl;
@@ -733,7 +853,7 @@ async function resolveUploadedFileUrl(
   if (urlCache.has(source)) return urlCache.get(source);
   try {
     console.log(`  Uploading ${source}`);
-    const uploaded = await uploadFile(storage, source, { page, folder });
+    const uploaded = await uploadFile(storage, source, { page, folder, db, alt });
     urlCache.set(source, uploaded.downloadUrl);
     await sleep(FILE_DELAY_MS);
     return uploaded.downloadUrl;
@@ -746,12 +866,12 @@ async function resolveUploadedFileUrl(
 async function resolveUploadedImageUrl(
   sourceUrl,
   alt,
-  { dryRun, storage, uploadImages, page },
+  { dryRun, storage, uploadImages, page, db },
   imageUrlCache,
 ) {
   return resolveUploadedFileUrl(
     resolveImageUrl(sourceUrl) || sourceUrl,
-    { dryRun, storage, uploadImages, page, folder: PICTURES_FOLDER },
+    { dryRun, storage, uploadImages, page, folder: PICTURES_FOLDER, db, alt },
     imageUrlCache,
   );
 }
@@ -1808,7 +1928,7 @@ async function scrapedToFirestoreModules(
               ? await resolveUploadedImageUrl(
                   album.imageSrc,
                   album.label,
-                  { dryRun, storage, uploadImages, page },
+                  { dryRun, storage, uploadImages, page, db },
                   imageUrlCache,
                 )
               : album.imageSrc,
@@ -1833,7 +1953,7 @@ async function scrapedToFirestoreModules(
           src: await resolveUploadedImageUrl(
             img.src,
             img.alt,
-            { dryRun, storage, uploadImages, page },
+            { dryRun, storage, uploadImages, page, db },
             imageUrlCache,
           ),
           alt: img.alt || "",
@@ -1856,7 +1976,7 @@ async function scrapedToFirestoreModules(
           src: await resolveUploadedImageUrl(
             slide.src,
             slide.alt,
-            { dryRun, storage, uploadImages, page },
+            { dryRun, storage, uploadImages, page, db },
             imageUrlCache,
           ),
           alt: slide.alt || "",
@@ -1874,7 +1994,7 @@ async function scrapedToFirestoreModules(
       const downloadUrl = await resolveUploadedImageUrl(
         mod.src,
         mod.alt,
-        { dryRun, storage, uploadImages, page },
+        { dryRun, storage, uploadImages, page, db },
         imageUrlCache,
       );
       firestoreModules.push({
@@ -1913,7 +2033,7 @@ async function scrapedToFirestoreModules(
           label: item.label || "",
           url: await resolveUploadedFileUrl(
             item.url,
-            { dryRun, storage, uploadImages, page, folder: DOCUMENTS_FOLDER },
+            { dryRun, storage, uploadImages, page, folder: DOCUMENTS_FOLDER, db },
             imageUrlCache,
           ),
         });
@@ -2876,6 +2996,13 @@ async function main() {
     );
   }
 
+  if (opts.backfillMediaOnly) {
+    const { db } = await initFirebase();
+    await backfillMediaRecords(db);
+    logProgress("[migrate] Done.");
+    return;
+  }
+
   if (opts.importBulletinsOnly) {
     if (!opts.connect && opts.headless) {
       console.error(
@@ -2985,6 +3112,14 @@ async function main() {
       await importEcatholicBulletinPdfs(opts, sessionOpts);
     } catch (err) {
       console.warn(`[migrate] Bulletin import failed: ${err.message}`);
+    }
+  }
+
+  if (opts.apply && !opts.dryRun && db && isBatchApply(opts)) {
+    try {
+      await backfillMediaRecords(db);
+    } catch (err) {
+      console.warn(`[migrate] Media backfill failed: ${err.message}`);
     }
   }
 

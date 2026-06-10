@@ -1,21 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { Check, Copy } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
+import { getFounderUserId, isFounderUser } from "@/lib/site/founder";
+
+/** @typedef {{ type: "success" | "error", title: string, description?: string, resetLink?: string }} StatusNotice */
 
 export function UsersAdmin({ users }) {
   const { user } = useAuth();
+  const founderId = useMemo(() => getFounderUserId(users), [users]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState(null);
-  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(null);
   const [roleUpdating, setRoleUpdating] = useState(null);
+  const [removing, setRemoving] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   async function getAuthHeaders() {
     if (!user) throw new Error("Not signed in");
@@ -26,11 +33,21 @@ export function UsersAdmin({ users }) {
     };
   }
 
+  function clearStatus() {
+    setStatus(null);
+    setCopied(false);
+  }
+
+  async function copyResetLink(link) {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
   async function handleInvite(event) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
-    setMessage(null);
+    clearStatus();
 
     try {
       const headers = await getAuthHeaders();
@@ -47,29 +64,87 @@ export function UsersAdmin({ users }) {
       if (!res.ok) throw new Error(data.error || "Failed to invite user");
 
       if (data.inviteSent) {
-        setMessage(`Invitation email sent to ${data.email}.`);
+        setStatus({
+          type: "success",
+          title: "Invitation sent",
+          description: `An email with password setup instructions was sent to ${data.email}.`,
+        });
       } else if (data.resetLink) {
-        setMessage(`User created. Share this password setup link: ${data.resetLink}`);
+        setStatus({
+          type: "success",
+          title: "User created",
+          description: `Share the password setup link below with ${data.email}. Email is not configured on this site, so the link is not sent automatically.`,
+          resetLink: data.resetLink,
+        });
       } else if (!data.isNewUser) {
-        setMessage(`Updated existing user ${data.email} to ${data.role}.`);
+        setStatus({
+          type: "success",
+          title: "User updated",
+          description: `${data.email} is now a ${data.role}.`,
+        });
       } else {
-        setMessage(`User ${data.email} added as ${data.role}.`);
+        setStatus({
+          type: "success",
+          title: "User added",
+          description: `${data.email} was added as ${data.role}.`,
+        });
       }
 
       setInviteEmail("");
       setInviteName("");
       setInviteRole("member");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to invite user");
+      setStatus({
+        type: "error",
+        title: "Could not invite user",
+        description: err instanceof Error ? err.message : "Failed to invite user",
+      });
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function handleRemove(target) {
+    const label = target.email || target.displayName || "this user";
+    if (
+      !window.confirm(
+        `Remove ${label}? They will lose access to the site and their Firebase sign-in will be deleted.`,
+      )
+    ) {
+      return;
+    }
+
+    setRemoving(target.id);
+    clearStatus();
+
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers,
+        body: JSON.stringify({ uid: target.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove user");
+      setStatus({
+        type: "success",
+        title: "User removed",
+        description: `${label} no longer has access to this site.`,
+      });
+    } catch (err) {
+      setStatus({
+        type: "error",
+        title: "Could not remove user",
+        description: err instanceof Error ? err.message : "Failed to remove user",
+      });
+    } finally {
+      setRemoving(null);
+    }
+  }
+
   async function handleRoleChange(uid, role) {
     setRoleUpdating(uid);
-    setError(null);
-    setMessage(null);
+    clearStatus();
 
     try {
       const headers = await getAuthHeaders();
@@ -80,9 +155,17 @@ export function UsersAdmin({ users }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update role");
-      setMessage(`Role updated to ${role}.`);
+      setStatus({
+        type: "success",
+        title: "Role updated",
+        description: `User is now a ${role}.`,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update role");
+      setStatus({
+        type: "error",
+        title: "Could not update role",
+        description: err instanceof Error ? err.message : "Failed to update role",
+      });
     } finally {
       setRoleUpdating(null);
     }
@@ -132,11 +215,13 @@ export function UsersAdmin({ users }) {
         </Button>
       </form>
 
-      {message && (
-        <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{message}</p>
-      )}
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      {status && (
+        <StatusNotice
+          status={status}
+          copied={copied}
+          onCopy={status.resetLink ? () => copyResetLink(status.resetLink) : undefined}
+          onDismiss={clearStatus}
+        />
       )}
 
       <table className="w-full text-sm">
@@ -152,30 +237,52 @@ export function UsersAdmin({ users }) {
           {users.map((u) => (
             <tr key={u.id} className="border-b">
               <td className="py-2">{u.email}</td>
-              <td className="py-2 capitalize">{u.role}</td>
+              <td className="py-2 capitalize">
+                {u.role}
+                {isFounderUser(users, u.id) && (
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">(owner)</span>
+                )}
+              </td>
               <td className="py-2">{u.displayName}</td>
               <td className="py-2">
-                {u.role === "admin" ? (
+                <div className="flex flex-wrap gap-2">
+                  {u.role === "admin" && !isFounderUser(users, u.id) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={roleUpdating === u.id || removing === u.id}
+                      onClick={() => handleRoleChange(u.id, "member")}
+                    >
+                      Make member
+                    </Button>
+                  ) : u.role !== "admin" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={roleUpdating === u.id || removing === u.id}
+                      onClick={() => handleRoleChange(u.id, "admin")}
+                    >
+                      Make admin
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={roleUpdating === u.id}
-                    onClick={() => handleRoleChange(u.id, "member")}
+                    disabled={
+                      roleUpdating === u.id ||
+                      removing === u.id ||
+                      u.id === user?.uid ||
+                      u.id === founderId
+                    }
+                    onClick={() => handleRemove(u)}
+                    className="text-red-700 hover:text-red-800"
                   >
-                    Make member
+                    {removing === u.id ? "Removing…" : "Remove"}
                   </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={roleUpdating === u.id}
-                    onClick={() => handleRoleChange(u.id, "admin")}
-                  >
-                    Make admin
-                  </Button>
-                )}
+                </div>
               </td>
             </tr>
           ))}
@@ -184,8 +291,84 @@ export function UsersAdmin({ users }) {
 
       <p className="text-xs text-muted-foreground">
         The first account on a new site becomes admin automatically. After that, invite users here.
-        Members can sign in but cannot access the builder until promoted to admin.
+        Members can sign in but cannot access the builder until promoted to admin. Remove deletes
+        their profile and Firebase sign-in. The original site owner cannot be removed or demoted.
       </p>
     </div>
+  );
+}
+
+/**
+ * @param {{ status: StatusNotice, copied: boolean, onCopy?: () => void, onDismiss: () => void }} props
+ */
+function StatusNotice({ status, copied, onCopy, onDismiss }) {
+  const isError = status.type === "error";
+
+  return (
+    <Card
+      className={
+        isError
+          ? "border-red-200 bg-red-50/80"
+          : "border-green-200 bg-green-50/80"
+      }
+    >
+      <CardContent className="space-y-3 pt-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <p
+              className={`text-sm font-medium ${isError ? "text-red-900" : "text-green-900"}`}
+            >
+              {status.title}
+            </p>
+            {status.description && (
+              <p className={`text-sm ${isError ? "text-red-800" : "text-green-800"}`}>
+                {status.description}
+              </p>
+            )}
+          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={onDismiss} className="shrink-0">
+            Dismiss
+          </Button>
+        </div>
+
+        {status.resetLink && onCopy && (
+          <div className="space-y-2 rounded-md border border-green-200/80 bg-white/70 p-3">
+            <Label htmlFor="invite-reset-link" className="text-xs text-green-900">
+              Password setup link
+            </Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="invite-reset-link"
+                readOnly
+                value={status.resetLink}
+                className="font-mono text-xs text-foreground"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-green-300 bg-white"
+                onClick={onCopy}
+              >
+                {copied ? (
+                  <>
+                    <Check className="size-3.5" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="size-3.5" />
+                    Copy link
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-green-800/80">
+              This link expires after use. Send it through a secure channel.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

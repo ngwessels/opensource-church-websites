@@ -5,6 +5,7 @@ import { getAdminUserFromRequest } from "@/lib/cms/auth";
 import { getFirebaseAdminApp, getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { sendUserInviteEmail } from "@/lib/mailgun/invite";
 import { buildUserProfileData } from "@/lib/site/bootstrap-data";
+import { isFounderUserServer } from "@/lib/site/founder.server";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 
 export const runtime = "nodejs";
@@ -133,6 +134,10 @@ export async function PATCH(request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    if (role === "member" && (await isFounderUserServer(uid))) {
+      return NextResponse.json({ error: "Cannot demote the original site owner" }, { status: 400 });
+    }
+
     if (userSnap.data()?.role === "admin" && role === "member") {
       const adminCount = await countAdmins(db);
       if (adminCount <= 1) {
@@ -155,6 +160,74 @@ export async function PATCH(request) {
     const status =
       message.includes("authorization") || message.includes("Admin access") ? 403 : 500;
     console.error("[admin/users PATCH]", message);
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+/** DELETE { uid } — remove user profile and Firebase Auth account */
+export async function DELETE(request) {
+  try {
+    if (!isFirebaseAdminConfigured()) {
+      return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
+    }
+
+    const adminUser = await getAdminUserFromRequest(request);
+
+    const body = await request.json();
+    const uid = typeof body?.uid === "string" ? body.uid.trim() : "";
+
+    if (!uid) {
+      return NextResponse.json({ error: "uid is required" }, { status: 400 });
+    }
+
+    const app = getFirebaseAdminApp();
+    const db = getFirebaseAdminFirestore();
+    if (!app || !db) {
+      return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
+    }
+
+    const userRef = db.collection(COLLECTIONS.users).doc(uid);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (await isFounderUserServer(uid)) {
+      return NextResponse.json({ error: "Cannot remove the original site owner" }, { status: 400 });
+    }
+
+    if (userSnap.data()?.role === "admin") {
+      const adminCount = await countAdmins(db);
+      if (adminCount <= 1) {
+        return NextResponse.json({ error: "Cannot remove the last admin" }, { status: 400 });
+      }
+    }
+
+    if (uid === adminUser.uid) {
+      const adminCount = await countAdmins(db);
+      if (adminCount <= 1) {
+        return NextResponse.json({ error: "Cannot remove yourself as the last admin" }, { status: 400 });
+      }
+    }
+
+    const auth = getAuth(app);
+    try {
+      await auth.deleteUser(uid);
+    } catch (err) {
+      const code = err && typeof err === "object" && "code" in err ? err.code : null;
+      if (code !== "auth/user-not-found") {
+        throw err;
+      }
+    }
+
+    await userRef.delete();
+
+    return NextResponse.json({ uid, removed: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to remove user";
+    const status =
+      message.includes("authorization") || message.includes("Admin access") ? 403 : 500;
+    console.error("[admin/users DELETE]", message);
     return NextResponse.json({ error: message }, { status });
   }
 }

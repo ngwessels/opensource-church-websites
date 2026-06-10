@@ -30,12 +30,39 @@ export async function ensureUserProfileServer(user) {
     return { role, bootstrapped: false };
   }
 
+  // Re-link profile when Firebase Auth uid changed but email matches an existing record.
+  if (user.email) {
+    const emailMatch = await db
+      .collection(COLLECTIONS.users)
+      .where("email", "==", user.email.trim())
+      .limit(1)
+      .get();
+    if (!emailMatch.empty) {
+      const legacy = emailMatch.docs[0];
+      const data = legacy.data();
+      const now = new Date().toISOString();
+      const role = data?.role === "admin" ? "admin" : "member";
+      await userRef.set({
+        email: data.email || user.email,
+        displayName: data.displayName || user.displayName || "",
+        role,
+        ...(data.isFounder ? { isFounder: true } : {}),
+        createdAt: data.createdAt || now,
+        updatedAt: now,
+      });
+      if (legacy.id !== user.uid) {
+        await legacy.ref.delete();
+      }
+      return { role, bootstrapped: false };
+    }
+  }
+
   const usersSnap = await db.collection(COLLECTIONS.users).limit(1).get();
   if (!usersSnap.empty) {
     throw new SiteInitializedError();
   }
 
-  const profile = buildUserProfileData(user, "admin");
+  const profile = buildUserProfileData(user, "admin", { isFounder: true });
   await userRef.set(profile);
 
   const bootstrapped = await ensureSiteBootstrappedServer();

@@ -1,15 +1,12 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PublicSite } from "@/components/site/PublicSite";
 import { useDesignPreviewListener } from "@/hooks/useDesignPreviewBridge";
 import { useAuth } from "@/hooks/useAuth";
 
-export function DesignPreviewClient({ slug = "" }) {
-  const searchParams = useSearchParams();
-  const designPreviewEnabled = searchParams.get("designPreview") === "1";
+export function DesignPreviewClient({ slug = "", designPreviewEnabled = false }) {
   const designPreview = useDesignPreviewListener(designPreviewEnabled);
   const { user } = useAuth();
 

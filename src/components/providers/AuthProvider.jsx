@@ -47,6 +47,7 @@ async function ensureProfileViaApi(user) {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   // null until client mount — avoids SSR/client env mismatch hydration errors
@@ -79,7 +80,13 @@ export function AuthProvider({ children }) {
             if (result?.fallback) {
               console.warn("[auth] Admin SDK unavailable — using client fallback for profile bootstrap");
               const db = getFirebaseFirestore();
+              const { doc, getDoc } = await import("firebase/firestore");
+              const { COLLECTIONS } = await import("@/lib/firestore/paths");
               await ensureUserProfileClientFallback(db, nextUser);
+              const snap = await getDoc(doc(db, COLLECTIONS.users, nextUser.uid));
+              setUserRole(snap.exists() ? snap.data()?.role ?? null : null);
+            } else if (result?.role) {
+              setUserRole(result.role);
             }
           } catch (err) {
             console.error("[auth] profile bootstrap failed", err);
@@ -87,10 +94,13 @@ export function AuthProvider({ children }) {
               setAuthError(err.message);
               await signOut(auth);
               setUser(null);
+              setUserRole(null);
               setLoading(false);
               return;
             }
           }
+        } else {
+          setUserRole(null);
         }
         setUser(nextUser);
         setLoading(false);
@@ -123,6 +133,7 @@ export function AuthProvider({ children }) {
   const logOut = useCallback(async () => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
     setAuthError(null);
+    setUserRole(null);
     await signOut(getFirebaseAuth());
   }, []);
 
@@ -159,6 +170,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       user,
+      userRole,
       loading,
       configured,
       authError,
@@ -174,6 +186,7 @@ export function AuthProvider({ children }) {
     }),
     [
       user,
+      userRole,
       loading,
       configured,
       authError,
