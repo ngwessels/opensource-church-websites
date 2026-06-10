@@ -10,6 +10,8 @@
 #        firebase apphosting:secrets:set firebaseStorageBucket --project <PROJECT_ID>
 #        firebase apphosting:secrets:set firebaseMessagingSenderId --project <PROJECT_ID>
 #        firebase apphosting:secrets:set firebaseAppId --project <PROJECT_ID>
+#        firebase apphosting:secrets:set siteUrl --project <PROJECT_ID>
+#        firebase apphosting:secrets:set appUrl --project <PROJECT_ID>
 #        firebase apphosting:secrets:set stripeSecretKey --project <PROJECT_ID>
 #        firebase apphosting:secrets:set stripeWebhookSecret --project <PROJECT_ID>
 #        firebase apphosting:secrets:set stripePublishableKey --project <PROJECT_ID>
@@ -17,6 +19,8 @@
 #   4. If build says PermissionDenied, grant access:
 #        firebase apphosting:secrets:grantaccess <secretName> --backend <BACKEND_ID> --project <PROJECT_ID>
 #   5. Remove duplicate env vars from the Firebase Console that reference secrets you have not created.
+#   6. Do not add env vars in the Console with blank values — every entry needs a value or secret
+#      (e.g. delete empty NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID if you are not using Analytics).
 
 runConfig:
   cpu: 1
@@ -25,14 +29,14 @@ runConfig:
   concurrency: 80
 
 env:
-  # Public URLs — set to your canonical domain before rollout.
+  # Public URLs — set via App Hosting secrets before rollout.
   - variable: NEXT_PUBLIC_SITE_URL
-    value: https://www.yourparish.org
+    secret: siteUrl
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_APP_URL
-    value: https://www.yourparish.org
+    secret: appUrl
     availability:
       - BUILD
       - RUNTIME

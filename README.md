@@ -94,14 +94,19 @@ Requires the Firebase **Blaze** (pay-as-you-go) plan.
 
 ```bash
 firebase apphosting:backends:create --project <PROJECT_ID>
-firebase apphosting:secrets:set stripeSecretKey
-# repeat for secrets referenced in apphosting.yaml
+firebase apphosting:secrets:set siteUrl
+firebase apphosting:secrets:set appUrl
+# repeat for all secrets referenced in apphosting.yaml
 ```
 
-3. Update `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_APP_URL` in `apphosting.yaml` (or the console) to your canonical domain before the first rollout.
+3. Set `siteUrl` and `appUrl` secrets to your canonical domain (e.g. `https://www.yourparish.org`) before the first rollout.
 4. Connect a custom domain in App Hosting settings and point DNS per Firebase instructions.
 
 On App Hosting, the Firebase Admin SDK can use Application Default Credentials — `FIREBASE_ADMIN_*` is optional when `FIREBASE_CONFIG` is auto-injected. Vercel deployments still need explicit service account credentials.
+
+**Per-backend env vars:** Each App Hosting backend (one per parish Firebase project) needs its own secrets and Console env values. Do not copy another parish's `NEXT_PUBLIC_*` values — mismatched Firebase client config and `FIREBASE_CONFIG` will break auth and Firestore at runtime.
+
+**Build error `either 'value' or 'secret' field is required`:** A variable in the Firebase Console backend settings has no value. Common culprit: `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` left empty. Either set it to your Analytics measurement ID (Firebase Console → Project settings → Your apps) or delete the variable entirely. Analytics is optional; an empty placeholder is invalid.
 
 > **Note:** This project uses Next.js 16. Firebase App Hosting officially supports Next.js through 15.x; test your rollout and watch build logs if you use App Hosting.
 

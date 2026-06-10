@@ -15,6 +15,7 @@ import { getPageType } from "@/lib/bulletins/schema";
 import { prefetchPageCalendarEvents } from "@/lib/calendar/prefetch";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
+  asHiddenPageSets,
   filterNavTreeForPublic,
   filterQuickLinksForPublic,
   filterSiteConfigForPublic,
@@ -78,13 +79,13 @@ export default async function PublicPage({ params }) {
     );
   }
 
-  const [siteConfig, nodes, page, { pageIds: hiddenPageIds, slugs: hiddenSlugs }] =
-    await Promise.all([
-      getCachedSiteConfig(),
-      getCachedNavNodes(),
-      getCachedPageBySlug(slug),
-      getCachedHiddenPages(),
-    ]);
+  const [siteConfig, nodes, page, hiddenPagesCached] = await Promise.all([
+    getCachedSiteConfig(),
+    getCachedNavNodes(),
+    getCachedPageBySlug(slug),
+    getCachedHiddenPages(),
+  ]);
+  const { pageIds: hiddenPageIds, slugs: hiddenSlugs } = asHiddenPageSets(hiddenPagesCached);
 
   const publicPage = resolvePublishedPageView(page);
 

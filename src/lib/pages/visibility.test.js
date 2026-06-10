@@ -5,6 +5,7 @@ import {
   filterFooterConfigForPublic,
   filterNavTreeForPublic,
   filterQuickLinksForPublic,
+  asHiddenPageSets,
   getHiddenPageSets,
   isHrefHidden,
   isPageHidden,
@@ -199,6 +200,20 @@ describe("footer quick links sync", () => {
       { label: "Staff", href: "/staff" },
       { label: "Our School", href: "https://school.example.com" },
     ]);
+  });
+});
+
+describe("asHiddenPageSets", () => {
+  it("rehydrates arrays from unstable_cache into Sets", () => {
+    const { pageIds, slugs } = asHiddenPageSets({
+      pageIds: ["p1"],
+      slugs: ["contact"],
+    });
+
+    assert.equal(pageIds instanceof Set, true);
+    assert.equal(slugs instanceof Set, true);
+    assert.equal(pageIds.has("p1"), true);
+    assert.equal(slugs.has("contact"), true);
   });
 });
 

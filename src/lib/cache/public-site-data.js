@@ -26,7 +26,11 @@ export const getCachedNavNodes = unstable_cache(
 );
 
 export const getCachedHiddenPages = unstable_cache(
-  async () => getHiddenPagesServer(),
+  async () => {
+    const { pageIds, slugs } = await getHiddenPagesServer();
+    // unstable_cache serializes values — Sets must be stored as arrays.
+    return { pageIds: Array.from(pageIds), slugs: Array.from(slugs) };
+  },
   ["public-hidden-pages"],
   { tags: [PUBLIC_CACHE_TAGS.hiddenPages] },
 );

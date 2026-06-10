@@ -33,6 +33,15 @@ export function getHiddenPageSets(pages) {
   return { pageIds, slugs };
 }
 
+/** Restore Sets after unstable_cache (JSON cannot preserve Set instances). */
+export function asHiddenPageSets(cached) {
+  return {
+    pageIds:
+      cached.pageIds instanceof Set ? cached.pageIds : new Set(cached.pageIds ?? []),
+    slugs: cached.slugs instanceof Set ? cached.slugs : new Set(cached.slugs ?? []),
+  };
+}
+
 /** @param {string} href */
 export function normalizeSitePath(href) {
   if (!href || href === "#") return null;
