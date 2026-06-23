@@ -9,6 +9,7 @@ import {
   BulletinAdminControls,
   deleteBulletin,
 } from "@/components/bulletins/BulletinAdminControls";
+import { toBuilderHref } from "@/lib/builder/navigation";
 import {
   findBulletinByDate,
   formatBulletinDate,
@@ -18,6 +19,11 @@ import {
   groupBulletinsByYearMonth,
   sortBulletinsDesc,
 } from "@/lib/bulletins/schema";
+
+function buildBulletinHref({ basePath, date, editing }) {
+  const path = editing ? toBuilderHref(basePath, true) : basePath;
+  return `${path}?date=${encodeURIComponent(date)}`;
+}
 
 const BulletinPdfViewer = dynamic(
   () => import("./BulletinPdfViewer").then((m) => m.BulletinPdfViewer),
@@ -79,9 +85,16 @@ function BulletinArchive({
               <ul className="space-y-1 border-t border-zinc-100 px-2 py-2">
                 {groups[year][month].map((bulletin) => {
                   const isSelected = bulletin.date === selectedDate;
-                  const href = pageSlug
-                    ? `${pageSlug}?date=${bulletin.date}`
-                    : `?date=${bulletin.date}`;
+                  const basePath =
+                    pageSlug ||
+                    (typeof window !== "undefined"
+                      ? window.location.pathname.split("?")[0]
+                      : "");
+                  const href = buildBulletinHref({
+                    basePath,
+                    date: bulletin.date,
+                    editing,
+                  });
 
                   return (
                     <li key={bulletin.id} className="group/row flex items-center gap-1">
@@ -191,8 +204,10 @@ export function BulletinsPageView({
   const slugPath = pageSlug ?? (page?.slug ? `/${page.slug}` : "");
 
   const handleSelect = (date) => {
-    const base = slugPath || window.location.pathname;
-    router.push(`${base}?date=${date}`, { scroll: false });
+    const basePath =
+      slugPath ||
+      (typeof window !== "undefined" ? window.location.pathname.split("?")[0] : "");
+    router.push(buildBulletinHref({ basePath, date, editing }), { scroll: false });
   };
 
   if (sorted.length === 0 && !editing) {

@@ -23,7 +23,8 @@ export function useAdminPublicRedirect({ enabled, pageSlug }) {
     if (!shouldRedirect) return;
 
     const publicPath = pageSlug ? `/${pageSlug}` : "/";
-    router.replace(toBuilderHref(publicPath, true));
+    const search = window.location.search;
+    router.replace(`${toBuilderHref(publicPath, true)}${search}`);
   }, [shouldRedirect, pageSlug, router]);
 
   // Only hide the public page once we know an admin is being redirected.
