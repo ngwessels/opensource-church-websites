@@ -1,4 +1,4 @@
-import { generateId } from "@/lib/sitemap/tree";
+import { generateId } from "../sitemap/tree.js";
 
 const DEFAULT_MAX_EVENTS = 15;
 const DEFAULT_PREVIEW_COUNT = 5;
@@ -156,16 +156,12 @@ export function sortEventsByDate(events) {
  */
 export function filterUpcoming(events, max = DEFAULT_MAX_EVENTS) {
   const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
 
   const upcoming = events.filter((event) => {
     const start = eventStartDateTime(event);
     const end = eventEndDateTime(event);
     if (!start || !end) return false;
-    // Drop events that started before today (e.g. multi-day items from earlier in the month)
-    if (start.getTime() < startOfToday.getTime()) return false;
-    // Drop timed events today that have already ended
+    // Keep any event that has not ended yet, including multi-day items that started earlier.
     return end.getTime() >= now.getTime();
   });
 
