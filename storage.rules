@@ -6,12 +6,20 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function userDoc() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
+    // Prefer auth custom claims (set server-side on login) — works without
+    // cross-service Firestore lookups in Storage rules.
+    function isAdminFromClaim() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isAdminFromFirestore() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
     }
 
     function isAdmin() {
-      return isSignedIn() && userDoc().data.role == 'admin';
+      return isAdminFromClaim() || isAdminFromFirestore();
     }
 
     match /media/{allPaths=**} {

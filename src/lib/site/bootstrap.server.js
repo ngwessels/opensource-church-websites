@@ -1,8 +1,14 @@
 import "server-only";
 
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
+import { syncUserRoleClaim } from "@/lib/firebase/sync-role-claim";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { buildSiteBootstrapData, buildUserProfileData } from "@/lib/site/bootstrap-data";
+
+/** @param {string} uid @param {"admin" | "member"} role */
+async function ensureRoleClaim(uid, role) {
+  await syncUserRoleClaim(uid, role);
+}
 
 export class SiteInitializedError extends Error {
   constructor() {
@@ -27,6 +33,7 @@ export async function ensureUserProfileServer(user) {
   const existing = await userRef.get();
   if (existing.exists) {
     const role = existing.data()?.role === "admin" ? "admin" : "member";
+    await ensureRoleClaim(user.uid, role);
     return { role, bootstrapped: false };
   }
 
@@ -53,6 +60,7 @@ export async function ensureUserProfileServer(user) {
       if (legacy.id !== user.uid) {
         await legacy.ref.delete();
       }
+      await ensureRoleClaim(user.uid, role);
       return { role, bootstrapped: false };
     }
   }
@@ -66,6 +74,7 @@ export async function ensureUserProfileServer(user) {
   await userRef.set(profile);
 
   const bootstrapped = await ensureSiteBootstrappedServer();
+  await ensureRoleClaim(user.uid, "admin");
   return { role: "admin", bootstrapped };
 }
 

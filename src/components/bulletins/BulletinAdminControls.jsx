@@ -72,9 +72,10 @@ export function BulletinAdminControls({ onChange }) {
 
       const now = new Date().toISOString();
       const bulletinId = generateBulletinId();
+      const trimmedTitle = title.trim();
       await setDoc(doc(db, COLLECTIONS.bulletins, bulletinId), {
         date,
-        title: title.trim() || undefined,
+        ...(trimmedTitle ? { title: trimmedTitle } : {}),
         mediaId: media.id,
         downloadUrl: media.downloadUrl,
         createdAt: now,

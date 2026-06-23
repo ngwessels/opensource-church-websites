@@ -87,6 +87,11 @@ export function AuthProvider({ children }) {
               setUserRole(snap.exists() ? snap.data()?.role ?? null : null);
             } else if (result?.role) {
               setUserRole(result.role);
+              try {
+                await nextUser.getIdToken(true);
+              } catch {
+                // Storage rules fall back to Firestore role lookup.
+              }
             }
           } catch (err) {
             console.error("[auth] profile bootstrap failed", err);

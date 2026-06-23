@@ -145,7 +145,14 @@ export function PageContent({
   const { mobileStack, tabletStack } = resolvePublicContentLayouts(page);
   const showResponsiveStacks = !editing && !previewViewport && (mobileStack || tabletStack);
 
-  const renderMainContent = ({ className, style, gridClassName, gridStyle } = {}) => {
+  const renderMainContent = ({
+    className,
+    style,
+    gridClassName,
+    gridStyle,
+  } = {}) => {
+    const regionGridClassName = gridClassName ?? className;
+    const regionGridStyle = gridStyle ?? style;
     if (builderStackMode) {
       return (
         <StackedContentColumn
@@ -238,8 +245,8 @@ export function PageContent({
         contentIds={contentIds}
         donationReturnPath={donationReturnPath}
         onEditDonation={onEditDonation}
-        className={className}
-        style={style}
+        className={regionGridClassName}
+        style={regionGridStyle}
       />
     );
   };
@@ -314,15 +321,12 @@ export function PageContent({
           style={responsiveStyle}
         >
           {sidebarColumn}
-          <div
-            id="content1"
-            className={`min-w-0 lg:w-2/3 ${builderStackMode || showResponsiveStacks ? "" : columnsClass}`}
-            style={builderStackMode || showResponsiveStacks ? undefined : columnsStyle}
-          >
+          <div id="content1" className="min-w-0 lg:w-2/3">
             {renderMainContent({
-              className: builderStackMode || showResponsiveStacks ? undefined : "grid gap-8",
-              style: columnsStyle,
-              gridClassName: `grid gap-8 ${columnsClass}`,
+              gridClassName:
+                builderStackMode || showResponsiveStacks
+                  ? undefined
+                  : `grid gap-8 ${columnsClass}`,
               gridStyle: columnsStyle,
             })}
           </div>
@@ -335,18 +339,15 @@ export function PageContent({
     <div>
       {features}
       <div
-        className={`py-8 ${builderStackMode || showResponsiveStacks ? "" : columnsClass} ${coreClass} ${marginClass}`}
-        style={
-          builderStackMode || showResponsiveStacks
-            ? responsiveStyle
-            : { ...responsiveStyle, ...columnsStyle }
-        }
+        className={`py-8 ${coreClass} ${marginClass}`}
+        style={responsiveStyle}
       >
         {renderMainContent({
-          className: builderStackMode || showResponsiveStacks ? undefined : undefined,
-          style: columnsStyle,
-          gridClassName: `grid gap-8 ${columnsClass}`,
-          gridStyle: { ...responsiveStyle, ...columnsStyle },
+          gridClassName:
+            builderStackMode || showResponsiveStacks
+              ? undefined
+              : `grid gap-8 ${columnsClass}`,
+          gridStyle: columnsStyle,
         })}
       </div>
     </div>

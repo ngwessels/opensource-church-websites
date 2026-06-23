@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 
+import { syncUserRoleClaim } from "@/lib/firebase/sync-role-claim";
+
 import { getAdminUserFromRequest } from "@/lib/cms/auth";
 import { getFirebaseAdminApp, getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { sendUserInviteEmail } from "@/lib/mailgun/invite";
@@ -153,6 +155,7 @@ export async function PATCH(request) {
     }
 
     await userRef.update({ role, updatedAt: new Date().toISOString() });
+    await syncUserRoleClaim(uid, role);
 
     return NextResponse.json({ uid, role });
   } catch (err) {
