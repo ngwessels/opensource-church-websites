@@ -26,12 +26,19 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { persistNavNodeChanges } from "@/lib/firestore/nav-nodes";
+import {
+  buildContactHtml,
+  EMPTY_CONTACT_FIELDS,
+  parseContactFromColumns,
+  upsertContactColumn,
+} from "@/lib/site/footer-contact";
 import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
 import { DEFAULT_HEADER_STYLES } from "@/lib/site/header-styles";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { applyQuickLinksDraft, quickLinksToDraftItems } from "@/lib/sitemap/tree";
 
+import { FooterContactEditor } from "./FooterContactEditor";
 import { HeaderQuickLinksEditor } from "./HeaderQuickLinksEditor";
 import { SocialMediaEditor } from "./SocialMediaEditor";
 import { DEFAULT_SOCIAL_MEDIA, sanitizeSocialMediaConfig } from "@/lib/site/social-media";
@@ -390,6 +397,9 @@ export function HeaderFooterSheet({
       ...siteConfig?.footerConfig?.styles,
     },
   }));
+  const [contactFields, setContactFields] = useState(() => ({
+    ...EMPTY_CONTACT_FIELDS,
+  }));
   const [socialMedia, setSocialMedia] = useState(() => ({
     ...DEFAULT_SOCIAL_MEDIA,
     ...siteConfig?.socialMedia,
@@ -416,7 +426,7 @@ export function HeaderFooterSheet({
         ...siteConfig?.socialMedia,
       });
     } else {
-      setFooterConfig({
+      const nextFooterConfig = {
         text: "",
         columns: [],
         ...siteConfig?.footerConfig,
@@ -424,7 +434,9 @@ export function HeaderFooterSheet({
           ...DEFAULT_FOOTER_STYLES,
           ...siteConfig?.footerConfig?.styles,
         },
-      });
+      };
+      setFooterConfig(nextFooterConfig);
+      setContactFields(parseContactFromColumns(nextFooterConfig.columns));
     }
   }, [open, isHeader, siteConfig]);
 
@@ -453,7 +465,15 @@ export function HeaderFooterSheet({
             headerConfig,
             socialMedia: sanitizeSocialMediaConfig(socialMedia),
           }
-        : { footerConfig };
+        : {
+            footerConfig: {
+              ...footerConfig,
+              columns: upsertContactColumn(
+                footerConfig.columns,
+                buildContactHtml(contactFields),
+              ),
+            },
+          };
       await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), {
         ...patch,
         updatedAt: now,
@@ -477,7 +497,7 @@ export function HeaderFooterSheet({
           <SheetDescription>
             {isHeader
               ? "Customize your parish name, quick links, social media, colors, fonts, logo, and tagline at the top of the site."
-              : "Customize footer colors, fonts, and the copyright line at the bottom of every page."}
+              : "Customize contact info, copyright text, and footer colors and fonts on every page."}
           </SheetDescription>
         </SheetHeader>
 
@@ -564,6 +584,7 @@ export function HeaderFooterSheet({
             </>
           ) : (
             <>
+              <FooterContactEditor value={contactFields} onChange={setContactFields} />
               <div className="space-y-2">
                 <Label htmlFor="footerText">Copyright text</Label>
                 <Input
@@ -579,10 +600,6 @@ export function HeaderFooterSheet({
                 designFonts={siteConfig?.design?.fonts || {}}
                 onChange={(styles) => setFooterConfig((c) => ({ ...c, styles }))}
               />
-              <p className="text-xs text-muted-foreground">
-                Footer column content is managed in site configuration. Use the fields above to style
-                how columns and links appear.
-              </p>
             </>
           )}
         </div>
