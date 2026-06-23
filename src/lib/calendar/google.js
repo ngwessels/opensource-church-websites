@@ -1,4 +1,4 @@
-import { parseVevents, veventToCalendarEvent } from "./ical";
+import { isExternalCalendarInvite, parseVevents, veventToCalendarEvent } from "./ical";
 import { filterUpcoming, generateEventId, googleCalendarIcalUrl, parseGoogleCalendarId } from "./schema";
 
 /**
@@ -21,6 +21,7 @@ export async function fetchGoogleCalendarEvents(calendarId, max = 15) {
   const vevents = parseVevents(icsText);
 
   const events = vevents
+    .filter((vevent) => !isExternalCalendarInvite(vevent, normalizedId))
     .map((vevent) => {
       const event = veventToCalendarEvent(vevent);
       if (event && !event.id) event.id = generateEventId();

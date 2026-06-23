@@ -29,6 +29,31 @@ function unfoldIcal(text) {
 }
 
 /**
+ * @param {string} value
+ * @returns {string}
+ */
+export function parseMailtoEmail(value) {
+  const trimmed = value.trim();
+  const mailtoMatch = trimmed.match(/^mailto:([^?\s]+)/i);
+  return (mailtoMatch?.[1] || trimmed).toLowerCase();
+}
+
+/**
+ * Google Calendar phishing often auto-adds invites with an external ORGANIZER.
+ * Native events on a parish calendar typically omit ORGANIZER entirely.
+ *
+ * @param {{ organizer?: string }} vevent
+ * @param {string} calendarId
+ * @returns {boolean}
+ */
+export function isExternalCalendarInvite(vevent, calendarId) {
+  if (!vevent.organizer) return false;
+  const owner = calendarId.trim().toLowerCase();
+  if (!owner) return false;
+  return parseMailtoEmail(vevent.organizer) !== owner;
+}
+
+/**
  * @param {string} block
  * @returns {Record<string, string>}
  */
@@ -92,7 +117,7 @@ function parseIcalDateTime(value, keyPart = "") {
 
 /**
  * @param {string} icsText
- * @returns {Array<{ uid: string, summary: string, description: string, location: string, url: string, dtstart: string, dtstartKey: string, dtend: string, dtendKey: string }>}
+ * @returns {Array<{ uid: string, summary: string, description: string, location: string, url: string, organizer: string, dtstart: string, dtstartKey: string, dtend: string, dtendKey: string }>}
  */
 export function parseVevents(icsText) {
   const unfolded = unfoldIcal(icsText);
@@ -112,6 +137,7 @@ export function parseVevents(icsText) {
       description: props.DESCRIPTION || "",
       location: props.LOCATION || "",
       url: props.URL || "",
+      organizer: props.ORGANIZER || "",
       dtstart: props.DTSTART,
       dtstartKey: block.match(/^(DTSTART[^\n:]*)/m)?.[1] || "DTSTART",
       dtend: props.DTEND || "",

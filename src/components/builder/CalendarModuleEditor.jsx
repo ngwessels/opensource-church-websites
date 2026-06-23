@@ -78,7 +78,14 @@ export function CalendarModuleEditor({ module, onSave, onClose }) {
               <p className="text-xs text-muted-foreground">
                 Paste your Calendar ID (e.g. <code className="text-xs">name@group.calendar.google.com</code>)
                 or the full public iCal URL from Google Calendar settings. The calendar must be{" "}
-                <strong>public</strong> (Settings → Integrate calendar).
+                <strong>public</strong> (Settings → Integrate calendar). Use a dedicated parish calendar
+                (not a personal inbox calendar) when possible.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                If spam invitations appear in Google Calendar, open each event → Report as spam (do not
+                click Decline). In Google Calendar settings, set{" "}
+                <strong>Add invitations to my calendar</strong> to{" "}
+                <strong>Only if the sender is known</strong>.
               </p>
 
               <div className="space-y-2">
