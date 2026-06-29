@@ -9,6 +9,7 @@ import {
   normalizeDonationConfig,
   sanitizeDonorComment,
   sanitizeReturnPath,
+  stripeCheckoutCustomerCollectionOptions,
   validateDonationConfig,
 } from "./schema.js";
 
@@ -121,6 +122,14 @@ describe("donations/schema", () => {
 
     it("uses custom fallback", () => {
       assert.equal(sanitizeReturnPath(null, "/"), "/");
+    });
+  });
+
+  describe("stripeCheckoutCustomerCollectionOptions", () => {
+    it("requires billing address and enables optional phone collection", () => {
+      const options = stripeCheckoutCustomerCollectionOptions();
+      assert.equal(options.billing_address_collection, "required");
+      assert.equal(options.phone_number_collection.enabled, true);
     });
   });
 

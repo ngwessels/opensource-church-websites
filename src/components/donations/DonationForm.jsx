@@ -203,7 +203,8 @@ export function DonationForm({
       )}
 
       <p className="text-xs text-zinc-600">
-        Contact and billing details are collected securely on the Stripe checkout page.
+        Email and mailing address are required; phone is optional. All details are collected
+        securely on the Stripe checkout page.
       </p>
 
       {error && (

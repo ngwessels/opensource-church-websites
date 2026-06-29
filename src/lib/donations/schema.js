@@ -24,6 +24,19 @@ export const DEFAULT_DONATION_COMMENTS = {
 export const DONOR_COMMENT_MAX_LENGTH = 500;
 
 /**
+ * Stripe Checkout session options for donor contact collection on the hosted page.
+ * Email is always required by Checkout (no separate API flag).
+ * Phone is optional when phone_number_collection is enabled.
+ * @returns {{ billing_address_collection: "required", phone_number_collection: { enabled: true } }}
+ */
+export function stripeCheckoutCustomerCollectionOptions() {
+  return {
+    billing_address_collection: "required",
+    phone_number_collection: { enabled: true },
+  };
+}
+
+/**
  * @param {string} label
  * @param {string} [description]
  * @returns {DonationFund}

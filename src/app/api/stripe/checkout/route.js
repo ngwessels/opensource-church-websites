@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { sanitizeDonorComment, sanitizeReturnPath } from "@/lib/donations/schema";
+import {
+  sanitizeDonorComment,
+  sanitizeReturnPath,
+  stripeCheckoutCustomerCollectionOptions,
+} from "@/lib/donations/schema";
 import { getStripe, isStripeConfigured, joinAppUrl } from "@/lib/stripe/server";
 
 /** @type {Record<string, "week" | "month">} */
@@ -88,8 +92,7 @@ export async function POST(request) {
     line_items: [lineItem],
     success_url: `${returnBase}${returnSeparator}status=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${returnBase}${returnSeparator}status=cancelled`,
-    billing_address_collection: "required",
-    phone_number_collection: { enabled: true },
+    ...stripeCheckoutCustomerCollectionOptions(),
     metadata: {
       frequency,
       fundId: fundId.trim(),
