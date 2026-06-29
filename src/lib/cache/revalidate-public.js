@@ -16,13 +16,18 @@ export function revalidatePublicPage(slug) {
   revalidatePath(publicPathForSlug(normalized));
 }
 
+/** Invalidate cached bulletin list and all public pages that render it. */
+export function revalidatePublicBulletins() {
+  revalidateTag(PUBLIC_CACHE_TAGS.bulletins, "max");
+  revalidatePath("/", "layout");
+}
+
 /** Invalidate shared site data (nav, design, header/footer) on every public page. */
 export function revalidatePublicSite() {
   revalidateTag(PUBLIC_CACHE_TAGS.siteConfig, "max");
   revalidateTag(PUBLIC_CACHE_TAGS.nav, "max");
   revalidateTag(PUBLIC_CACHE_TAGS.hiddenPages, "max");
-  revalidateTag(PUBLIC_CACHE_TAGS.bulletins, "max");
-  revalidatePath("/", "layout");
+  revalidatePublicBulletins();
 }
 
 /** Page publish: refresh the page plus shared chrome that may reference it. */

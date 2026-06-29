@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, deleteDoc, doc, getDocs, query, setDoc, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -8,20 +8,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getDefaultBulletinDate } from "@/lib/bulletins/schema";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
-function generateBulletinId() {
-  return `bulletin_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
+export async function deleteBulletin(bulletinId, { getIdToken } = {}) {
+  if (!getIdToken) {
+    throw new Error("You must be signed in to delete a bulletin.");
+  }
 
-export async function deleteBulletin(bulletinId) {
-  const db = getFirebaseFirestore();
-  await deleteDoc(doc(db, COLLECTIONS.bulletins, bulletinId));
+  const token = await getIdToken();
+  const res = await fetch(`/api/bulletins?id=${encodeURIComponent(bulletinId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to delete bulletin.");
+  }
 }
 
 export function BulletinAdminControls({ onChange }) {
@@ -51,6 +57,12 @@ export function BulletinAdminControls({ onChange }) {
       return;
     }
 
+    if (!user) {
+      setError("You must be signed in to upload a bulletin.");
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
     const db = getFirebaseFirestore();
     const duplicate = await getDocs(
       query(collection(db, COLLECTIONS.bulletins), where("date", "==", date)),
@@ -70,24 +82,27 @@ export function BulletinAdminControls({ onChange }) {
         setProgress,
       );
 
-      const now = new Date().toISOString();
-      const bulletinId = generateBulletinId();
-      const trimmedTitle = title.trim();
-      await setDoc(doc(db, COLLECTIONS.bulletins, bulletinId), {
-        date,
-        ...(trimmedTitle ? { title: trimmedTitle } : {}),
-        mediaId: media.id,
-        downloadUrl: media.downloadUrl,
-        createdAt: now,
-        updatedAt: now,
+      const token = await user.getIdToken();
+      const res = await fetch("/api/bulletins", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          date,
+          title: title.trim() || undefined,
+          mediaId: media.id,
+          downloadUrl: media.downloadUrl,
+        }),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save bulletin.");
+      }
 
       setDate(getDefaultBulletinDate());
       setTitle("");
-      await requestPublicRevalidate({
-        getIdToken: () => user?.getIdToken(),
-        scope: "site",
-      });
       await onChange?.();
     } catch (err) {
       setError(err.message || "Failed to upload bulletin.");

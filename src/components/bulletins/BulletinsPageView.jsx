@@ -3,12 +3,13 @@
 import { Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   BulletinAdminControls,
   deleteBulletin,
 } from "@/components/bulletins/BulletinAdminControls";
+import { useAuth } from "@/hooks/useAuth";
 import { toBuilderHref } from "@/lib/builder/navigation";
 import {
   findBulletinByDate,
@@ -43,6 +44,7 @@ function BulletinArchive({
   pageSlug,
   editing = false,
   onBulletinsRefresh,
+  getIdToken,
 }) {
   const groups = groupBulletinsByYearMonth(bulletins);
   const years = Object.keys(groups).sort((a, b) => Number(b) - Number(a));
@@ -52,7 +54,7 @@ function BulletinArchive({
   const selectedMonthKey = getBulletinMonthKey(selectedDate);
 
   const handleDelete = async (bulletinId) => {
-    await deleteBulletin(bulletinId);
+    await deleteBulletin(bulletinId, { getIdToken });
     await onBulletinsRefresh?.();
   };
 
@@ -194,14 +196,41 @@ export function BulletinsPageView({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const dateParam = searchParams.get("date");
+  const [displayBulletins, setDisplayBulletins] = useState(bulletins);
 
-  const sorted = useMemo(() => sortBulletinsDesc(bulletins), [bulletins]);
+  useEffect(() => {
+    if (editing) {
+      setDisplayBulletins(bulletins);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/bulletins");
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          setDisplayBulletins(data.bulletins ?? []);
+        }
+      } catch {
+        // Keep server-rendered bulletins when the live fetch fails.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bulletins, editing]);
+
+  const sorted = useMemo(() => sortBulletinsDesc(displayBulletins), [displayBulletins]);
   const selected =
     findBulletinByDate(sorted, dateParam) || sorted[0] || null;
   const selectedDate = selected?.date;
 
   const slugPath = pageSlug ?? (page?.slug ? `/${page.slug}` : "");
+  const getIdToken = user ? () => user.getIdToken() : undefined;
 
   const handleSelect = (date) => {
     const basePath =
@@ -235,6 +264,7 @@ export function BulletinsPageView({
             pageSlug={slugPath}
             editing={editing}
             onBulletinsRefresh={onBulletinsRefresh}
+            getIdToken={getIdToken}
           />
           <div className="min-w-0 flex-1">
             <h1 className="mb-4 text-2xl font-semibold uppercase tracking-wide text-zinc-900">
@@ -260,6 +290,7 @@ export function BulletinsPageView({
           pageSlug={slugPath}
           editing={editing}
           onBulletinsRefresh={onBulletinsRefresh}
+          getIdToken={getIdToken}
         />
 
         <div className="min-w-0 flex-1">
