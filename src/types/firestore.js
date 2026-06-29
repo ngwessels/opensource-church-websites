@@ -136,7 +136,15 @@
  * @property {string} [returnPath]
  * @property {DonorInfo} [donor]
  * @property {string} [donorEmail] - legacy flat field
+ * @property {string} [donorComment]
  * @property {string} createdAt
+ */
+
+/**
+ * @typedef {object} DonationCommentsConfig
+ * @property {boolean} enabled
+ * @property {string} label
+ * @property {string} placeholder
  */
 
 /**
@@ -152,6 +160,7 @@
  * @property {string} [description]
  * @property {DonationFund[]} funds
  * @property {number[]} [presetAmountsCents]
+ * @property {DonationCommentsConfig} [comments]
  */
 
 /** @typedef {'text' | 'links' | 'image' | 'gallery' | 'photo_albums' | 'slideshow' | 'feature_tiles' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'calendar' | 'documents' | 'people' | 'buttons' | 'form' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */

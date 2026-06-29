@@ -89,6 +89,7 @@ export function DonationsManager() {
                   <th className="px-4 py-3 font-medium text-muted-foreground">Amount</th>
                   <th className="px-4 py-3 font-medium text-muted-foreground">Frequency</th>
                   <th className="px-4 py-3 font-medium text-muted-foreground">Fund</th>
+                  <th className="px-4 py-3 font-medium text-muted-foreground">Comment</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,6 +127,15 @@ export function DonationsManager() {
                     </td>
                     <td className="px-4 py-3 align-top text-foreground">
                       {donation.fundLabel || "—"}
+                    </td>
+                    <td className="max-w-xs px-4 py-3 align-top text-foreground">
+                      {donation.donorComment ? (
+                        <span title={donation.donorComment} className="line-clamp-2">
+                          {donation.donorComment}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))}

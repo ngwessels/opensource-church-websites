@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { sanitizeReturnPath } from "@/lib/donations/schema";
-import { getAppUrl, getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { sanitizeDonorComment, sanitizeReturnPath } from "@/lib/donations/schema";
+import { getStripe, isStripeConfigured, joinAppUrl } from "@/lib/stripe/server";
 
 /** @type {Record<string, "week" | "month">} */
 const RECURRING_INTERVALS = {
@@ -37,7 +37,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { amountCents, frequency, fundId, fundLabel, returnPath } = body;
+  const { amountCents, frequency, fundId, fundLabel, returnPath, donorComment } = body;
 
   if (!amountCents || typeof amountCents !== "number" || amountCents < 100) {
     return NextResponse.json(
@@ -63,10 +63,12 @@ export async function POST(request) {
 
   const safeReturnPath = sanitizeReturnPath(returnPath);
   const trimmedFundLabel = fundLabel.trim();
+  const safeDonorComment = sanitizeDonorComment(donorComment);
   const recurringInterval = RECURRING_INTERVALS[frequency];
 
   const stripe = getStripe();
-  const appUrl = getAppUrl();
+  const returnBase = joinAppUrl(safeReturnPath);
+  const returnSeparator = returnBase.includes("?") ? "&" : "?";
 
   const lineItem = {
     quantity: 1,
@@ -84,8 +86,8 @@ export async function POST(request) {
   const session = await stripe.checkout.sessions.create({
     mode: recurringInterval ? "subscription" : "payment",
     line_items: [lineItem],
-    success_url: `${appUrl}${safeReturnPath}?status=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}${safeReturnPath}?status=cancelled`,
+    success_url: `${returnBase}${returnSeparator}status=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${returnBase}${returnSeparator}status=cancelled`,
     billing_address_collection: "required",
     phone_number_collection: { enabled: true },
     metadata: {
@@ -93,6 +95,7 @@ export async function POST(request) {
       fundId: fundId.trim(),
       fundLabel: trimmedFundLabel,
       returnPath: safeReturnPath,
+      ...(safeDonorComment ? { donorComment: safeDonorComment } : {}),
     },
   });
 

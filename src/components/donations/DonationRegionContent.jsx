@@ -56,6 +56,7 @@ export function DonationRegionContent({ page, returnPath, editing = false, onEdi
         <DonationForm
           funds={config.funds}
           presetAmountsCents={config.presetAmountsCents}
+          comments={config.comments}
           returnPath={returnPath}
         />
       </div>

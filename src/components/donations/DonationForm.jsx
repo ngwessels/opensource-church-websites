@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { DEFAULT_PRESET_AMOUNTS_CENTS } from "@/lib/donations/schema";
+import { DEFAULT_DONATION_COMMENTS, DEFAULT_PRESET_AMOUNTS_CENTS, DONOR_COMMENT_MAX_LENGTH } from "@/lib/donations/schema";
 
 const FREQUENCY_OPTIONS = [
   { value: "once", label: "One-time" },
@@ -14,12 +14,14 @@ const FREQUENCY_OPTIONS = [
  * @param {object} props
  * @param {import('@/types/firestore').DonationFund[]} props.funds
  * @param {number[]} [props.presetAmountsCents]
+ * @param {import('@/types/firestore').DonationCommentsConfig} [props.comments]
  * @param {string} props.returnPath
  * @param {boolean} [props.disabled]
  */
 export function DonationForm({
   funds,
   presetAmountsCents = DEFAULT_PRESET_AMOUNTS_CENTS,
+  comments = DEFAULT_DONATION_COMMENTS,
   returnPath,
   disabled = false,
 }) {
@@ -27,6 +29,7 @@ export function DonationForm({
   const [amountCents, setAmountCents] = useState(presetAmountsCents[1] ?? presetAmountsCents[0] ?? 5000);
   const [customAmount, setCustomAmount] = useState("");
   const [frequency, setFrequency] = useState("once");
+  const [donorComment, setDonorComment] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -59,6 +62,7 @@ export function DonationForm({
     }
 
     try {
+      const trimmedComment = donorComment.trim();
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,6 +72,7 @@ export function DonationForm({
           fundId: selectedFund.id,
           fundLabel: selectedFund.label,
           returnPath,
+          ...(trimmedComment ? { donorComment: trimmedComment } : {}),
         }),
       });
 
@@ -178,6 +183,24 @@ export function DonationForm({
           ))}
         </div>
       </div>
+
+      {comments.enabled && (
+        <div>
+          <label htmlFor="donor-comment" className="block text-sm font-medium text-zinc-700">
+            {comments.label}
+          </label>
+          <textarea
+            id="donor-comment"
+            value={donorComment}
+            onChange={(e) => setDonorComment(e.target.value)}
+            placeholder={comments.placeholder || undefined}
+            maxLength={DONOR_COMMENT_MAX_LENGTH}
+            rows={3}
+            disabled={disabled}
+            className="mt-2 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </div>
+      )}
 
       <p className="text-xs text-zinc-600">
         Contact and billing details are collected securely on the Stripe checkout page.

@@ -45,6 +45,7 @@ export async function POST(request) {
     const fundId = session.metadata?.fundId;
     const fundLabel = session.metadata?.fundLabel;
     const returnPath = session.metadata?.returnPath;
+    const donorComment = session.metadata?.donorComment?.trim();
 
     const donor = donorFromStripeSession(
       session.customer_details,
@@ -63,6 +64,7 @@ export async function POST(request) {
       ...(fundId ? { fundId } : {}),
       ...(fundLabel ? { fundLabel } : {}),
       ...(returnPath ? { returnPath } : {}),
+      ...(donorComment ? { donorComment } : {}),
       createdAt: new Date().toISOString(),
     });
 

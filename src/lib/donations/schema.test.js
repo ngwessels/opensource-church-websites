@@ -5,7 +5,9 @@ import {
   donorFromStripeSession,
   formatDonorAddress,
   getDonationConfig,
+  normalizeDonationComments,
   normalizeDonationConfig,
+  sanitizeDonorComment,
   sanitizeReturnPath,
   validateDonationConfig,
 } from "./schema.js";
@@ -24,6 +26,50 @@ describe("donations/schema", () => {
       });
       assert.equal(config.funds.length, 1);
       assert.equal(config.funds[0].label, "Building Fund");
+    });
+
+    it("includes default comments config", () => {
+      const config = normalizeDonationConfig(null);
+      assert.equal(config.comments.enabled, true);
+      assert.equal(config.comments.label, "Comments");
+      assert.equal(config.comments.placeholder, "");
+    });
+
+    it("merges custom comments config", () => {
+      const config = normalizeDonationConfig({
+        comments: {
+          enabled: false,
+          label: "Special intention",
+          placeholder: "In memory of…",
+        },
+      });
+      assert.equal(config.comments.enabled, false);
+      assert.equal(config.comments.label, "Special intention");
+      assert.equal(config.comments.placeholder, "In memory of…");
+    });
+  });
+
+  describe("normalizeDonationComments", () => {
+    it("defaults enabled to true", () => {
+      const comments = normalizeDonationComments({});
+      assert.equal(comments.enabled, true);
+    });
+  });
+
+  describe("sanitizeDonorComment", () => {
+    it("returns undefined for empty values", () => {
+      assert.equal(sanitizeDonorComment(""), undefined);
+      assert.equal(sanitizeDonorComment("   "), undefined);
+      assert.equal(sanitizeDonorComment(null), undefined);
+    });
+
+    it("trims and preserves non-empty text", () => {
+      assert.equal(sanitizeDonorComment("  Hello  "), "Hello");
+    });
+
+    it("truncates to 500 characters", () => {
+      const long = "a".repeat(600);
+      assert.equal(sanitizeDonorComment(long)?.length, 500);
     });
   });
 

@@ -16,6 +16,8 @@ import { createDonationFund } from "@/lib/donations/schema";
  * @param {(value: string) => void} props.onDescriptionChange
  * @param {string} props.presetAmounts
  * @param {(value: string) => void} props.onPresetAmountsChange
+ * @param {import('@/types/firestore').DonationCommentsConfig} props.comments
+ * @param {(comments: import('@/types/firestore').DonationCommentsConfig) => void} props.onCommentsChange
  * @param {import('@/types/firestore').DonationFund[]} props.funds
  * @param {(funds: import('@/types/firestore').DonationFund[]) => void} props.onFundsChange
  */
@@ -26,6 +28,8 @@ export function DonationSettingsFields({
   onDescriptionChange,
   presetAmounts,
   onPresetAmountsChange,
+  comments,
+  onCommentsChange,
   funds,
   onFundsChange,
 }) {
@@ -64,6 +68,44 @@ export function DonationSettingsFields({
         <p className="text-xs text-muted-foreground">
           Comma-separated dollar amounts shown as quick-select buttons (minimum $1 each).
         </p>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <Label>Comments</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Optional field for donors to leave a note with their gift (max 500 characters).
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="donation-comments-enabled"
+            type="checkbox"
+            checked={comments.enabled}
+            onChange={(e) => onCommentsChange({ ...comments, enabled: e.target.checked })}
+          />
+          <Label htmlFor="donation-comments-enabled">Show comments field</Label>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="donation-comments-label">Field label</Label>
+          <Input
+            id="donation-comments-label"
+            value={comments.label}
+            onChange={(e) => onCommentsChange({ ...comments, label: e.target.value })}
+            placeholder="Comments"
+            disabled={!comments.enabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="donation-comments-placeholder">Placeholder</Label>
+          <Input
+            id="donation-comments-placeholder"
+            value={comments.placeholder}
+            onChange={(e) => onCommentsChange({ ...comments, placeholder: e.target.value })}
+            placeholder="Optional"
+            disabled={!comments.enabled}
+          />
+        </div>
       </div>
 
       <div className="space-y-3">

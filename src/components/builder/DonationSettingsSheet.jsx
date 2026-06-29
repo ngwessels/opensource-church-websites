@@ -29,6 +29,7 @@ function DonationSettingsForm({ page, onClose, onSave }) {
     formatPresetAmountsDollars(initial.presetAmountsCents),
   );
   const [funds, setFunds] = useState(initial.funds);
+  const [comments, setComments] = useState(initial.comments);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -40,6 +41,7 @@ function DonationSettingsForm({ page, onClose, onSave }) {
       description: description.trim(),
       funds,
       presetAmountsCents: parsePresetAmountsDollars(presetAmounts),
+      comments,
     };
 
     const check = validateDonationConfig(draft);
@@ -69,6 +71,8 @@ function DonationSettingsForm({ page, onClose, onSave }) {
           onDescriptionChange={setDescription}
           presetAmounts={presetAmounts}
           onPresetAmountsChange={setPresetAmounts}
+          comments={comments}
+          onCommentsChange={setComments}
           funds={funds}
           onFundsChange={setFunds}
         />
@@ -94,7 +98,8 @@ export function DonationSettingsSheet({ open, page, onClose, onSave }) {
         <SheetHeader>
           <SheetTitle>Donation form</SheetTitle>
           <SheetDescription>
-            Configure the heading, amounts, and fund designations shown on this page.
+            Configure the heading, amounts, fund designations, and optional comments field shown on
+            this page.
           </SheetDescription>
         </SheetHeader>
 

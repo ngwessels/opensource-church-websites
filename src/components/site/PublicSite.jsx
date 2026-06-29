@@ -56,7 +56,7 @@ export function PublicSite({
   const navStyle = layout.nav || theme.layout?.nav || "solid";
   const isBulletinsPage = getPageType(page) === "bulletins";
   const isDonationPage = getPageType(page) === "donation";
-  const pageSlug = page?.slug ? `/${page.slug}` : "";
+  const pageSlug = page?.slug ? `/${String(page.slug).replace(/^\/+/, "")}` : "";
   const donationReturnPath = isDonationPage ? pageSlug || "/" : null;
 
   const cssVars = tokensToCssVars({

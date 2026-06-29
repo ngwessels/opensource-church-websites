@@ -19,5 +19,22 @@ export function getStripe() {
 }
 
 export function getAppUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const raw =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
+  return raw.replace(/\/+$/, "");
+}
+
+/**
+ * Join site origin and relative path without a double slash.
+ * @param {string} returnPath - Path starting with / (e.g. /giving)
+ */
+export function joinAppUrl(returnPath) {
+  const base = getAppUrl();
+  const path =
+    typeof returnPath === "string" && returnPath.startsWith("/") && !returnPath.startsWith("//")
+      ? returnPath
+      : "/give";
+  return new URL(path, `${base}/`).toString();
 }

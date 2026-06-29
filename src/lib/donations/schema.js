@@ -1,6 +1,7 @@
 import { generateId } from "../sitemap/tree.js";
 
 /** @typedef {import('@/types/firestore').DonationFund} DonationFund */
+/** @typedef {import('@/types/firestore').DonationCommentsConfig} DonationCommentsConfig */
 /** @typedef {import('@/types/firestore').DonationPageConfig} DonationPageConfig */
 /** @typedef {import('@/types/firestore').DonorInfo} DonorInfo */
 /** @typedef {import('@/types/firestore').DonorAddress} DonorAddress */
@@ -13,6 +14,14 @@ export const DEFAULT_DONATION_FUND = {
   label: "General Fund",
   description: "",
 };
+
+export const DEFAULT_DONATION_COMMENTS = {
+  enabled: true,
+  label: "Comments",
+  placeholder: "",
+};
+
+export const DONOR_COMMENT_MAX_LENGTH = 500;
 
 /**
  * @param {string} label
@@ -53,7 +62,37 @@ export function normalizeDonationConfig(config) {
       Array.isArray(config?.presetAmountsCents) && config.presetAmountsCents.length > 0
         ? config.presetAmountsCents.filter((n) => typeof n === "number" && n >= 100)
         : DEFAULT_PRESET_AMOUNTS_CENTS,
+    comments: normalizeDonationComments(config?.comments),
   };
+}
+
+/**
+ * @param {Partial<DonationCommentsConfig> | undefined | null} comments
+ * @returns {DonationCommentsConfig}
+ */
+export function normalizeDonationComments(comments) {
+  return {
+    enabled: comments?.enabled !== false,
+    label:
+      typeof comments?.label === "string" && comments.label.trim()
+        ? comments.label.trim()
+        : DEFAULT_DONATION_COMMENTS.label,
+    placeholder:
+      typeof comments?.placeholder === "string" ? comments.placeholder.trim() : "",
+  };
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+export function sanitizeDonorComment(value) {
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  return trimmed.slice(0, DONOR_COMMENT_MAX_LENGTH);
 }
 
 /**
