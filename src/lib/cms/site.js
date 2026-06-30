@@ -57,11 +57,19 @@ export async function updateSiteDesignAdmin(design) {
   return updateSiteConfigAdmin({ design: mergeDesign(current.design, design) });
 }
 
-export async function updateSiteSettingsAdmin({ name, tagline, canonicalDomain, seo, socialMedia }) {
+export async function updateSiteSettingsAdmin({
+  name,
+  tagline,
+  canonicalDomain,
+  timezone,
+  seo,
+  socialMedia,
+}) {
   const patch = {};
   if (name !== undefined) patch.name = name;
   if (tagline !== undefined) patch.tagline = tagline;
   if (canonicalDomain !== undefined) patch.canonicalDomain = canonicalDomain;
+  if (timezone !== undefined) patch.timezone = timezone;
   if (seo !== undefined) {
     const current = await getSiteConfigAdmin();
     patch.seo = { ...(current.seo || {}), ...seo };

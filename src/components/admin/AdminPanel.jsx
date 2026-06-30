@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
@@ -22,6 +29,7 @@ import { formatBytes, uploadMediaFile } from "@/lib/media/upload";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { normalizeMassTimes } from "@/lib/mass-times/schema";
 import { sanitizeSocialMediaConfig } from "@/lib/site/social-media";
+import { DEFAULT_SITE_TIMEZONE, SITE_TIMEZONE_OPTIONS } from "@/lib/site/timezone";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
 export function AdminPanel({ siteConfig, pageCount = 0 }) {
@@ -154,6 +162,30 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
                   placeholder="www.yourparish.org"
                   className="mt-1"
                 />
+              </div>
+              <div>
+                <Label htmlFor="timezone">Timezone</Label>
+                <Select
+                  value={config.timezone || DEFAULT_SITE_TIMEZONE}
+                  onValueChange={(value) => {
+                    setConfig({ ...config, timezone: value });
+                    saveConfig({ timezone: value });
+                  }}
+                >
+                  <SelectTrigger id="timezone" className="mt-1 w-full">
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SITE_TIMEZONE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Used for Google Calendar event times on the public site.
+                </p>
               </div>
             </Card>
             <SearchAppearanceEditor

@@ -8,9 +8,10 @@ import { normalizeCalendarConfig } from "./schema";
  * Called during static page generation so events ship with the cached HTML.
  *
  * @param {import('@/lib/pages/regions').Page | null | undefined} page
+ * @param {string} [siteTimezone]
  * @returns {Promise<Record<string, import('./types').CalendarEvent[]>>}
  */
-export async function prefetchPageCalendarEvents(page) {
+export async function prefetchPageCalendarEvents(page, siteTimezone = "") {
   /** @type {Record<string, import('./types').CalendarEvent[]>} */
   const byModuleId = {};
 
@@ -30,7 +31,7 @@ export async function prefetchPageCalendarEvents(page) {
       const maxEvents = config.maxEvents || 15;
 
       tasks.push(
-        fetchGoogleCalendarEvents(calendarId, maxEvents)
+        fetchGoogleCalendarEvents(calendarId, maxEvents, siteTimezone)
           .then((events) => {
             byModuleId[moduleId] = events;
           })

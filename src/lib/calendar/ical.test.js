@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   isExternalCalendarInvite,
+  parseCalendarTimezone,
   parseMailtoEmail,
   parseVevents,
   veventToCalendarEvent,
@@ -62,5 +63,54 @@ END:VEVENT`;
 
     assert.equal(vevents.length, 1);
     assert.equal(events[0]?.title, "8th Grade Graduation");
+  });
+
+  it("converts UTC instants using X-WR-TIMEZONE instead of server local time", () => {
+    const ics = `BEGIN:VCALENDAR
+X-WR-TIMEZONE:America/Los_Angeles
+BEGIN:VEVENT
+DTSTART:20250701T160000Z
+DTEND:20250701T170000Z
+SUMMARY:Morning Mass
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20240919T010000Z
+DTEND:20240919T013000Z
+SUMMARY:Evening meeting
+END:VEVENT
+END:VCALENDAR`;
+
+    assert.equal(parseCalendarTimezone(ics), "America/Los_Angeles");
+
+    const timezone = parseCalendarTimezone(ics);
+    const events = parseVevents(ics)
+      .map((vevent) => veventToCalendarEvent(vevent, null, timezone))
+      .filter(Boolean);
+
+    assert.equal(events[0]?.date, "2025-07-01");
+    assert.equal(events[0]?.startTime, "09:00");
+    assert.equal(events[0]?.endTime, "10:00");
+
+    assert.equal(events[1]?.date, "2024-09-18");
+    assert.equal(events[1]?.startTime, "18:00");
+    assert.equal(events[1]?.endTime, "18:30");
+  });
+
+  it("uses site timezone over ICS X-WR-TIMEZONE when both differ", () => {
+    const ics = `BEGIN:VCALENDAR
+X-WR-TIMEZONE:America/Los_Angeles
+BEGIN:VEVENT
+DTSTART:20250701T160000Z
+DTEND:20250701T170000Z
+SUMMARY:Morning Mass
+END:VEVENT
+END:VCALENDAR`;
+
+    const [vevent] = parseVevents(ics);
+    const pacificEvent = veventToCalendarEvent(vevent, null, "America/Los_Angeles");
+    const easternEvent = veventToCalendarEvent(vevent, null, "America/New_York");
+
+    assert.equal(pacificEvent?.startTime, "09:00");
+    assert.equal(easternEvent?.startTime, "12:00");
   });
 });

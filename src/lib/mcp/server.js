@@ -347,11 +347,12 @@ export function registerMcpTools(server) {
     "update_site_settings",
     {
       description:
-        "Update site name, tagline, canonical domain, site-wide SEO settings, or global social media links",
+        "Update site name, tagline, canonical domain, timezone, site-wide SEO settings, or global social media links",
       inputSchema: {
         name: z.string().optional(),
         tagline: z.string().optional(),
         canonicalDomain: z.string().optional(),
+        timezone: z.string().optional(),
         seo: z
           .object({
             description: z.string().optional(),

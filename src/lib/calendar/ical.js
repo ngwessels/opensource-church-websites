@@ -76,11 +76,68 @@ function parsePropertyBlock(block) {
 }
 
 /**
+ * @param {string} keyPart - full key including params e.g. DTSTART;TZID=America/Los_Angeles
+ * @returns {string}
+ */
+function parseTzidFromKey(keyPart = "") {
+  const match = keyPart.match(/TZID=([^:;]+)/i);
+  return match?.[1]?.trim() || "";
+}
+
+/**
+ * @param {string} icsText
+ * @returns {string}
+ */
+export function parseCalendarTimezone(icsText) {
+  const match = unfoldIcal(icsText).match(/^X-WR-TIMEZONE:(.+)$/m);
+  return match?.[1]?.trim() || "";
+}
+
+/**
+ * Convert a UTC instant to calendar-local date and clock time.
+ * @param {number} year
+ * @param {number} month 1-12
+ * @param {number} day
+ * @param {number} hour 0-23
+ * @param {number} minute
+ * @param {string} timeZone IANA timezone
+ * @returns {{ date: string, hours: number, minutes: number }}
+ */
+function utcInstantToZonedParts(year, month, day, hour, minute, timeZone) {
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  /** @type {Record<string, string>} */
+  const parts = {};
+  for (const part of formatter.formatToParts(new Date(utcMs))) {
+    if (part.type !== "literal") parts[part.type] = part.value;
+  }
+
+  let hours = Number(parts.hour);
+  if (hours === 24) hours = 0;
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hours,
+    minutes: Number(parts.minute),
+  };
+}
+
+/**
  * @param {string} value
  * @param {string} [keyPart] - full key including params e.g. DTSTART;VALUE=DATE
+ * @param {string} [timeZone] - IANA timezone for UTC values (from TZID or X-WR-TIMEZONE)
  * @returns {{ date: string, startTime: string, endTime: string, allDay: boolean }}
  */
-function parseIcalDateTime(value, keyPart = "") {
+function parseIcalDateTime(value, keyPart = "", timeZone = "") {
   const allDay = keyPart.toUpperCase().includes("VALUE=DATE") || /^\d{8}$/.test(value);
 
   if (allDay && /^\d{8}$/.test(value)) {
@@ -98,15 +155,28 @@ function parseIcalDateTime(value, keyPart = "") {
 
   const [, y, mo, d, h, mi] = match;
   const utc = value.endsWith("Z");
+  const eventTimeZone = parseTzidFromKey(keyPart) || timeZone;
   let date;
   let hours = Number(h);
   let minutes = Number(mi);
 
-  if (utc) {
+  if (utc && eventTimeZone) {
+    const zoned = utcInstantToZonedParts(
+      Number(y),
+      Number(mo),
+      Number(d),
+      hours,
+      minutes,
+      eventTimeZone,
+    );
+    date = zoned.date;
+    hours = zoned.hours;
+    minutes = zoned.minutes;
+  } else if (utc) {
     const dt = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), hours, minutes));
-    date = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-    hours = dt.getHours();
-    minutes = dt.getMinutes();
+    date = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+    hours = dt.getUTCHours();
+    minutes = dt.getUTCMinutes();
   } else {
     date = `${y}-${mo}-${d}`;
   }
@@ -151,19 +221,20 @@ export function parseVevents(icsText) {
 /**
  * @param {ReturnType<typeof parseVevents>[number]} vevent
  * @param {import('./types').CalendarEvent | null} base
+ * @param {string} [calendarTimezone] - from X-WR-TIMEZONE when DTSTART/DTEND are UTC
  */
-export function veventToCalendarEvent(vevent, base = null) {
+export function veventToCalendarEvent(vevent, base = null, calendarTimezone = "") {
   const title = decodeIcalText(vevent.summary);
   if (!title) return null;
 
-  const start = parseIcalDateTime(vevent.dtstart, vevent.dtstartKey);
+  const start = parseIcalDateTime(vevent.dtstart, vevent.dtstartKey, calendarTimezone);
   if (!start.date) return null;
 
   let endDate = "";
   let endTime = "";
 
   if (vevent.dtend) {
-    const end = parseIcalDateTime(vevent.dtend, vevent.dtendKey);
+    const end = parseIcalDateTime(vevent.dtend, vevent.dtendKey, calendarTimezone);
     if (end.allDay) {
       const [y, m, d] = end.date.split("-").map(Number);
       const adjusted = new Date(y, m - 1, d);

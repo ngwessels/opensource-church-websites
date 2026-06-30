@@ -1,12 +1,19 @@
-import { isExternalCalendarInvite, parseVevents, veventToCalendarEvent } from "./ical";
+import {
+  isExternalCalendarInvite,
+  parseCalendarTimezone,
+  parseVevents,
+  veventToCalendarEvent,
+} from "./ical";
 import { filterUpcoming, generateEventId, googleCalendarIcalUrl, parseGoogleCalendarId } from "./schema";
+import { normalizeSiteTimezone } from "../site/timezone";
 
 /**
  * @param {string} calendarId
  * @param {number} [max]
+ * @param {string} [siteTimezone]
  * @returns {Promise<import('./types').CalendarEvent[]>}
  */
-export async function fetchGoogleCalendarEvents(calendarId, max = 15) {
+export async function fetchGoogleCalendarEvents(calendarId, max = 15, siteTimezone = "") {
   const normalizedId = parseGoogleCalendarId(calendarId);
   if (!normalizedId) return [];
 
@@ -18,12 +25,15 @@ export async function fetchGoogleCalendarEvents(calendarId, max = 15) {
   }
 
   const icsText = await response.text();
+  const displayTimezone = normalizeSiteTimezone(
+    siteTimezone || parseCalendarTimezone(icsText),
+  );
   const vevents = parseVevents(icsText);
 
   const events = vevents
     .filter((vevent) => !isExternalCalendarInvite(vevent, normalizedId))
     .map((vevent) => {
-      const event = veventToCalendarEvent(vevent);
+      const event = veventToCalendarEvent(vevent, null, displayTimezone);
       if (event && !event.id) event.id = generateEventId();
       return event;
     })

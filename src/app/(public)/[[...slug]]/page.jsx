@@ -100,7 +100,7 @@ export default async function PublicPage({ params }) {
   const quickLinks = filterQuickLinksForPublic(sortQuickLinks(nodes), hiddenPageIds);
   const [bulletins, calendarEventsByModuleId] = await Promise.all([
     getPageType(publicPage) === "bulletins" ? getCachedBulletins() : Promise.resolve([]),
-    prefetchPageCalendarEvents(publicPage),
+    prefetchPageCalendarEvents(publicPage, siteConfig.timezone),
   ]);
 
   return (

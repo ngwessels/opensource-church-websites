@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCachedGoogleCalendarEvents } from "@/lib/calendar/cached";
+import { getSiteConfigServer } from "@/lib/firestore/server";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -16,7 +17,12 @@ export async function GET(request) {
   }
 
   try {
-    const events = await getCachedGoogleCalendarEvents(calendarId, max);
+    const siteConfig = await getSiteConfigServer();
+    const events = await getCachedGoogleCalendarEvents(
+      calendarId,
+      max,
+      siteConfig?.timezone,
+    );
     return NextResponse.json({ events });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch calendar.";

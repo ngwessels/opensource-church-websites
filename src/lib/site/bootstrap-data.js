@@ -1,4 +1,5 @@
 import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
+import { DEFAULT_SITE_TIMEZONE } from "@/lib/site/timezone";
 import { DEFAULT_SOCIAL_MEDIA } from "@/lib/site/social-media";
 import { normalizeDesign } from "@/lib/design/design-utils";
 import { getThemeById } from "@/lib/design/themes";
@@ -20,6 +21,7 @@ export function buildSiteBootstrapData() {
   const siteConfig = {
     name: "My Parish",
     tagline: "",
+    timezone: DEFAULT_SITE_TIMEZONE,
     canonicalDomain: process.env.NEXT_PUBLIC_SITE_URL || "",
     seo: { title: "My Parish", description: "", faviconUrl: "" },
     design: normalizeDesign({ themeId: "verona" }, getThemeById("verona")),
