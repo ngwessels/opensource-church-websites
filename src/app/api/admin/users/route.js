@@ -6,14 +6,22 @@ import { syncUserRoleClaim } from "@/lib/firebase/sync-role-claim";
 import { getAdminUserFromRequest } from "@/lib/cms/auth";
 import { getFirebaseAdminApp, getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { sendUserInviteEmail } from "@/lib/mailgun/invite";
+import { getSiteBaseUrl } from "@/lib/seo/site-url";
 import { buildUserProfileData } from "@/lib/site/bootstrap-data";
 import { isFounderUserServer } from "@/lib/site/founder.server";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 
 export const runtime = "nodejs";
 
-function getAppUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+function getInviteContinueUrl(siteConfig) {
+  const baseUrl = getSiteBaseUrl(siteConfig);
+  try {
+    return new URL("/login", `${baseUrl}/`).toString();
+  } catch {
+    throw new Error(
+      "Site URL is not configured. Set canonical domain in Admin settings or NEXT_PUBLIC_APP_URL to a valid https URL.",
+    );
+  }
 }
 
 async function countAdmins(db) {
@@ -81,12 +89,13 @@ export async function POST(request) {
     let resetLink = null;
 
     if (isNewUser) {
-      resetLink = await auth.generatePasswordResetLink(email, {
-        url: `${getAppUrl()}/login`,
-      });
-
       const siteSnap = await db.collection(COLLECTIONS.site).doc(SITE_CONFIG_ID).get();
-      const siteName = siteSnap.exists ? siteSnap.data()?.name || "your church website" : "your church website";
+      const siteConfig = siteSnap.exists ? siteSnap.data() : null;
+      const siteName = siteConfig?.name || "your church website";
+
+      resetLink = await auth.generatePasswordResetLink(email, {
+        url: getInviteContinueUrl(siteConfig),
+      });
       const emailResult = await sendUserInviteEmail({ to: email, resetLink, siteName });
       inviteSent = emailResult.sent;
     }

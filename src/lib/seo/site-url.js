@@ -4,19 +4,23 @@
  *
  * @param {object | null | undefined} [siteConfig]
  */
+function normalizeUrlCandidate(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function getSiteBaseUrl(siteConfig) {
   const raw =
     siteConfig?.canonicalDomain?.trim() ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
+    normalizeUrlCandidate(process.env.NEXT_PUBLIC_SITE_URL) ||
+    normalizeUrlCandidate(process.env.NEXT_PUBLIC_APP_URL) ||
     "";
 
   if (!raw) {
-    return (
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      "http://localhost:3000"
-    ).replace(/\/+$/, "");
+    const fallback =
+      normalizeUrlCandidate(process.env.NEXT_PUBLIC_SITE_URL) ||
+      normalizeUrlCandidate(process.env.NEXT_PUBLIC_APP_URL) ||
+      "http://localhost:3000";
+    return fallback.replace(/\/+$/, "");
   }
   if (/^https?:\/\//i.test(raw)) return raw.replace(/\/+$/, "");
   return `https://${raw.replace(/\/+$/, "")}`;

@@ -24,6 +24,21 @@ describe("getSiteBaseUrl", () => {
       process.env.NEXT_PUBLIC_SITE_URL = prev;
     }
   });
+
+  it("adds https to env URLs without a scheme", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevApp = process.env.NEXT_PUBLIC_APP_URL;
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "www.example.org";
+    try {
+      assert.equal(getSiteBaseUrl(null), "https://www.example.org");
+    } finally {
+      if (prevSite === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+      else process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      if (prevApp === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+      else process.env.NEXT_PUBLIC_APP_URL = prevApp;
+    }
+  });
 });
 
 describe("pageUrlFromSlug", () => {
