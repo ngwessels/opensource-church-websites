@@ -5,6 +5,8 @@ import {
   sanitizeReturnPath,
   stripeCheckoutCustomerCollectionOptions,
 } from "@/lib/donations/schema";
+import { RECAPTCHA_ACTIONS, RECAPTCHA_TOKEN_FIELD } from "@/lib/recaptcha/constants";
+import { assertRecaptchaOrSkip } from "@/lib/recaptcha/server";
 import { getStripe, isStripeConfigured, joinAppUrl } from "@/lib/stripe/server";
 
 /** @type {Record<string, "week" | "month">} */
@@ -42,6 +44,14 @@ export async function POST(request) {
   }
 
   const { amountCents, frequency, fundId, fundLabel, returnPath, donorComment } = body;
+
+  const recaptchaResult = await assertRecaptchaOrSkip({
+    token: body[RECAPTCHA_TOKEN_FIELD],
+    expectedAction: RECAPTCHA_ACTIONS.donationCheckout,
+  });
+  if (!recaptchaResult.ok) {
+    return NextResponse.json({ error: recaptchaResult.error }, { status: recaptchaResult.status });
+  }
 
   if (!amountCents || typeof amountCents !== "number" || amountCents < 100) {
     return NextResponse.json(

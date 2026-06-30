@@ -89,6 +89,12 @@ env:
       - BUILD
       - RUNTIME
 
+  # reCAPTCHA v3 — server secret is runtime-only.
+  - variable: RECAPTCHA_SECRET_KEY
+    secret: recaptchaSecretKey
+    availability:
+      - RUNTIME
+
   # MCP OAuth (optional — Cursor MCP login). Uncomment after creating the secret:
   #   openssl rand -base64 32
   #   firebase apphosting:secrets:set mcpOauthCookieSecret --project <PROJECT_ID>

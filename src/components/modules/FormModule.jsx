@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { RecaptchaNotice } from "@/components/recaptcha/RecaptchaNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRecaptchaV3 } from "@/hooks/useRecaptchaV3";
 import { DISPLAY_FIELD_TYPES, normalizeFormConfig } from "@/lib/forms/schema";
+import { RECAPTCHA_ACTIONS, RECAPTCHA_TOKEN_FIELD } from "@/lib/recaptcha/constants";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,8 +31,11 @@ export function FormModule({ module, editing = false, preview = false }) {
   const [fieldErrors, setFieldErrors] = useState(/** @type {Record<string, string>} */ ({}));
   /** @type {[Record<string, string | string[]>, (v: Record<string, string | string[]>) => void]} */
   const [values, setValues] = useState({});
+  const { enabled: recaptchaEnabled, ready: recaptchaReady, error: recaptchaError, execute: executeRecaptcha } =
+    useRecaptchaV3();
 
   const inputFields = config.fields.filter((f) => !DISPLAY_FIELD_TYPES.has(f.type));
+  const submitDisabled = editing || status === "loading" || (recaptchaEnabled && !recaptchaReady);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -74,6 +80,11 @@ export function FormModule({ module, editing = false, preview = false }) {
     }
 
     try {
+      const recaptchaToken = await executeRecaptcha(RECAPTCHA_ACTIONS.formSubmit);
+      if (recaptchaToken) {
+        formData.set(RECAPTCHA_TOKEN_FIELD, recaptchaToken);
+      }
+
       const response = await fetch("/api/forms/submit", {
         method: "POST",
         body: formData,
@@ -287,20 +298,30 @@ export function FormModule({ module, editing = false, preview = false }) {
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
         )}
 
+        {recaptchaError && !errorMessage && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{recaptchaError}</p>
+        )}
+
         {editing && !preview && (
           <p className="text-xs text-zinc-500 italic">Preview only — publish the page to accept submissions.</p>
         )}
 
         <Button
           type="submit"
-          disabled={editing || status === "loading"}
+          disabled={submitDisabled}
           className={cn(
             "bg-[var(--site-primary)] text-white hover:opacity-90",
             preview && "pointer-events-none",
           )}
         >
-          {status === "loading" ? "Submitting…" : config.submitLabel}
+          {status === "loading"
+            ? "Submitting…"
+            : recaptchaEnabled && !recaptchaReady
+              ? "Loading security check…"
+              : config.submitLabel}
         </Button>
+
+        <RecaptchaNotice />
       </form>
     </>
   );

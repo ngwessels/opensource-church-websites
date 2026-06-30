@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 
+import { RecaptchaNotice } from "@/components/recaptcha/RecaptchaNotice";
+import { useRecaptchaV3 } from "@/hooks/useRecaptchaV3";
 import { DEFAULT_DONATION_COMMENTS, DEFAULT_PRESET_AMOUNTS_CENTS, DONOR_COMMENT_MAX_LENGTH } from "@/lib/donations/schema";
+import { RECAPTCHA_ACTIONS, RECAPTCHA_TOKEN_FIELD } from "@/lib/recaptcha/constants";
 
 const FREQUENCY_OPTIONS = [
   { value: "once", label: "One-time" },
@@ -32,8 +35,11 @@ export function DonationForm({
   const [donorComment, setDonorComment] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { enabled: recaptchaEnabled, ready: recaptchaReady, error: recaptchaError, execute: executeRecaptcha } =
+    useRecaptchaV3();
 
   const selectedFund = funds.find((f) => f.id === selectedFundId) ?? funds[0];
+  const submitDisabled = loading || disabled || (recaptchaEnabled && !recaptchaReady);
 
   function formatAmount(cents) {
     return new Intl.NumberFormat("en-US", {
@@ -63,6 +69,7 @@ export function DonationForm({
 
     try {
       const trimmedComment = donorComment.trim();
+      const recaptchaToken = await executeRecaptcha(RECAPTCHA_ACTIONS.donationCheckout);
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -73,6 +80,7 @@ export function DonationForm({
           fundLabel: selectedFund.label,
           returnPath,
           ...(trimmedComment ? { donorComment: trimmedComment } : {}),
+          ...(recaptchaToken ? { [RECAPTCHA_TOKEN_FIELD]: recaptchaToken } : {}),
         }),
       });
 
@@ -207,17 +215,25 @@ export function DonationForm({
         securely on the Stripe checkout page.
       </p>
 
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      {(error || recaptchaError) && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error ?? recaptchaError}
+        </p>
       )}
 
       <button
         type="submit"
-        disabled={loading || disabled}
+        disabled={submitDisabled}
         className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {loading ? "Redirecting to checkout…" : "Give now"}
+        {loading
+          ? "Redirecting to checkout…"
+          : recaptchaEnabled && !recaptchaReady
+            ? "Loading security check…"
+            : "Give now"}
       </button>
+
+      <RecaptchaNotice />
     </form>
   );
 }

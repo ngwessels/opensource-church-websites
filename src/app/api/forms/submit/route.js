@@ -5,6 +5,8 @@ import { formatSubmissionForDisplay, validateSubmission } from "@/lib/forms/sche
 import { uploadFormFile } from "@/lib/forms/upload";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { sendFormNotification } from "@/lib/mailgun/client";
+import { RECAPTCHA_ACTIONS, RECAPTCHA_TOKEN_FIELD } from "@/lib/recaptcha/constants";
+import { assertRecaptchaOrSkip } from "@/lib/recaptcha/server";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { generateId } from "@/lib/sitemap/tree";
 
@@ -30,6 +32,14 @@ export async function POST(request) {
     const honeypot = formData.get(config.honeypotFieldName);
     if (typeof honeypot === "string" && honeypot.trim()) {
       return NextResponse.json({ success: true, message: config.successMessage });
+    }
+
+    const recaptchaResult = await assertRecaptchaOrSkip({
+      token: formData.get(RECAPTCHA_TOKEN_FIELD),
+      expectedAction: RECAPTCHA_ACTIONS.formSubmit,
+    });
+    if (!recaptchaResult.ok) {
+      return NextResponse.json({ error: recaptchaResult.error }, { status: recaptchaResult.status });
     }
 
     /** @type {Record<string, unknown>} */

@@ -122,6 +122,17 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 
 Copy the webhook signing secret into `STRIPE_WEBHOOK_SECRET`. Test donations at `/give`.
 
+## reCAPTCHA v3 setup (optional)
+
+Protects donation checkout and CMS form submissions from bots.
+
+1. Register a **reCAPTCHA v3** site at [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin).
+2. Add domains: `localhost`, `127.0.0.1`, and your production domain.
+3. Set `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` (site key) and `RECAPTCHA_SECRET_KEY` (secret key) in `.env.local` or your host env.
+4. Optionally tune `RECAPTCHA_SCORE_THRESHOLD` (default `0.5`; higher is stricter).
+
+When both keys are unset, donations and forms work as before without verification.
+
 ## Project structure
 
 ```

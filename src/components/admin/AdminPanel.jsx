@@ -184,6 +184,10 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
               <ul className="space-y-2 text-sm">
                 <CheckItem done={isFirebaseConfigured()} label="Firebase configured" />
                 <CheckItem done={!!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY} label="Stripe configured" />
+                <CheckItem
+                  done={!!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
+                  label="reCAPTCHA configured"
+                />
                 <CheckItem done={!!config.canonicalDomain} label="Custom domain set" />
               </ul>
             </Card>
