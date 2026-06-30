@@ -75,6 +75,8 @@ export function AuthProvider({ children }) {
       unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
         setAuthError(null);
         if (nextUser) {
+          setUser(nextUser);
+          setLoading(true);
           try {
             const result = await ensureProfileViaApi(nextUser);
             if (result?.fallback) {
@@ -104,11 +106,12 @@ export function AuthProvider({ children }) {
               return;
             }
           }
+          setLoading(false);
         } else {
           setUserRole(null);
+          setUser(null);
+          setLoading(false);
         }
-        setUser(nextUser);
-        setLoading(false);
       });
     }
 
@@ -118,21 +121,29 @@ export function AuthProvider({ children }) {
 
   const signInWithEmail = useCallback(async (email, password) => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
-    await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+    const auth = getFirebaseAuth();
+    setLoading(true);
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    setUser(credential.user);
   }, []);
 
   const signUpWithEmail = useCallback(async (email, password, displayName) => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
     const auth = getFirebaseAuth();
+    setLoading(true);
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     if (displayName) {
       await updateProfile(credential.user, { displayName });
     }
+    setUser(credential.user);
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
-    await signInWithPopup(getFirebaseAuth(), new GoogleAuthProvider());
+    const auth = getFirebaseAuth();
+    setLoading(true);
+    const credential = await signInWithPopup(auth, new GoogleAuthProvider());
+    setUser(credential.user);
   }, []);
 
   const logOut = useCallback(async () => {

@@ -20,6 +20,8 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
+    user,
+    loading: authLoading,
     configured,
     authError,
     clearAuthError,
@@ -34,6 +36,7 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
   const [submitting, setSubmitting] = useState(false);
   const [mfaResolver, setMfaResolver] = useState(null);
   const [siteInitialized, setSiteInitialized] = useState(null);
+  const [redirectAfterAuth, setRedirectAfterAuth] = useState(false);
 
   const isSignup = mode === "signup";
   const queryError = searchParams.get("error");
@@ -51,6 +54,12 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
       setError(queryMessage);
     }
   }, [queryMessage]);
+
+  useEffect(() => {
+    if (!redirectAfterAuth || authLoading || !user) return;
+    router.push(redirectTo);
+    setRedirectAfterAuth(false);
+  }, [redirectAfterAuth, authLoading, user, router, redirectTo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +91,7 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
       } else {
         await signInWithEmail(email, password);
       }
-      router.push(redirectTo);
+      setRedirectAfterAuth(true);
     } catch (err) {
       if (!isSignup && isMfaError(err)) {
         setMfaResolver(getMfaResolver(err));
@@ -100,7 +109,7 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
 
     try {
       await signInWithGoogle();
-      router.push(redirectTo);
+      setRedirectAfterAuth(true);
     } catch (err) {
       if (isMfaError(err)) {
         setMfaResolver(getMfaResolver(err));
@@ -113,7 +122,7 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
   }
 
   function handleMfaSuccess() {
-    router.push(redirectTo);
+    setRedirectAfterAuth(true);
   }
 
   function handleMfaCancel() {

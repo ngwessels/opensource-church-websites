@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/useAuth";
+import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { formatBytes, uploadMediaFile } from "@/lib/media/upload";
@@ -23,6 +25,7 @@ import { sanitizeSocialMediaConfig } from "@/lib/site/social-media";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
 export function AdminPanel({ siteConfig, pageCount = 0 }) {
+  const { user } = useAuth();
   const [tab, setTab] = useState("overview");
   const [users, setUsers] = useState([]);
   const [config, setConfig] = useState(siteConfig || {});
@@ -52,6 +55,10 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
       : { ...partial, updatedAt: new Date().toISOString() };
     setConfig(next);
     await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), firestorePatch);
+    await requestPublicRevalidate({
+      getIdToken: () => user?.getIdToken(),
+      scope: "site",
+    });
   };
 
   const tabs = [
