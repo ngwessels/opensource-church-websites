@@ -1,10 +1,10 @@
 import "server-only";
 
-export const MCP_OAUTH_COOKIE_NAME = "mcp_oauth_pending";
+import { getOAuthIssuer, oauthAbsoluteUrl } from "@/lib/oauth/origin";
 
-export function getOAuthIssuer() {
-  return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
-}
+export { getOAuthIssuer, oauthAbsoluteUrl };
+
+export const MCP_OAUTH_COOKIE_NAME = "mcp_oauth_pending";
 
 export function getMcpResourceUrl() {
   return `${getOAuthIssuer()}/api/mcp`;

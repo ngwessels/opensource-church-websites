@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
-import { getAuthCodeTtlSeconds } from "@/lib/oauth/config";
+import { getAuthCodeTtlSeconds, oauthAbsoluteUrl } from "@/lib/oauth/config";
 import {
   MCP_OAUTH_COOKIE_NAME,
   oauthPendingCookieOptions,
@@ -28,8 +28,7 @@ export async function GET(request) {
       oauthPendingCookieOptions(getAuthCodeTtlSeconds()),
     );
 
-    const loginUrl = new URL("/oauth/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(oauthAbsoluteUrl("/oauth/login", request));
   } catch (err) {
     const message = err instanceof Error ? err.message : "invalid_request";
     return NextResponse.json({ error: message }, { status: 400 });
