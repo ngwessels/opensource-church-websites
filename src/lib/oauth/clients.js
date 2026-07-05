@@ -5,10 +5,14 @@ import { randomBytes } from "crypto";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 
-const CURSOR_REDIRECT_URIS = [
+const MCP_CLIENT_REDIRECT_URIS = [
+  // Cursor
   "cursor://anysphere.cursor-mcp/oauth/callback",
   "https://www.cursor.com/agents/mcp/oauth/callback",
   "https://cursor.com/agents/mcp/oauth/callback",
+  // Grok web connectors (grok.com/connectors → Custom)
+  "https://grok.com/connectors-oauth-exchange-code/",
+  "https://www.grok.com/connectors-oauth-exchange-code/",
 ];
 
 function getDb() {
@@ -23,7 +27,7 @@ function now() {
 
 export function isAllowedRedirectUri(uri) {
   if (!uri) return false;
-  if (CURSOR_REDIRECT_URIS.includes(uri)) return true;
+  if (MCP_CLIENT_REDIRECT_URIS.includes(uri)) return true;
   if (uri.startsWith("http://127.0.0.1:") || uri.startsWith("http://localhost:")) return true;
   return false;
 }

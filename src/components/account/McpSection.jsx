@@ -110,8 +110,8 @@ export function McpSection() {
       <CardHeader>
         <CardTitle>MCP Connections</CardTitle>
         <CardDescription>
-          Connect Cursor or other MCP clients via OAuth. You sign in and approve access in your
-          browser — no API keys to copy.
+          Connect Cursor, Grok web connectors, or other MCP clients via OAuth. You sign in and
+          approve access in your browser — no API keys to copy.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -135,6 +135,14 @@ export function McpSection() {
             <li>Open Cursor Settings → MCP</li>
             <li>Add the configuration below (URL only — no token)</li>
             <li>When prompted, sign in and accept access in your browser</li>
+          </ol>
+          <p className="mt-4 text-sm font-medium text-foreground">Connect in Grok</p>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>Go to grok.com/connectors → New Connector → Custom</li>
+            <li>
+              Server URL: <code className="text-xs">{cursorConfig.mcpServers["parish-site"].url}</code>
+            </li>
+            <li>Complete the OAuth sign-in and consent flow in your browser</li>
           </ol>
           <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-muted p-3 text-xs">
             {JSON.stringify(cursorConfig, null, 2)}
