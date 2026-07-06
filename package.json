@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/pages/visibility.test.js src/lib/pages/viewports.test.js src/lib/media/object-position.test.js src/lib/seo/site-url.test.js src/lib/donations/schema.test.js src/lib/stripe/server.test.js src/lib/recaptcha/server.test.js src/lib/forms/schema.test.js src/lib/zoom/parse.test.js src/lib/site/footer-contact.test.js src/lib/calendar/ical.test.js src/lib/calendar/schema.test.js src/lib/oauth/config.test.js src/lib/sitemap/tree.test.js",
+    "test": "node --test src/lib/pages/visibility.test.js src/lib/pages/viewports.test.js src/lib/media/object-position.test.js src/lib/seo/site-url.test.js src/lib/donations/schema.test.js src/lib/stripe/server.test.js src/lib/recaptcha/server.test.js src/lib/forms/schema.test.js src/lib/zoom/parse.test.js src/lib/site/footer-contact.test.js src/lib/calendar/ical.test.js src/lib/calendar/schema.test.js src/lib/oauth/config.test.js src/lib/sitemap/tree.test.js src/lib/cms/content-search.test.js",
     "import:bulletins": "node scripts/import-ecatholic-bulletins.mjs",
     "import:bulletins:dry": "node scripts/import-ecatholic-bulletins.mjs --dry-run"
   },

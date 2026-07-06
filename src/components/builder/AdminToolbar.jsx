@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, HelpCircle } from "lucide-react";
 
+import { SiteContentSearchDialog, SiteContentSearchTrigger } from "@/components/builder/SiteContentSearch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -34,6 +36,20 @@ export function AdminToolbar() {
   const pathname = usePathname();
   const { user, logOut } = useAuth();
   const { config } = useSiteConfig();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <header
@@ -77,6 +93,9 @@ export function AdminToolbar() {
       </div>
 
       <div className="flex items-center gap-3">
+        <SiteContentSearchTrigger onClick={openSearch} />
+        <SiteContentSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-1 text-sm text-foreground hover:text-foreground">
             {config?.name || "My Parish"}

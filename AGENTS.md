@@ -57,6 +57,11 @@ Folders: `pictures-root` (images), `documents-root` (PDFs), `unused-pictures` (s
 
 - `get_builder_capabilities` — module types, layouts, region rules, `moduleConfigSchemas`, design playbooks
 - `get_site_summary` — quick overview of pages, nav, and design
+- `search_site_content` — find text across all pages, modules, settings, bulletins, and media
+
+**Site content search**
+
+Use `search_site_content` with `{ query: "Jane Doe" }` to find names, events, or phrases anywhere on the site. Results include `source`, `snippet`, `pageTitle`, `moduleType`, `field`, and `builderUrl` for editing. Also available in the builder via **Search** (⌘K / Ctrl+K) or `GET /api/admin/search?q=...`.
 
 **Module types**
 

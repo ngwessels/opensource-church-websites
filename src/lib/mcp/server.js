@@ -7,6 +7,7 @@ import * as pages from "@/lib/cms/pages";
 import * as site from "@/lib/cms/site";
 import * as media from "@/lib/cms/media";
 import * as bulletins from "@/lib/cms/bulletins";
+import * as search from "@/lib/cms/content-search";
 import { MODULE_TYPES } from "@/lib/modules/registry";
 
 function jsonResult(data) {
@@ -677,6 +678,19 @@ export function registerMcpTools(server) {
       inputSchema: { bulletinId: z.string() },
     },
     async ({ bulletinId }) => run(() => bulletins.deleteBulletinAdmin(bulletinId)),
+  );
+
+  server.registerTool(
+    "search_site_content",
+    {
+      description:
+        "Search all site content for text: page titles, module content (text, people, calendar events, links, etc.), site settings, mass times, footer, navigation labels, bulletins, and media metadata. Returns snippets with page/module context and builderUrl for editing.",
+      inputSchema: {
+        query: z.string().describe("Text to search for (person name, event title, phrase, etc.)"),
+        limit: z.number().int().min(1).max(100).optional().describe("Max results (default 50)"),
+      },
+    },
+    async ({ query, limit }) => run(() => search.searchSiteContentAdmin({ query, limit })),
   );
 
   server.registerTool(

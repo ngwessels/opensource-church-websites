@@ -236,6 +236,16 @@ export function getBuilderCapabilities() {
     },
     designTools: ["list_design_themes", "apply_design_theme", "update_site_design"],
     batchTools: ["add_modules_batch", "upload_media_batch", "publish_all_pages"],
+    search: {
+      tool: "search_site_content",
+      api: "GET /api/admin/search?q=...",
+      searches: [
+        "Page titles, SEO, and all module config text",
+        "People names, calendar events, text HTML, links, form labels",
+        "Site name, tagline, mass times, footer columns",
+        "Navigation labels, bulletin titles/dates, media name/alt/tags",
+      ],
+    },
     playbooks: {
       fullParishSiteRedesign: [
         "get_site_summary + list_pages + get_nav_tree",
