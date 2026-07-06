@@ -16,7 +16,12 @@ const QUERY_ERRORS = {
   admin_required: "You do not have permission to access the website builder. Contact your administrator.",
 };
 
-export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
+export function SignInForm({
+  mode = "login",
+  redirectTo = "/builder/edit",
+  authRedirectMode = "default",
+  hideDefaultHeader = false,
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
@@ -55,11 +60,22 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
     }
   }, [queryMessage]);
 
+  const immediateRedirect = authRedirectMode === "immediate";
+
   useEffect(() => {
     if (!redirectAfterAuth || authLoading || !user) return;
+    if (immediateRedirect) {
+      window.location.assign(redirectTo);
+      return;
+    }
     router.push(redirectTo);
     setRedirectAfterAuth(false);
-  }, [redirectAfterAuth, authLoading, user, router, redirectTo]);
+  }, [redirectAfterAuth, authLoading, user, router, redirectTo, immediateRedirect]);
+
+  useEffect(() => {
+    if (!immediateRedirect || authLoading || !user) return;
+    window.location.replace(redirectTo);
+  }, [immediateRedirect, authLoading, user, redirectTo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +107,10 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
       } else {
         await signInWithEmail(email, password);
       }
+      if (immediateRedirect) {
+        window.location.assign(redirectTo);
+        return;
+      }
       setRedirectAfterAuth(true);
     } catch (err) {
       if (!isSignup && isMfaError(err)) {
@@ -109,6 +129,10 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
 
     try {
       await signInWithGoogle();
+      if (immediateRedirect) {
+        window.location.assign(redirectTo);
+        return;
+      }
       setRedirectAfterAuth(true);
     } catch (err) {
       if (isMfaError(err)) {
@@ -122,6 +146,10 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
   }
 
   function handleMfaSuccess() {
+    if (immediateRedirect) {
+      window.location.assign(redirectTo);
+      return;
+    }
     setRedirectAfterAuth(true);
   }
 
@@ -163,16 +191,18 @@ export function SignInForm({ mode = "login", redirectTo = "/builder/edit" }) {
 
   return (
     <div className="w-full max-w-md space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">
-          {isSignup ? "Create an account" : "Sign in"}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {isSignup
-            ? "Set up access to manage your church website."
-            : "Access your church website builder."}
-        </p>
-      </div>
+      {!hideDefaultHeader && (
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {isSignup ? "Create an account" : "Sign in"}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {isSignup
+              ? "Set up access to manage your church website."
+              : "Access your church website builder."}
+          </p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {isSignup && (

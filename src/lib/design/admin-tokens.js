@@ -26,6 +26,9 @@ export const ADMIN_TOOLBAR_HEIGHT = 65;
 export const ADMIN_PAGE_NAV_HEIGHT = 60;
 export const MODULE_TRAY_HEIGHT = 320;
 
+/** Minimum browser width (px) required to use the website builder. */
+export const BUILDER_MIN_VIEWPORT_WIDTH = 1024;
+
 export const ADMIN_Z = {
   toolbar: 50,
   sectionTab: 40,

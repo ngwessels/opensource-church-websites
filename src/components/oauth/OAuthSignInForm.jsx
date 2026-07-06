@@ -11,7 +11,12 @@ export function OAuthSignInForm() {
           Sign in with your parish admin account to connect an MCP client to your site.
         </p>
       </div>
-      <SignInForm mode="login" redirectTo="/oauth/consent" />
+      <SignInForm
+        mode="login"
+        redirectTo="/oauth/consent"
+        authRedirectMode="immediate"
+        hideDefaultHeader
+      />
     </div>
   );
 }

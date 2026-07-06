@@ -1,9 +1,25 @@
 "use client";
 
 import { AdminToolbar } from "./AdminToolbar";
-import { ADMIN_PAGE_NAV_HEIGHT } from "@/lib/design/admin-tokens";
+import { BuilderDesktopRequired } from "./BuilderDesktopRequired";
+import { ADMIN_PAGE_NAV_HEIGHT, BUILDER_MIN_VIEWPORT_WIDTH } from "@/lib/design/admin-tokens";
+import { useMinViewportWidth } from "@/hooks/useMinViewportWidth";
 
 export function BuilderShell({ children, bottomBar, moduleTrayOpen = false }) {
+  const isDesktopViewport = useMinViewportWidth(BUILDER_MIN_VIEWPORT_WIDTH);
+
+  if (isDesktopViewport === false) {
+    return <BuilderDesktopRequired />;
+  }
+
+  if (isDesktopViewport === undefined) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col bg-muted">
       <AdminToolbar />

@@ -72,41 +72,41 @@ export function AuthProvider({ children }) {
       const { getFirebaseFirestore } = await import("@/lib/firebase/firestore");
       const auth = getFirebaseAuth();
 
-      unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
+      unsubscribe = onAuthStateChanged(auth, (nextUser) => {
         setAuthError(null);
         if (nextUser) {
           setUser(nextUser);
-          setLoading(true);
-          try {
-            const result = await ensureProfileViaApi(nextUser);
-            if (result?.fallback) {
-              console.warn("[auth] Admin SDK unavailable — using client fallback for profile bootstrap");
-              const db = getFirebaseFirestore();
-              const { doc, getDoc } = await import("firebase/firestore");
-              const { COLLECTIONS } = await import("@/lib/firestore/paths");
-              await ensureUserProfileClientFallback(db, nextUser);
-              const snap = await getDoc(doc(db, COLLECTIONS.users, nextUser.uid));
-              setUserRole(snap.exists() ? snap.data()?.role ?? null : null);
-            } else if (result?.role) {
-              setUserRole(result.role);
-              try {
-                await nextUser.getIdToken(true);
-              } catch {
-                // Storage rules fall back to Firestore role lookup.
+          setLoading(false);
+
+          void (async () => {
+            try {
+              const result = await ensureProfileViaApi(nextUser);
+              if (result?.fallback) {
+                console.warn("[auth] Admin SDK unavailable — using client fallback for profile bootstrap");
+                const db = getFirebaseFirestore();
+                const { doc, getDoc } = await import("firebase/firestore");
+                const { COLLECTIONS } = await import("@/lib/firestore/paths");
+                await ensureUserProfileClientFallback(db, nextUser);
+                const snap = await getDoc(doc(db, COLLECTIONS.users, nextUser.uid));
+                setUserRole(snap.exists() ? snap.data()?.role ?? null : null);
+              } else if (result?.role) {
+                setUserRole(result.role);
+                try {
+                  await nextUser.getIdToken(true);
+                } catch {
+                  // Storage rules fall back to Firestore role lookup.
+                }
+              }
+            } catch (err) {
+              console.error("[auth] profile bootstrap failed", err);
+              if (err?.code === "site_initialized" || err?.message?.includes("closed to new signups")) {
+                setAuthError(err.message);
+                await signOut(auth);
+                setUser(null);
+                setUserRole(null);
               }
             }
-          } catch (err) {
-            console.error("[auth] profile bootstrap failed", err);
-            if (err?.code === "site_initialized" || err?.message?.includes("closed to new signups")) {
-              setAuthError(err.message);
-              await signOut(auth);
-              setUser(null);
-              setUserRole(null);
-              setLoading(false);
-              return;
-            }
-          }
-          setLoading(false);
+          })();
         } else {
           setUserRole(null);
           setUser(null);
@@ -122,28 +122,28 @@ export function AuthProvider({ children }) {
   const signInWithEmail = useCallback(async (email, password) => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
     const auth = getFirebaseAuth();
-    setLoading(true);
     const credential = await signInWithEmailAndPassword(auth, email, password);
     setUser(credential.user);
+    setLoading(false);
   }, []);
 
   const signUpWithEmail = useCallback(async (email, password, displayName) => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
     const auth = getFirebaseAuth();
-    setLoading(true);
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     if (displayName) {
       await updateProfile(credential.user, { displayName });
     }
     setUser(credential.user);
+    setLoading(false);
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");
     const auth = getFirebaseAuth();
-    setLoading(true);
     const credential = await signInWithPopup(auth, new GoogleAuthProvider());
     setUser(credential.user);
+    setLoading(false);
   }, []);
 
   const logOut = useCallback(async () => {
