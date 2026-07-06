@@ -139,3 +139,29 @@ export async function uploadMediaAdmin({
 
   throw new Error("base64 or sourceUrl is required");
 }
+
+/**
+ * @param {{ files: Array<{ folderId: string, filename: string, mimeType?: string, base64?: string, sourceUrl?: string, description?: string, alt?: string, tags?: string[] }> }} input
+ */
+export async function uploadMediaBatchAdmin({ files }) {
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error("files array is required");
+  }
+
+  const uploaded = [];
+  const errors = [];
+
+  for (let index = 0; index < files.length; index += 1) {
+    try {
+      const result = await uploadMediaAdmin(files[index]);
+      uploaded.push(result);
+    } catch (err) {
+      errors.push({
+        index,
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  return { uploaded, errors };
+}

@@ -6,6 +6,7 @@ import * as nav from "@/lib/cms/nav";
 import * as pages from "@/lib/cms/pages";
 import * as site from "@/lib/cms/site";
 import * as media from "@/lib/cms/media";
+import * as bulletins from "@/lib/cms/bulletins";
 import { MODULE_TYPES } from "@/lib/modules/registry";
 
 function jsonResult(data) {
@@ -153,6 +154,39 @@ const siteDesignSchema = z.object({
     .optional(),
 });
 
+const donationConfigSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  funds: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        label: z.string(),
+        description: z.string().optional(),
+      }),
+    )
+    .optional(),
+  presetAmountsCents: z.array(z.number().int().min(100)).optional(),
+  comments: z
+    .object({
+      enabled: z.boolean().optional(),
+      label: z.string().optional(),
+      placeholder: z.string().optional(),
+    })
+    .optional(),
+});
+
+const mediaUploadFileSchema = z.object({
+  folderId: z.string(),
+  filename: z.string(),
+  mimeType: z.string().optional(),
+  base64: z.string().optional(),
+  sourceUrl: z.string().url().optional(),
+  description: z.string().max(500).optional(),
+  alt: z.string().max(200).optional(),
+  tags: z.array(z.string()).max(20).optional(),
+});
+
 /** @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server */
 export function registerMcpTools(server) {
   server.registerTool(
@@ -221,6 +255,17 @@ export function registerMcpTools(server) {
           .boolean()
           .optional()
           .describe("When true, page is hidden from the public site and navigation."),
+        pageType: z
+          .enum(["content", "bulletins", "donation"])
+          .optional()
+          .describe("Page type: content (default), bulletins (archive), or donation (online giving)."),
+        heroSlideshowEnabled: z
+          .boolean()
+          .optional()
+          .describe("When true, enables the hero/features region for slideshow modules."),
+        donationConfig: donationConfigSchema
+          .optional()
+          .describe("Donation page configuration (use with pageType donation)."),
       },
     },
     async ({ pageId, ...updates }) => run(() => pages.updatePageAdmin(pageId, updates)),
@@ -238,6 +283,26 @@ export function registerMcpTools(server) {
       },
     },
     async (args) => run(() => pages.addModuleAdmin(args.pageId, args)),
+  );
+
+  server.registerTool(
+    "add_modules_batch",
+    {
+      description:
+        "Add multiple modules to a page in one call. Each module can include an optional config merged with defaults. Validates all placement rules before committing.",
+      inputSchema: {
+        pageId: z.string(),
+        modules: z.array(
+          z.object({
+            type: moduleTypeSchema,
+            region: z.string().optional(),
+            insertIndex: z.number().int().min(0).optional(),
+            config: z.record(z.unknown()).optional(),
+          }),
+        ),
+      },
+    },
+    async ({ pageId, modules }) => run(() => pages.addModulesBatchAdmin(pageId, modules)),
   );
 
   server.registerTool(
@@ -288,6 +353,15 @@ export function registerMcpTools(server) {
   );
 
   server.registerTool(
+    "publish_all_pages",
+    {
+      description: "Publish all pages to the live site (use after a site-wide redesign)",
+      inputSchema: {},
+    },
+    async () => run(() => pages.publishAllPagesAdmin()),
+  );
+
+  server.registerTool(
     "revert_page",
     {
       description: "Revert a page draft to the last published snapshot",
@@ -311,7 +385,8 @@ export function registerMcpTools(server) {
   server.registerTool(
     "save_sitemap",
     {
-      description: "Save the full sitemap as a flat array of nav nodes",
+      description:
+        "Save the full sitemap as a flat array of nav nodes. Node shape: { id, type (page|secure_page|link|group), title, slug?, externalUrl?, parentId, order, pageId?, isQuickLink?, quickLinkOrder?, hideInNav? }. Prefer add_nav_page for single-page additions.",
       inputSchema: {
         nodes: z.array(z.record(z.unknown())),
       },
@@ -328,6 +403,32 @@ export function registerMcpTools(server) {
   );
 
   server.registerTool(
+    "add_nav_page",
+    {
+      description:
+        "Add a single page to the sitemap without rebuilding the full nav tree. Creates nav node and page record.",
+      inputSchema: {
+        title: z.string(),
+        slug: z.string().optional(),
+        parentId: z.string().nullable().optional(),
+        type: z.enum(["page", "secure_page", "link", "group"]).optional(),
+        isQuickLink: z.boolean().optional(),
+      },
+    },
+    async (args) => run(() => nav.addNavPageAdmin(args)),
+  );
+
+  server.registerTool(
+    "delete_nav_node",
+    {
+      description:
+        "Remove a nav node and all descendants from the sitemap. Does not delete orphaned page records.",
+      inputSchema: { nodeId: z.string() },
+    },
+    async ({ nodeId }) => run(() => nav.deleteNavNodeAdmin(nodeId)),
+  );
+
+  server.registerTool(
     "get_site_config",
     { description: "Get site configuration", inputSchema: {} },
     async () => run(() => site.getSiteConfigAdmin()),
@@ -341,6 +442,31 @@ export function registerMcpTools(server) {
       inputSchema: { design: siteDesignSchema },
     },
     async ({ design }) => run(() => site.updateSiteDesignAdmin(design)),
+  );
+
+  server.registerTool(
+    "list_design_themes",
+    {
+      description:
+        "List available design themes (id, name, description, colors, fonts, structure). Use before apply_design_theme.",
+      inputSchema: {},
+    },
+    async () => run(() => site.listDesignThemes()),
+  );
+
+  server.registerTool(
+    "apply_design_theme",
+    {
+      description:
+        "Apply a catalog theme in one call (like selecting a theme in the Design panel). Optional color/font/structure overrides merge on top.",
+      inputSchema: {
+        themeId: z.string(),
+        colors: siteDesignSchema.shape.colors.optional(),
+        fonts: siteDesignSchema.shape.fonts.optional(),
+        structure: siteDesignSchema.shape.structure.optional(),
+      },
+    },
+    async (args) => run(() => site.applyDesignThemeAdmin(args)),
   );
 
   server.registerTool(
@@ -400,6 +526,23 @@ export function registerMcpTools(server) {
           tagline: config.tagline,
           headerConfig: config.headerConfig,
           design: config.design,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "get_footer_config",
+    {
+      description: "Get footer configuration (columns, copyright text, styles).",
+      inputSchema: {},
+    },
+    async () =>
+      run(async () => {
+        const config = await site.getSiteConfigAdmin();
+        return {
+          name: config.name,
+          tagline: config.tagline,
+          footerConfig: config.footerConfig,
         };
       }),
   );
@@ -469,6 +612,18 @@ export function registerMcpTools(server) {
   );
 
   server.registerTool(
+    "upload_media_batch",
+    {
+      description:
+        "Upload multiple files in one call. Each file uses base64 (max ~3MB) or sourceUrl (max ~10MB). Returns uploaded records and per-file errors (partial success allowed). Use pictures-root for images, documents-root for PDFs.",
+      inputSchema: {
+        files: z.array(mediaUploadFileSchema),
+      },
+    },
+    async ({ files }) => run(() => media.uploadMediaBatchAdmin({ files })),
+  );
+
+  server.registerTool(
     "update_media",
     {
       description: "Update media metadata: description, alt, and/or tags",
@@ -489,6 +644,39 @@ export function registerMcpTools(server) {
       inputSchema: { mediaId: z.string() },
     },
     async ({ mediaId }) => run(() => media.deleteMediaAdmin(mediaId)),
+  );
+
+  server.registerTool(
+    "list_bulletins",
+    {
+      description: "List bulletin archive sorted by date (newest first)",
+      inputSchema: {},
+    },
+    async () => run(() => bulletins.listBulletinsAdmin()),
+  );
+
+  server.registerTool(
+    "create_bulletin",
+    {
+      description:
+        "Create a bulletin record. Upload PDF first via upload_media (folderId documents-root), then pass mediaId and downloadUrl.",
+      inputSchema: {
+        date: z.string().describe("Publish date YYYY-MM-DD"),
+        title: z.string().optional(),
+        mediaId: z.string(),
+        downloadUrl: z.string(),
+      },
+    },
+    async (args) => run(() => bulletins.createBulletinAdmin(args)),
+  );
+
+  server.registerTool(
+    "delete_bulletin",
+    {
+      description: "Delete a bulletin by bulletinId",
+      inputSchema: { bulletinId: z.string() },
+    },
+    async ({ bulletinId }) => run(() => bulletins.deleteBulletinAdmin(bulletinId)),
   );
 
   server.registerTool(

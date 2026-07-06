@@ -100,6 +100,42 @@ export async function addModuleAdmin(pageId, { type, region = "content-1", inser
   return updatePageAdmin(pageId, { regions });
 }
 
+/**
+ * @param {string} pageId
+ * @param {Array<{ type: string, region?: string, insertIndex?: number, config?: Record<string, unknown> }>} modules
+ */
+export async function addModulesBatchAdmin(pageId, modules) {
+  if (!Array.isArray(modules) || modules.length === 0) {
+    throw new Error("modules array is required");
+  }
+
+  const page = await getPageAdmin({ pageId });
+  let regions = page.regions || [];
+  const created = [];
+
+  for (const spec of modules) {
+    const type = spec.type;
+    const region = spec.region ?? "content-1";
+    const insertIndex = spec.insertIndex;
+
+    const error = getDropValidationError(type, region, { ...page, regions });
+    if (error) throw new Error(error);
+
+    const mod = {
+      id: generateId(),
+      type,
+      region,
+      order: insertIndex ?? 0,
+      config: { ...getDefaultConfig(type), ...(spec.config || {}) },
+    };
+    regions = insertModuleAt(regions, region, mod, insertIndex);
+    created.push(mod);
+  }
+
+  const updated = await updatePageAdmin(pageId, { regions });
+  return { page: updated, modules: created };
+}
+
 export async function updateModuleAdmin(pageId, moduleId, config) {
   const page = await getPageAdmin({ pageId });
   const regions = (page.regions || []).map((r) => ({
@@ -206,4 +242,16 @@ export async function revertPageAdmin(pageId) {
   });
   const updated = await ref.get();
   return { id: updated.id, ...updated.data() };
+}
+
+export async function publishAllPagesAdmin() {
+  const allPages = await listPagesAdmin();
+  const published = [];
+
+  for (const page of allPages) {
+    const result = await publishPageAdmin(page.id);
+    published.push(result.id);
+  }
+
+  return { published, count: published.length };
 }

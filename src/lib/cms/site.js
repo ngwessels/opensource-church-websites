@@ -6,6 +6,8 @@ import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { mergeFooterConfig } from "@/lib/site/footer-styles";
 import { mergeHeaderConfig } from "@/lib/site/header-styles";
 import { mergeSocialMedia } from "@/lib/site/social-media";
+import { getThemeById, THEMES } from "@/lib/design/themes";
+import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 import { MODULE_CATEGORIES } from "@/types/firestore";
 
 function getDb() {
@@ -110,6 +112,40 @@ export async function updateMassTimesAdmin(massTimes) {
   return updateSiteConfigAdmin({ massTimes });
 }
 
+export function listDesignThemes() {
+  return {
+    themes: THEMES.map((t) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      colors: t.colors,
+      fonts: t.fonts,
+      structure: t.structure,
+      meta: t.meta,
+    })),
+  };
+}
+
+/**
+ * @param {{ themeId: string, colors?: object, fonts?: object, structure?: object }} input
+ */
+export async function applyDesignThemeAdmin({ themeId, colors, fonts, structure }) {
+  const theme = getThemeById(themeId);
+  const design = {
+    themeId: theme.id,
+    colors: { ...theme.colors, ...(colors || {}) },
+    fonts: { ...theme.fonts, ...(fonts || {}) },
+    layout: { ...theme.layout },
+    structure: { ...theme.structure, ...(structure || {}) },
+    tokens: {
+      typography: { ...theme.tokens.typography },
+      spacing: { ...theme.tokens.spacing },
+      shape: { ...theme.tokens.shape },
+    },
+  };
+  return updateSiteDesignAdmin(design);
+}
+
 export function getBuilderCapabilities() {
   return {
     moduleTypes: Object.values(MODULE_CATEGORIES).flat(),
@@ -146,14 +182,141 @@ export function getBuilderCapabilities() {
       "Slideshow and feature_tiles modules must be placed in the features region",
       "Only slideshow or feature_tiles modules can be placed in the features region",
       "Each region has a max module count",
+      "Single-column mobile/tablet module order uses contentStackOrderByViewport on update_page",
     ],
+    pageTypes: {
+      content: "Standard content page (default)",
+      bulletins: "Bulletin archive page — pair with create_bulletin after upload_media",
+      donation: "Online giving page — set donationConfig on update_page",
+    },
+    updatePageFields: [
+      "pageType",
+      "heroSlideshowEnabled",
+      "donationConfig",
+      "title",
+      "slug",
+      "layout",
+      "hidden",
+      "seo",
+      "regions",
+      "contentColumns",
+      "contentColumnsByViewport",
+      "contentStackOrderByViewport",
+      "contentMarginX",
+      "contentMarginXByViewport",
+      "maxModulesPerRegion",
+    ],
+    navNodeSchema: {
+      id: "string",
+      type: "page | secure_page | link | group",
+      title: "string",
+      slug: "string? (page segments, empty for home)",
+      externalUrl: "string? (link nodes)",
+      parentId: "string|null",
+      order: "number",
+      pageId: "string? (page nodes)",
+      isQuickLink: "boolean?",
+      quickLinkOrder: "number?",
+      hideInNav: "boolean?",
+    },
+    navTools: ["list_nav_nodes", "get_nav_tree", "save_sitemap", "add_nav_page", "delete_nav_node"],
+    mediaFolders: {
+      pictures: DEFAULT_MEDIA_FOLDERS.pictures,
+      documents: DEFAULT_MEDIA_FOLDERS.documents,
+      unused: DEFAULT_MEDIA_FOLDERS.unused,
+    },
+    mediaUpload: {
+      tools: ["upload_media", "upload_media_batch"],
+      limits: {
+        base64MaxMb: 3,
+        sourceUrlMaxMb: 10,
+      },
+      workflow:
+        "Upload images to pictures-root, PDFs to documents-root. Use returned downloadUrl in module configs (slideshow src, gallery images, image src, logoUrl, people photoUrl, documents url).",
+    },
+    designTools: ["list_design_themes", "apply_design_theme", "update_site_design"],
+    batchTools: ["add_modules_batch", "upload_media_batch", "publish_all_pages"],
+    playbooks: {
+      fullParishSiteRedesign: [
+        "get_site_summary + list_pages + get_nav_tree",
+        "list_design_themes → apply_design_theme",
+        "update_site_settings (name, tagline, social, SEO)",
+        "update_header_config + update_footer_config + update_mass_times",
+        "add_nav_page for each section (About, Mass Times, Contact, Ministries, Give, Bulletins)",
+        "Per page: upload_media_batch → add_modules_batch → update_module for fine-tuning",
+        "publish_all_pages",
+      ],
+      homepageFromScratch: [
+        "update_page (home): layout, heroSlideshowEnabled: true, contentColumnsByViewport",
+        "upload_media_batch for hero images",
+        "add_modules_batch: slideshow in features, text/buttons in content, mass_times in sidebar",
+        "update_module to set slide src to downloadUrl values",
+        "publish_page",
+      ],
+      bulletinPosting: [
+        "Ensure page with pageType bulletins exists",
+        "upload_media folderId=documents-root (PDF)",
+        "create_bulletin with mediaId + downloadUrl",
+        "publish_page if page content changed",
+      ],
+    },
     moduleConfigSchemas: {
+      text: {
+        title: "string?",
+        html: "string (HTML content)",
+      },
       links: {
         title: "string",
         items: [{ label: "string", href: "string" }],
       },
       buttons: {
         items: [{ label: "string", href: "string" }],
+      },
+      image: {
+        title: "string",
+        src: "string (downloadUrl from upload_media)",
+        alt: "string",
+        caption: "string?",
+        size: "small | medium | large | full",
+      },
+      gallery: {
+        title: "string",
+        images: [{ src: "string", alt: "string?", caption: "string?" }],
+      },
+      carousel: {
+        title: "string",
+        slides: [{ src: "string", alt: "string?", caption: "string?" }],
+      },
+      video: {
+        title: "string",
+        source: "youtube | vimeo | upload",
+        url: "string?",
+        embedUrl: "string?",
+        src: "string?",
+      },
+      zoom: {
+        title: "string",
+        meetingId: "string",
+        password: "string?",
+        joinUrl: "string?",
+        instructions: "string?",
+        schedule: [{ id: "string", day: "string", time: "string" }],
+      },
+      calendar: {
+        title: "string",
+        source: "manual | google",
+        events: [{ id: "string", title: "string", date: "string", time: "string?", location: "string?", description: "string?" }],
+        maxEvents: "number",
+        previewCount: "number",
+        googleCalendarId: "string? (when source=google)",
+      },
+      mass_times: {
+        title: "string",
+        useSiteDefaults: "boolean (true = use site/config.massTimes)",
+      },
+      daily_readings: {
+        title: "string",
+        showUsccbLink: "boolean",
       },
       documents: {
         title: "string",
@@ -227,6 +390,43 @@ export function getBuilderCapabilities() {
           "publish_page",
           "Public submissions POST to /api/forms/submit with formId",
         ],
+      },
+      embed: {
+        title: "string",
+        embedUrl: "string?",
+        html: "string?",
+        height: "number",
+      },
+      facebook: {
+        title: "string",
+        pageUrl: "string?",
+        embedUrl: "string?",
+        width: "number",
+        height: "number",
+      },
+      google_maps: {
+        title: "string",
+        embedUrl: "string (Google Maps embed URL)",
+        height: "number",
+      },
+      instagram: {
+        title: "string",
+        postUrl: "string?",
+        embedUrl: "string?",
+        height: "number?",
+      },
+      rss: {
+        title: "string",
+        feedUrl: "string",
+        maxItems: "number",
+      },
+      donationConfig: {
+        title: "string",
+        description: "string",
+        funds: [{ id: "string", label: "string", description: "string?" }],
+        presetAmountsCents: ["number (cents, e.g. 2500 = $25)"],
+        comments: { enabled: "boolean", label: "string", placeholder: "string?" },
+        tools: ["update_page with pageType donation"],
       },
     },
     designStructure: {

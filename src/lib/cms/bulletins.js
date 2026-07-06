@@ -3,6 +3,7 @@ import "server-only";
 import { revalidatePublicBulletins } from "@/lib/cache/revalidate-public";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
+import { listBulletinsServer } from "@/lib/firestore/server";
 
 function getDb() {
   const db = getFirebaseAdminFirestore();
@@ -16,6 +17,10 @@ function now() {
 
 function generateBulletinId() {
   return `bulletin_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export async function listBulletinsAdmin() {
+  return listBulletinsServer();
 }
 
 /**

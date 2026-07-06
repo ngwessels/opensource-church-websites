@@ -4,7 +4,15 @@ import { revalidatePublicSite } from "@/lib/cache/revalidate-public";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { serializeNavNode } from "@/lib/firestore/serialize";
-import { buildNavTree, ensureHomeNavInList, flattenNavTree, isHomeNode, syncPageSlugs } from "@/lib/sitemap/tree";
+import {
+  buildNavPageNode,
+  buildNavTree,
+  collectDescendantNodeIds,
+  ensureHomeNavInList,
+  flattenNavTree,
+  isHomeNode,
+  syncPageSlugs,
+} from "@/lib/sitemap/tree";
 
 function getDb() {
   const db = getFirebaseAdminFirestore();
@@ -99,4 +107,52 @@ export async function saveSitemapFromTreeAdmin(tree) {
     existing.map((n) => n.id),
     existing.map((n) => n.pageId),
   );
+}
+
+/**
+ * @param {{ title: string, slug?: string, parentId?: string|null, type?: string, isQuickLink?: boolean }} input
+ */
+export async function addNavPageAdmin(input) {
+  const title = input.title?.trim();
+  if (!title) throw new Error("title is required");
+
+  const existing = await listNavNodesAdmin();
+  const node = buildNavPageNode({
+    title,
+    slug: input.slug?.trim(),
+    parentId: input.parentId ?? null,
+    type: input.type ?? "page",
+    isQuickLink: input.isQuickLink ?? false,
+    existingNodes: existing,
+  });
+
+  const nodes = [...existing, node];
+  await saveSitemapAdmin(
+    nodes,
+    existing.map((n) => n.id),
+    existing.map((n) => n.pageId),
+  );
+
+  return { navNode: node, pageId: node.pageId };
+}
+
+export async function deleteNavNodeAdmin(nodeId) {
+  const id = nodeId?.trim();
+  if (!id) throw new Error("nodeId is required");
+
+  const existing = await listNavNodesAdmin();
+  if (!existing.some((n) => n.id === id)) {
+    throw new Error("Nav node not found");
+  }
+
+  const toRemove = collectDescendantNodeIds(existing, id);
+  const nodes = existing.filter((n) => !toRemove.has(n.id));
+
+  await saveSitemapAdmin(
+    nodes,
+    existing.map((n) => n.id),
+    existing.map((n) => n.pageId),
+  );
+
+  return { deleted: [...toRemove] };
 }

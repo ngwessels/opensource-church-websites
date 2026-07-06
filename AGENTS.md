@@ -17,35 +17,50 @@ Prefer lighter verification instead:
 
 ## MCP (`parish-site`)
 
-When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools to manage the live church site (same capabilities as the builder UI). Tool definitions live in `src/lib/mcp/server.js`; implementation is in `src/lib/cms/*`.
+When the `parish-site` server is enabled in `~/.cursor/mcp.json`, use its tools to manage the live church site (same content capabilities as the builder UI). Tool definitions live in `src/lib/mcp/server.js`; implementation is in `src/lib/cms/*`.
+
+Call `get_site_summary` or `get_builder_capabilities` first when exploring an unfamiliar site. The capabilities response includes design playbooks, module schemas, and media folder IDs.
 
 **Pages & modules**
 
-- `list_pages`, `get_page`, `update_page` — page metadata, layout, regions, SEO
-- `add_module`, `update_module`, `move_module`, `remove_module` — content modules (`text`, `links`, `buttons`, `image`, `gallery`, `slideshow`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `form`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`)
-- `publish_page`, `revert_page` — draft/publish workflow
+- `list_pages`, `get_page`, `update_page` — page metadata, layout, regions, SEO, `pageType`, `heroSlideshowEnabled`, `donationConfig`
+- `add_module`, `add_modules_batch`, `update_module`, `move_module`, `remove_module` — content modules
+- `publish_page`, `publish_all_pages`, `revert_page` — draft/publish workflow
 
 **Navigation / sitemap**
 
-- `list_nav_nodes`, `get_nav_tree`, `save_sitemap` — flat or hierarchical nav; save full sitemap
+- `list_nav_nodes`, `get_nav_tree`, `save_sitemap` — full sitemap read/write
+- `add_nav_page`, `delete_nav_node` — add or remove a single page without rebuilding the full tree
 
 **Site settings & design**
 
-- `get_site_config`, `update_site_settings` — name, tagline, canonical domain, social media
-- `update_site_design` — theme, colors, fonts, layout
-- `get_header_config`, `update_header_config`, `update_header_styles` — header layout, logo, tagline, colors, fonts
-- `update_footer_config`, `update_mass_times` — footer and mass times schedule
+- `get_site_config`, `update_site_settings` — name, tagline, canonical domain, social media, SEO
+- `list_design_themes`, `apply_design_theme`, `update_site_design` — theme gallery and design
+- `get_header_config`, `update_header_config`, `update_header_styles` — header layout, logo, colors, fonts
+- `get_footer_config`, `update_footer_config` — footer columns and styles
+- `update_mass_times` — mass times schedule
 
 **Media library**
 
-- `list_media`, `get_media`, `list_media_folders` — browse files with description, alt, tags
-- `upload_media` — base64 or `sourceUrl` (max ~3MB); optional description, alt, tags
+- `list_media`, `get_media`, `list_media_folders` — browse files
+- `upload_media`, `upload_media_batch` — base64 (≤3 MB each) or `sourceUrl` (≤10 MB each)
 - `update_media`, `delete_media` — metadata and removal
+
+Folders: `pictures-root` (images), `documents-root` (PDFs), `unused-pictures` (staging). Use returned `downloadUrl` in module configs.
+
+**Bulletins**
+
+- `list_bulletins`, `create_bulletin`, `delete_bulletin`
+- Workflow: set page `pageType: "bulletins"` → `upload_media` (documents-root) → `create_bulletin` → `publish_page` if needed
 
 **Discovery**
 
-- `get_builder_capabilities` — module types, layouts, region rules, and `moduleConfigSchemas`
+- `get_builder_capabilities` — module types, layouts, region rules, `moduleConfigSchemas`, design playbooks
 - `get_site_summary` — quick overview of pages, nav, and design
+
+**Module types**
+
+`text`, `links`, `buttons`, `image`, `gallery`, `photo_albums`, `slideshow`, `feature_tiles`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `form`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`
 
 **Buttons module**
 
@@ -60,17 +75,17 @@ Config shape: `{ title, items: [{ label, url }] }`. Items use `url` (not `href`)
 3. `update_module` with `config: { title, items: [{ label, url: downloadUrl }] }`
 4. `publish_page`
 
-External URLs can be used directly in `url` without uploading. Call `get_builder_capabilities` for full schema details.
-
 **Slideshow module (hero)**
 
 Config shape: `{ slides: [{ src, alt, caption, title, subtitle, ctaLabel, ctaHref, objectPositionByViewport }] }`.
+
+Place in the `features` region. Set `src` to `downloadUrl` from `upload_media`.
 
 Per-slide `objectPositionByViewport` controls image crop on different screen sizes: `{ mobile, tablet, desktop }` each set to a 9-point preset (`top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`). Unset viewports fall back: tablet → mobile, desktop → tablet → mobile (default `center`).
 
 **Social media (global)**
 
-Config shape on `site/config`: `{ showInHeader, showInFooter, items: [{ platform, url }] }`. Platforms: `facebook`, `instagram`, `youtube`, `x`. Icon links appear in the site header and footer when URLs are set. Use `update_site_settings` with a `socialMedia` object, or edit in the builder Header Settings sheet / Admin Settings tab.
+Config shape on `site/config`: `{ showInHeader, showInFooter, items: [{ platform, url }] }`. Platforms: `facebook`, `instagram`, `youtube`, `x`. Use `update_site_settings` with a `socialMedia` object.
 
 **Forms module**
 
@@ -81,8 +96,22 @@ Field types: `heading`, `paragraph`, `text`, `email`, `phone`, `textarea`, `sele
 1. `add_module` with `type: "form"`
 2. `update_module` with fields and `notificationEmails` (Mailgun recipients)
 3. `publish_page` — public submissions go to `POST /api/forms/submit` with `formId`
-4. View responses in the builder module editor (Responses tab) or via Firestore `formSubmissions` collection (admin read)
 
 Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notifications.
 
-Prefer MCP tools when the user wants site content or design changed from Cursor. Call `get_site_summary` or `get_builder_capabilities` first when unsure of current structure.
+**Donation pages**
+
+1. `add_nav_page` or use existing page
+2. `update_page` with `pageType: "donation"` and optional `donationConfig` (`title`, `description`, `funds`, `presetAmountsCents`, `comments`)
+3. `publish_page`
+
+**Full-site design playbook**
+
+1. `get_site_summary` + `list_pages` + `get_nav_tree`
+2. `list_design_themes` → `apply_design_theme` (optional color/font overrides)
+3. `update_site_settings`, `update_header_config`, `update_footer_config`, `update_mass_times`
+4. `add_nav_page` for each section
+5. Per page: `upload_media_batch` → `add_modules_batch` → `update_module` for fine-tuning
+6. `publish_all_pages`
+
+Prefer MCP tools when the user wants site content or design changed from Cursor.

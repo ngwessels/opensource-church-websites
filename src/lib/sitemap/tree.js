@@ -98,6 +98,59 @@ export function isDescendant(nodes, ancestorId, nodeId) {
   return false;
 }
 
+/** Collect node id and all descendant ids (matches sitemap editor delete). */
+export function collectDescendantNodeIds(nodes, rootId) {
+  const toRemove = new Set([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of nodes) {
+      if (n.parentId && toRemove.has(n.parentId) && !toRemove.has(n.id)) {
+        toRemove.add(n.id);
+        changed = true;
+      }
+    }
+  }
+  return toRemove;
+}
+
+/**
+ * Build a new nav page node appended after existing siblings.
+ * @param {object} params
+ * @param {string} params.title
+ * @param {string} [params.slug]
+ * @param {string|null} [params.parentId]
+ * @param {import('@/types/firestore').NavNodeType} [params.type]
+ * @param {boolean} [params.isQuickLink]
+ * @param {object[]} params.existingNodes
+ * @param {string} [params.navId]
+ * @param {string} [params.pageId]
+ */
+export function buildNavPageNode({
+  title,
+  slug,
+  parentId = null,
+  type = "page",
+  isQuickLink = false,
+  existingNodes,
+  navId,
+  pageId,
+}) {
+  const siblings = getSiblings(existingNodes, parentId);
+  const order =
+    siblings.length > 0 ? Math.max(...siblings.map((s) => s.order ?? 0)) + 1 : 0;
+  return {
+    id: navId ?? generateId(),
+    type,
+    title,
+    slug: slug ?? slugify(title),
+    parentId,
+    order,
+    isQuickLink,
+    pageId: pageId ?? generatePageId(),
+  };
+}
+
 /**
  * @param {object[]} nodes
  * @param {string|null} activeId - null when creating from palette
