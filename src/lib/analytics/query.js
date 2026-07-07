@@ -34,7 +34,6 @@ export async function getSiteAnalyticsReport(query) {
     .where("date", ">=", dateFrom)
     .where("date", "<=", dateTo)
     .orderBy("date")
-    .orderBy("timestamp")
     .get();
 
   const events = snap.docs.map((doc) => /** @type {AnalyticsEventRecord} */ (doc.data()));
