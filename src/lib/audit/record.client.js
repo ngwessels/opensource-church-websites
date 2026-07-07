@@ -1,12 +1,3 @@
-import { doc } from "firebase/firestore";
-
-import {
-  AUDIT_SNAPSHOTS_SUBCOLLECTION,
-  COLLECTIONS,
-} from "@/lib/firestore/paths";
-
-import { buildAuditWrites } from "./build-writes.js";
-
 /**
  * @typedef {import('./schema.js').AuditAction} AuditAction
  * @typedef {import('./schema.js').AuditActor} AuditActor
@@ -15,8 +6,8 @@ import { buildAuditWrites } from "./build-writes.js";
  */
 
 /**
- * @param {import('firebase/firestore').WriteBatch} batch
- * @param {import('firebase/firestore').Firestore} db
+ * Record an audit event via the server API (avoids client Firestore rules on auditEvents).
+ *
  * @param {object} input
  * @param {AuditAction} input.action
  * @param {AuditActor} input.actor
@@ -25,52 +16,49 @@ import { buildAuditWrites } from "./build-writes.js";
  * @param {AuditContext} [input.context]
  * @param {unknown} [input.before]
  * @param {unknown} [input.after]
- * @returns {string}
+ * @param {() => Promise<string | undefined>} [input.getIdToken]
+ * @returns {Promise<string | null>}
  */
-export function appendAuditEventToClientBatch(batch, db, input) {
-  const { eventId, writes } = buildAuditWrites({
-    action: input.action,
-    actor: input.actor,
-    source: "ui",
-    resource: input.resource,
-    summary: input.summary,
-    context: input.context,
-    before: input.before,
-    after: input.after,
-  });
-
-  for (const write of writes) {
-    const segments = write.refPath.split("/");
-    if (segments.length === 2) {
-      batch.set(doc(db, segments[0], segments[1]), write.data);
-      continue;
+export async function recordAuditEventViaApi(input) {
+  try {
+    let token;
+    if (input.getIdToken) {
+      token = await input.getIdToken();
+    } else {
+      const { getAuth } = await import("firebase/auth");
+      token = await getAuth().currentUser?.getIdToken();
+    }
+    if (!token) {
+      console.warn("[audit] skipped UI event without auth token", { summary: input.summary });
+      return null;
     }
 
-    if (segments.length === 4 && segments[2] === AUDIT_SNAPSHOTS_SUBCOLLECTION) {
-      const eventRef = doc(db, segments[0], segments[1]);
-      batch.set(doc(eventRef, AUDIT_SNAPSHOTS_SUBCOLLECTION, segments[3]), write.data);
+    const res = await fetch("/api/admin/audit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        action: input.action,
+        resource: input.resource,
+        summary: input.summary,
+        context: input.context,
+        before: input.before,
+        after: input.after,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn("[audit] API record failed", data.error || res.statusText);
+      return null;
     }
+
+    const data = await res.json();
+    return data.eventId ?? null;
+  } catch (err) {
+    console.warn("[audit] API record error", err);
+    return null;
   }
-
-  return eventId;
-}
-
-/**
- * @param {import('firebase/firestore').Firestore} db
- * @param {object} input
- * @param {AuditAction} input.action
- * @param {AuditActor} input.actor
- * @param {AuditResource} input.resource
- * @param {string} input.summary
- * @param {AuditContext} [input.context]
- * @param {unknown} [input.before]
- * @param {unknown} [input.after]
- * @returns {Promise<string>}
- */
-export async function recordAuditEventClient(input) {
-  const { writeBatch } = await import("firebase/firestore");
-  const batch = writeBatch(db);
-  const eventId = appendAuditEventToClientBatch(batch, db, input);
-  await batch.commit();
-  return eventId;
 }

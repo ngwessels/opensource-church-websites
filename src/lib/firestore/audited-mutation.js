@@ -1,6 +1,6 @@
-import { doc, getDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
-import { appendAuditEventToClientBatch } from "@/lib/audit/record.client";
+import { recordAuditEventViaApi } from "@/lib/audit/record.client";
 
 /**
  * @typedef {import('@/lib/audit/schema.js').AuditAction} AuditAction
@@ -18,7 +18,26 @@ import { appendAuditEventToClientBatch } from "@/lib/audit/record.client";
  * @property {AuditContext} [context]
  * @property {unknown} [before]
  * @property {unknown} [after]
+ * @property {() => Promise<string | undefined>} [getIdToken]
  */
+
+/**
+ * @param {AuditMeta} audit
+ * @param {unknown} before
+ * @param {unknown} after
+ */
+async function recordAudit(audit, before, after) {
+  await recordAuditEventViaApi({
+    action: audit.action,
+    actor: audit.actor,
+    resource: audit.resource,
+    summary: audit.summary,
+    context: audit.context,
+    before: before ?? undefined,
+    after: after ?? undefined,
+    getIdToken: audit.getIdToken,
+  });
+}
 
 /**
  * @param {import('firebase/firestore').DocumentReference} ref
@@ -30,18 +49,8 @@ export async function auditedUpdateDoc(ref, patch, audit) {
   const before = audit.before ?? (snap.exists() ? { id: snap.id, ...snap.data() } : null);
   const after = audit.after ?? (before ? { ...before, ...patch } : { id: snap.id, ...patch });
 
-  const batch = writeBatch(ref.firestore);
-  batch.update(ref, patch);
-  appendAuditEventToClientBatch(batch, ref.firestore, {
-    action: audit.action,
-    actor: audit.actor,
-    resource: audit.resource,
-    summary: audit.summary,
-    context: audit.context,
-    before,
-    after,
-  });
-  await batch.commit();
+  await updateDoc(ref, patch);
+  await recordAudit(audit, before, after);
 }
 
 /**
@@ -54,18 +63,8 @@ export async function auditedSetDoc(ref, data, audit) {
   const before = audit.before ?? (snap.exists() ? { id: snap.id, ...snap.data() } : null);
   const after = audit.after ?? { id: ref.id, ...data };
 
-  const batch = writeBatch(ref.firestore);
-  batch.set(ref, data);
-  appendAuditEventToClientBatch(batch, ref.firestore, {
-    action: audit.action,
-    actor: audit.actor,
-    resource: audit.resource,
-    summary: audit.summary,
-    context: audit.context,
-    before: before ?? undefined,
-    after,
-  });
-  await batch.commit();
+  await setDoc(ref, data);
+  await recordAudit(audit, before, after);
 }
 
 /**
@@ -76,22 +75,12 @@ export async function auditedDeleteDoc(ref, audit) {
   const snap = await getDoc(ref);
   const before = audit.before ?? (snap.exists() ? { id: snap.id, ...snap.data() } : null);
 
-  const batch = writeBatch(ref.firestore);
-  batch.delete(ref);
-  appendAuditEventToClientBatch(batch, ref.firestore, {
-    action: audit.action,
-    actor: audit.actor,
-    resource: audit.resource,
-    summary: audit.summary,
-    context: audit.context,
-    before: before ?? undefined,
-    after: audit.after,
-  });
-  await batch.commit();
+  await deleteDoc(ref);
+  await recordAudit(audit, before, audit.after);
 }
 
 /**
- * Run a custom write batch and append a single audit event.
+ * Run a custom write batch, then record a single audit event via API.
  *
  * @param {import('firebase/firestore').Firestore} db
  * @param {(batch: import('firebase/firestore').WriteBatch) => void | Promise<void>} applyWrites
@@ -100,21 +89,13 @@ export async function auditedDeleteDoc(ref, audit) {
 export async function auditedWriteBatch(db, applyWrites, audit) {
   const batch = writeBatch(db);
   await applyWrites(batch);
-  appendAuditEventToClientBatch(batch, db, {
-    action: audit.action,
-    actor: audit.actor,
-    resource: audit.resource,
-    summary: audit.summary,
-    context: audit.context,
-    before: audit.before,
-    after: audit.after,
-  });
   await batch.commit();
+  await recordAudit(audit, audit.before, audit.after);
 }
 
 /**
  * @param {import('@/hooks/useAuth').AuthUser | null | undefined} user
- * @param {{ role?: import('@/types/firestore').UserRole, displayName?: string } | null | undefined} profile
+ * @param {{ role?: import('@/types/firestore').UserRole, displayName?: string, email?: string } | null | undefined} profile
  * @returns {AuditActor | null}
  */
 export function buildClientAuditActor(user, profile) {

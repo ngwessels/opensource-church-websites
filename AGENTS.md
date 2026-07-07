@@ -63,7 +63,7 @@ Folders: `pictures-root` (images), `documents-root` (PDFs), `unused-pictures` (s
 
 - Immutable `auditEvents` collection records admin create/update/delete/publish actions with actor (`uid`, `email`, `role`), timestamp, source (`ui` | `mcp` | `api`), resource, optional builder context, and full before/after snapshots in `auditEvents/{id}/snapshots/{before|after}`.
 - Browse in the builder under **Admin → Audit Log**, or via `GET /api/admin/audit` and `GET /api/admin/audit/{eventId}`.
-- Server mutations log through `src/lib/audit/record.server.js` (`lib/cms/*`, API routes). Builder UI logs through `src/lib/firestore/audited-mutation.js`.
+- Server mutations log through `src/lib/audit/record.server.js` (`lib/cms/*`, API routes). Builder UI logs through `POST /api/admin/audit` after each Firestore write (no client write to `auditEvents`).
 
 **Discovery**
 
