@@ -3,7 +3,7 @@ import {
   COLLECTIONS,
 } from "../firestore/paths.js";
 
-import { buildAuditEventRecord, prepareSnapshotPayload } from "./schema.js";
+import { buildAuditEventRecord, buildSnapshotDocument, prepareSnapshotPayload, stripUndefinedForFirestore } from "./schema.js";
 
 /**
  * @param {object} input
@@ -35,13 +35,18 @@ export function buildAuditWrites(input) {
   });
 
   /** @type {Array<{ refPath: string, data: unknown }>} */
-  const writes = [{ refPath: `${COLLECTIONS.auditEvents}/${eventId}`, data: event }];
+  const writes = [
+    {
+      refPath: `${COLLECTIONS.auditEvents}/${eventId}`,
+      data: stripUndefinedForFirestore(event),
+    },
+  ];
 
   if (hasBeforeSnapshot) {
     const prepared = prepareSnapshotPayload(input.before);
     writes.push({
       refPath: `${COLLECTIONS.auditEvents}/${eventId}/${AUDIT_SNAPSHOTS_SUBCOLLECTION}/before`,
-      data: { data: prepared.data, truncated: prepared.truncated, originalSizeBytes: prepared.originalSizeBytes },
+      data: buildSnapshotDocument(prepared),
     });
   }
 
@@ -49,7 +54,7 @@ export function buildAuditWrites(input) {
     const prepared = prepareSnapshotPayload(input.after);
     writes.push({
       refPath: `${COLLECTIONS.auditEvents}/${eventId}/${AUDIT_SNAPSHOTS_SUBCOLLECTION}/after`,
-      data: { data: prepared.data, truncated: prepared.truncated, originalSizeBytes: prepared.originalSizeBytes },
+      data: buildSnapshotDocument(prepared),
     });
   }
 

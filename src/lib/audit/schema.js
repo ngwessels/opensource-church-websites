@@ -116,6 +116,48 @@ export function prepareSnapshotPayload(data) {
 }
 
 /**
+ * Recursively remove undefined values — Firestore rejects undefined fields.
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+export function stripUndefinedForFirestore(value) {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      const next = stripUndefinedForFirestore(item);
+      return next === undefined ? null : next;
+    });
+  }
+
+  /** @type {Record<string, unknown>} */
+  const result = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined) continue;
+    const next = stripUndefinedForFirestore(entry);
+    if (next !== undefined) {
+      result[key] = next;
+    }
+  }
+  return result;
+}
+
+/**
+ * @param {{ data: unknown, truncated: boolean, originalSizeBytes?: number }} prepared
+ */
+export function buildSnapshotDocument(prepared) {
+  /** @type {Record<string, unknown>} */
+  const doc = {
+    data: stripUndefinedForFirestore(prepared.data),
+    truncated: prepared.truncated,
+  };
+  if (prepared.originalSizeBytes !== undefined) {
+    doc.originalSizeBytes = prepared.originalSizeBytes;
+  }
+  return doc;
+}
+
+/**
  * @param {unknown} action
  * @returns {AuditAction}
  */

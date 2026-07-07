@@ -20,6 +20,9 @@ describe("buildAuditWrites", () => {
     assert.equal(event.hasBeforeSnapshot, true);
     assert.equal(event.hasAfterSnapshot, true);
     assert.equal(writes.length, 3);
+    const beforeWrite = writes.find((write) => write.refPath.endsWith("/snapshots/before"));
+    assert.ok(beforeWrite);
+    assert.equal("originalSizeBytes" in /** @type {Record<string, unknown>} */ (beforeWrite.data), false);
     assert.ok(writes.some((write) => write.refPath.endsWith("/snapshots/before")));
     assert.ok(writes.some((write) => write.refPath.endsWith("/snapshots/after")));
   });

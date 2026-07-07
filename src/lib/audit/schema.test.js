@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import {
   AUDIT_SNAPSHOT_MAX_BYTES,
   buildAuditEventRecord,
+  buildSnapshotDocument,
   normalizeAuditAction,
   prepareSnapshotPayload,
+  stripUndefinedForFirestore,
 } from "./schema.js";
 
 describe("prepareSnapshotPayload", () => {
@@ -50,5 +52,33 @@ describe("buildAuditEventRecord", () => {
 
   it("defaults unknown actions to update", () => {
     assert.equal(normalizeAuditAction("bogus"), "update");
+  });
+});
+
+describe("stripUndefinedForFirestore", () => {
+  it("removes undefined fields from objects", () => {
+    const result = stripUndefinedForFirestore({
+      kept: "yes",
+      dropped: undefined,
+      nested: { a: 1, b: undefined },
+    });
+    assert.deepEqual(result, { kept: "yes", nested: { a: 1 } });
+  });
+});
+
+describe("buildSnapshotDocument", () => {
+  it("omits originalSizeBytes when snapshot is not truncated", () => {
+    const doc = buildSnapshotDocument({ data: { title: "About" }, truncated: false });
+    assert.equal("originalSizeBytes" in doc, false);
+    assert.equal(doc.truncated, false);
+  });
+
+  it("includes originalSizeBytes when truncated", () => {
+    const doc = buildSnapshotDocument({
+      data: { preview: "x" },
+      truncated: true,
+      originalSizeBytes: 1_000_000,
+    });
+    assert.equal(doc.originalSizeBytes, 1_000_000);
   });
 });
