@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { donorFromStripeSession } from "@/lib/donations/schema";
+import {
+  persistDonationFromCheckoutSession,
+  persistDonationFromInvoice,
+} from "@/lib/donations/stripe-webhook";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getStripe } from "@/lib/stripe/server";
 
@@ -31,44 +34,23 @@ export async function POST(request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
+  const db = getFirebaseAdminFirestore();
+
+  if (!db) {
+    console.warn("[stripe/webhook] Firebase Admin not configured — donation not persisted.", event.type);
+    return NextResponse.json({ received: true, persisted: false });
+  }
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const db = getFirebaseAdminFirestore();
-
-    if (!db) {
-      console.warn("[stripe/webhook] Firebase Admin not configured — donation not persisted.", session.id);
-      return NextResponse.json({ received: true, persisted: false });
-    }
-
-    const frequency = session.metadata?.frequency ?? "once";
-    const amountCents = session.amount_total ?? 0;
-    const fundId = session.metadata?.fundId;
-    const fundLabel = session.metadata?.fundLabel;
-    const returnPath = session.metadata?.returnPath;
-    const donorComment = session.metadata?.donorComment?.trim();
-
-    const donor = donorFromStripeSession(
-      session.customer_details,
-      session.customer_email ?? undefined,
-    );
-
-    await db.collection("donations").doc(session.id).set({
-      amountCents,
-      currency: session.currency ?? "usd",
-      frequency,
-      status: "completed",
-      stripeSessionId: session.id,
-      stripeCustomerId: typeof session.customer === "string" ? session.customer : undefined,
-      ...(donor ? { donor } : {}),
-      donorEmail: donor?.email ?? session.customer_details?.email ?? session.customer_email ?? undefined,
-      ...(fundId ? { fundId } : {}),
-      ...(fundLabel ? { fundLabel } : {}),
-      ...(returnPath ? { returnPath } : {}),
-      ...(donorComment ? { donorComment } : {}),
-      createdAt: new Date().toISOString(),
-    });
-
+    await persistDonationFromCheckoutSession(db, session);
     return NextResponse.json({ received: true, persisted: true });
+  }
+
+  if (event.type === "invoice.paid") {
+    const invoice = event.data.object;
+    const result = await persistDonationFromInvoice(db, stripe, invoice);
+    return NextResponse.json({ received: true, ...result });
   }
 
   return NextResponse.json({ received: true });

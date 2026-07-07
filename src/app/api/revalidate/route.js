@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAdminUserFromRequest } from "@/lib/cms/auth";
+import { getAdminUserFromRequest, getFinanceOrAdminUserFromRequest } from "@/lib/cms/auth";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { revalidateAfterPagePublish, revalidatePublicSite } from "@/lib/cache/revalidate-public";
 
@@ -16,22 +16,27 @@ export async function POST(request) {
       return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
     }
 
-    await getAdminUserFromRequest(request);
-
     const body = await request.json();
     const scope = body?.scope === "site" ? "site" : "page";
     const slug = typeof body?.slug === "string" ? body.slug : "";
 
     if (scope === "site") {
+      await getAdminUserFromRequest(request);
       revalidatePublicSite();
     } else {
+      await getFinanceOrAdminUserFromRequest(request);
       revalidateAfterPagePublish(slug);
     }
 
     return NextResponse.json({ revalidated: true, scope, slug });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Revalidation failed";
-    const status = message === "Missing authorization" || message === "Admin access required" ? 401 : 500;
+    const status =
+      message === "Missing authorization" ||
+      message === "Admin access required" ||
+      message === "Finance or admin access required"
+        ? 401
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

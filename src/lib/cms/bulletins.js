@@ -1,6 +1,7 @@
 import "server-only";
 
 import { revalidatePublicBulletins } from "@/lib/cache/revalidate-public";
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { listBulletinsServer } from "@/lib/firestore/server";
@@ -61,7 +62,16 @@ export async function createBulletinAdmin(input) {
   await db.collection(COLLECTIONS.bulletins).doc(bulletinId).set(record);
   revalidatePublicBulletins();
 
-  return { id: bulletinId, ...record };
+  const created = { id: bulletinId, ...record };
+
+  await recordAuditEvent({
+    action: "create",
+    resource: { type: "bulletin", id: bulletinId },
+    summary: `Created bulletin for ${date}`,
+    after: created,
+  });
+
+  return created;
 }
 
 export async function deleteBulletinAdmin(bulletinId) {
@@ -73,8 +83,16 @@ export async function deleteBulletinAdmin(bulletinId) {
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Bulletin not found.");
 
+  const before = { id: snap.id, ...snap.data() };
   await ref.delete();
   revalidatePublicBulletins();
+
+  await recordAuditEvent({
+    action: "delete",
+    resource: { type: "bulletin", id },
+    summary: `Deleted bulletin ${id}`,
+    before,
+  });
 
   return { deleted: id };
 }

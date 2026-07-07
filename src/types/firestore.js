@@ -1,4 +1,4 @@
-/** @typedef {'admin' | 'member'} UserRole */
+/** @typedef {'admin' | 'finance' | 'member'} UserRole */
 
 /** @typedef {'page' | 'link' | 'group' | 'secure_page'} NavNodeType */
 
@@ -129,7 +129,9 @@
  * @property {string} currency
  * @property {DonationFrequency} frequency
  * @property {DonationStatus} status
- * @property {string} stripeSessionId
+ * @property {string} [stripeSessionId]
+ * @property {string} [stripeInvoiceId]
+ * @property {string} [stripeSubscriptionId]
  * @property {string} [stripeCustomerId]
  * @property {string} [fundId]
  * @property {string} [fundLabel]
@@ -161,6 +163,60 @@
  * @property {DonationFund[]} funds
  * @property {number[]} [presetAmountsCents]
  * @property {DonationCommentsConfig} [comments]
+ */
+
+/**
+ * @typedef {object} AdminDocumentationUpdatedBy
+ * @property {string} [uid]
+ * @property {string} [email]
+ * @property {"ui" | "mcp"} [source]
+ */
+
+/**
+ * @typedef {object} AdminDocumentationNote
+ * @property {string} id
+ * @property {string} title
+ * @property {string} body
+ * @property {number} order
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ * @property {AdminDocumentationUpdatedBy} [updatedBy]
+ */
+
+/**
+ * @typedef {object} AdminDocumentationRecord
+ * @property {AdminDocumentationNote[]} notes
+ * @property {string} updatedAt
+ */
+
+/** @typedef {'page_view' | 'engagement'} AnalyticsEventType */
+
+/**
+ * @typedef {object} AnalyticsEventRecord
+ * @property {AnalyticsEventType} type
+ * @property {string} timestamp
+ * @property {string} date
+ * @property {string} pagePath
+ * @property {string} [pageTitle]
+ * @property {string} [pageId]
+ * @property {PageType} [pageType]
+ * @property {string} sessionId
+ * @property {string} visitorId
+ * @property {boolean} [isNewVisitor]
+ * @property {string} [referrer]
+ * @property {string} [utmSource]
+ * @property {string} [utmMedium]
+ * @property {string} [utmCampaign]
+ * @property {string} [utmTerm]
+ * @property {string} [utmContent]
+ * @property {'mobile' | 'tablet' | 'desktop'} [deviceType]
+ * @property {string} [browser]
+ * @property {string} [os]
+ * @property {string} [language]
+ * @property {string} [country]
+ * @property {number} [screenWidth]
+ * @property {number} [screenHeight]
+ * @property {number} [engagementMs]
  */
 
 /** @typedef {'text' | 'links' | 'image' | 'gallery' | 'photo_albums' | 'slideshow' | 'feature_tiles' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'calendar' | 'documents' | 'people' | 'buttons' | 'form' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */

@@ -1,5 +1,6 @@
-import { doc, writeBatch } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 
+import { auditedWriteBatch } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { serializeNavNode } from "@/lib/firestore/serialize";
 
@@ -12,24 +13,34 @@ function nodeSignature(node) {
  * @param {import('firebase/firestore').Firestore} db
  * @param {object[]} before
  * @param {object[]} after
+ * @param {import('@/lib/firestore/audited-mutation').AuditMeta} [audit]
  */
-export async function persistNavNodeChanges(db, before, after) {
+export async function persistNavNodeChanges(db, before, after, audit) {
+  const applyWrites = (batch) => {
+    const beforeMap = new Map(before.map((node) => [node.id, node]));
+    const afterMap = new Map(after.map((node) => [node.id, node]));
+
+    for (const [id] of beforeMap) {
+      if (!afterMap.has(id)) {
+        batch.delete(doc(db, COLLECTIONS.navNodes, id));
+      }
+    }
+
+    for (const [id, node] of afterMap) {
+      const prev = beforeMap.get(id);
+      if (!prev || nodeSignature(prev) !== nodeSignature(node)) {
+        batch.set(doc(db, COLLECTIONS.navNodes, id), serializeNavNode(node), { merge: true });
+      }
+    }
+  };
+
+  if (audit) {
+    await auditedWriteBatch(db, applyWrites, { ...audit, before, after });
+    return;
+  }
+
+  const { writeBatch } = await import("firebase/firestore");
   const batch = writeBatch(db);
-  const beforeMap = new Map(before.map((node) => [node.id, node]));
-  const afterMap = new Map(after.map((node) => [node.id, node]));
-
-  for (const [id] of beforeMap) {
-    if (!afterMap.has(id)) {
-      batch.delete(doc(db, COLLECTIONS.navNodes, id));
-    }
-  }
-
-  for (const [id, node] of afterMap) {
-    const prev = beforeMap.get(id);
-    if (!prev || nodeSignature(prev) !== nodeSignature(node)) {
-      batch.set(doc(db, COLLECTIONS.navNodes, id), serializeNavNode(node), { merge: true });
-    }
-  }
-
+  applyWrites(batch);
   await batch.commit();
 }

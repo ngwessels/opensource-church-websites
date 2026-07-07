@@ -7,6 +7,8 @@ import * as pages from "@/lib/cms/pages";
 import * as site from "@/lib/cms/site";
 import * as media from "@/lib/cms/media";
 import * as bulletins from "@/lib/cms/bulletins";
+import * as documentation from "@/lib/cms/documentation";
+import { setMcpToolName } from "@/lib/cms/auth";
 import * as search from "@/lib/cms/content-search";
 import { MODULE_TYPES } from "@/lib/modules/registry";
 
@@ -23,8 +25,9 @@ function errorResult(message) {
   };
 }
 
-async function run(fn) {
+async function run(toolName, fn) {
   try {
+    if (toolName) setMcpToolName({ toolName });
     const result = await fn();
     return jsonResult(result);
   } catch (err) {
@@ -193,7 +196,7 @@ export function registerMcpTools(server) {
   server.registerTool(
     "list_pages",
     { description: "List all site pages", inputSchema: {} },
-    async () => run(() => pages.listPagesAdmin()),
+    async () => run("list_pages", () => pages.listPagesAdmin()),
   );
 
   server.registerTool(
@@ -205,7 +208,7 @@ export function registerMcpTools(server) {
         slug: z.string().optional(),
       },
     },
-    async ({ pageId, slug }) => run(() => pages.getPageAdmin({ pageId, slug })),
+    async ({ pageId, slug }) => run("null", () => pages.getPageAdmin({ pageId, slug })),
   );
 
   server.registerTool(
@@ -269,7 +272,7 @@ export function registerMcpTools(server) {
           .describe("Donation page configuration (use with pageType donation)."),
       },
     },
-    async ({ pageId, ...updates }) => run(() => pages.updatePageAdmin(pageId, updates)),
+    async ({ pageId, ...updates }) => run("null", () => pages.updatePageAdmin(pageId, updates)),
   );
 
   server.registerTool(
@@ -283,7 +286,7 @@ export function registerMcpTools(server) {
         insertIndex: z.number().int().min(0).optional(),
       },
     },
-    async (args) => run(() => pages.addModuleAdmin(args.pageId, args)),
+    async (args) => run("null", () => pages.addModuleAdmin(args.pageId, args)),
   );
 
   server.registerTool(
@@ -303,7 +306,7 @@ export function registerMcpTools(server) {
         ),
       },
     },
-    async ({ pageId, modules }) => run(() => pages.addModulesBatchAdmin(pageId, modules)),
+    async ({ pageId, modules }) => run("null", () => pages.addModulesBatchAdmin(pageId, modules)),
   );
 
   server.registerTool(
@@ -318,7 +321,7 @@ export function registerMcpTools(server) {
       },
     },
     async ({ pageId, moduleId, config }) =>
-      run(() => pages.updateModuleAdmin(pageId, moduleId, config)),
+      run("null", () => pages.updateModuleAdmin(pageId, moduleId, config)),
   );
 
   server.registerTool(
@@ -332,7 +335,7 @@ export function registerMcpTools(server) {
         insertIndex: z.number().int().min(0),
       },
     },
-    async (args) => run(() => pages.moveModuleAdmin(args.pageId, args)),
+    async (args) => run("null", () => pages.moveModuleAdmin(args.pageId, args)),
   );
 
   server.registerTool(
@@ -341,7 +344,7 @@ export function registerMcpTools(server) {
       description: "Remove a module from a page",
       inputSchema: { pageId: z.string(), moduleId: z.string() },
     },
-    async ({ pageId, moduleId }) => run(() => pages.removeModuleAdmin(pageId, moduleId)),
+    async ({ pageId, moduleId }) => run("null", () => pages.removeModuleAdmin(pageId, moduleId)),
   );
 
   server.registerTool(
@@ -350,7 +353,7 @@ export function registerMcpTools(server) {
       description: "Publish a page draft to the live site",
       inputSchema: { pageId: z.string() },
     },
-    async ({ pageId }) => run(() => pages.publishPageAdmin(pageId)),
+    async ({ pageId }) => run("null", () => pages.publishPageAdmin(pageId)),
   );
 
   server.registerTool(
@@ -359,7 +362,7 @@ export function registerMcpTools(server) {
       description: "Publish all pages to the live site (use after a site-wide redesign)",
       inputSchema: {},
     },
-    async () => run(() => pages.publishAllPagesAdmin()),
+    async () => run("null", () => pages.publishAllPagesAdmin()),
   );
 
   server.registerTool(
@@ -368,19 +371,19 @@ export function registerMcpTools(server) {
       description: "Revert a page draft to the last published snapshot",
       inputSchema: { pageId: z.string() },
     },
-    async ({ pageId }) => run(() => pages.revertPageAdmin(pageId)),
+    async ({ pageId }) => run("null", () => pages.revertPageAdmin(pageId)),
   );
 
   server.registerTool(
     "list_nav_nodes",
     { description: "List all navigation nodes (flat)", inputSchema: {} },
-    async () => run(() => nav.listNavNodesAdmin()),
+    async () => run("null", () => nav.listNavNodesAdmin()),
   );
 
   server.registerTool(
     "get_nav_tree",
     { description: "Get hierarchical navigation tree", inputSchema: {} },
-    async () => run(() => nav.getNavTreeAdmin()),
+    async () => run("null", () => nav.getNavTreeAdmin()),
   );
 
   server.registerTool(
@@ -393,7 +396,7 @@ export function registerMcpTools(server) {
       },
     },
     async ({ nodes }) =>
-      run(async () => {
+      run("null", async () => {
         const existing = await nav.listNavNodesAdmin();
         return nav.saveSitemapAdmin(
           nodes,
@@ -416,7 +419,7 @@ export function registerMcpTools(server) {
         isQuickLink: z.boolean().optional(),
       },
     },
-    async (args) => run(() => nav.addNavPageAdmin(args)),
+    async (args) => run("null", () => nav.addNavPageAdmin(args)),
   );
 
   server.registerTool(
@@ -426,13 +429,13 @@ export function registerMcpTools(server) {
         "Remove a nav node and all descendants from the sitemap. Does not delete orphaned page records.",
       inputSchema: { nodeId: z.string() },
     },
-    async ({ nodeId }) => run(() => nav.deleteNavNodeAdmin(nodeId)),
+    async ({ nodeId }) => run("null", () => nav.deleteNavNodeAdmin(nodeId)),
   );
 
   server.registerTool(
     "get_site_config",
     { description: "Get site configuration", inputSchema: {} },
-    async () => run(() => site.getSiteConfigAdmin()),
+    async () => run("null", () => site.getSiteConfigAdmin()),
   );
 
   server.registerTool(
@@ -442,7 +445,7 @@ export function registerMcpTools(server) {
         "Update site-wide design theme, colors, and fonts. Merges with existing design. Use update_header_styles for header-specific overrides.",
       inputSchema: { design: siteDesignSchema },
     },
-    async ({ design }) => run(() => site.updateSiteDesignAdmin(design)),
+    async ({ design }) => run("null", () => site.updateSiteDesignAdmin(design)),
   );
 
   server.registerTool(
@@ -452,7 +455,7 @@ export function registerMcpTools(server) {
         "List available design themes (id, name, description, colors, fonts, structure). Use before apply_design_theme.",
       inputSchema: {},
     },
-    async () => run(() => site.listDesignThemes()),
+    async () => run("null", () => site.listDesignThemes()),
   );
 
   server.registerTool(
@@ -467,7 +470,7 @@ export function registerMcpTools(server) {
         structure: siteDesignSchema.shape.structure.optional(),
       },
     },
-    async (args) => run(() => site.applyDesignThemeAdmin(args)),
+    async (args) => run("null", () => site.applyDesignThemeAdmin(args)),
   );
 
   server.registerTool(
@@ -489,7 +492,7 @@ export function registerMcpTools(server) {
         socialMedia: socialMediaSchema.optional(),
       },
     },
-    async (args) => run(() => site.updateSiteSettingsAdmin(args)),
+    async (args) => run("null", () => site.updateSiteSettingsAdmin(args)),
   );
 
   server.registerTool(
@@ -499,7 +502,7 @@ export function registerMcpTools(server) {
         "Update header layout and display options (logo, tagline visibility, layout). Merges with existing headerConfig.",
       inputSchema: { headerConfig: headerConfigSchema },
     },
-    async ({ headerConfig }) => run(() => site.updateHeaderConfigAdmin(headerConfig)),
+    async ({ headerConfig }) => run("null", () => site.updateHeaderConfigAdmin(headerConfig)),
   );
 
   server.registerTool(
@@ -509,7 +512,7 @@ export function registerMcpTools(server) {
         "Update header colors and fonts: title/tagline/nav text colors, header and nav background colors, and font families/sizes. Merges with existing headerConfig.styles.",
       inputSchema: { styles: headerStylesSchema },
     },
-    async ({ styles }) => run(() => site.updateHeaderStylesAdmin(styles)),
+    async ({ styles }) => run("null", () => site.updateHeaderStylesAdmin(styles)),
   );
 
   server.registerTool(
@@ -520,7 +523,7 @@ export function registerMcpTools(server) {
       inputSchema: {},
     },
     async () =>
-      run(async () => {
+      run("null", async () => {
         const config = await site.getSiteConfigAdmin();
         return {
           name: config.name,
@@ -538,7 +541,7 @@ export function registerMcpTools(server) {
       inputSchema: {},
     },
     async () =>
-      run(async () => {
+      run("null", async () => {
         const config = await site.getSiteConfigAdmin();
         return {
           name: config.name,
@@ -555,7 +558,7 @@ export function registerMcpTools(server) {
         "Update footer configuration: copyright text, columns, and styles (footerBackground, headingColor, textColor, linkColor, copyrightColor, fonts, sizes).",
       inputSchema: { footerConfig: z.record(z.unknown()) },
     },
-    async ({ footerConfig }) => run(() => site.updateFooterConfigAdmin(footerConfig)),
+    async ({ footerConfig }) => run("null", () => site.updateFooterConfigAdmin(footerConfig)),
   );
 
   server.registerTool(
@@ -565,7 +568,7 @@ export function registerMcpTools(server) {
         "Update mass times: { weekly: { saturday, sunday, weekday }, holidays: [{ name, date, times, notes }], special: [{ name, date, endDate?, times, notes }], holyDays: string[], adoration: string[], confession: string[] }",
       inputSchema: { massTimes: z.record(z.unknown()) },
     },
-    async ({ massTimes }) => run(() => site.updateMassTimesAdmin(massTimes)),
+    async ({ massTimes }) => run("null", () => site.updateMassTimesAdmin(massTimes)),
   );
 
   server.registerTool(
@@ -575,7 +578,7 @@ export function registerMcpTools(server) {
         "List media files with metadata (name, description, alt, tags, downloadUrl), optionally filtered by folderId",
       inputSchema: { folderId: z.string().optional() },
     },
-    async ({ folderId }) => run(() => media.listMediaAdmin({ folderId })),
+    async ({ folderId }) => run("null", () => media.listMediaAdmin({ folderId })),
   );
 
   server.registerTool(
@@ -584,13 +587,13 @@ export function registerMcpTools(server) {
       description: "Get a single media file by mediaId, including description, alt, and tags",
       inputSchema: { mediaId: z.string() },
     },
-    async ({ mediaId }) => run(() => media.getMediaAdmin(mediaId)),
+    async ({ mediaId }) => run("null", () => media.getMediaAdmin(mediaId)),
   );
 
   server.registerTool(
     "list_media_folders",
     { description: "List media folders", inputSchema: {} },
-    async () => run(() => media.listMediaFoldersAdmin()),
+    async () => run("null", () => media.listMediaFoldersAdmin()),
   );
 
   server.registerTool(
@@ -609,7 +612,7 @@ export function registerMcpTools(server) {
         tags: z.array(z.string()).max(20).optional(),
       },
     },
-    async (args) => run(() => media.uploadMediaAdmin(args)),
+    async (args) => run("null", () => media.uploadMediaAdmin(args)),
   );
 
   server.registerTool(
@@ -621,7 +624,7 @@ export function registerMcpTools(server) {
         files: z.array(mediaUploadFileSchema),
       },
     },
-    async ({ files }) => run(() => media.uploadMediaBatchAdmin({ files })),
+    async ({ files }) => run("null", () => media.uploadMediaBatchAdmin({ files })),
   );
 
   server.registerTool(
@@ -635,7 +638,7 @@ export function registerMcpTools(server) {
         tags: z.array(z.string()).max(20).optional(),
       },
     },
-    async ({ mediaId, ...fields }) => run(() => media.updateMediaAdmin(mediaId, fields)),
+    async ({ mediaId, ...fields }) => run("null", () => media.updateMediaAdmin(mediaId, fields)),
   );
 
   server.registerTool(
@@ -644,7 +647,7 @@ export function registerMcpTools(server) {
       description: "Delete a media record",
       inputSchema: { mediaId: z.string() },
     },
-    async ({ mediaId }) => run(() => media.deleteMediaAdmin(mediaId)),
+    async ({ mediaId }) => run("null", () => media.deleteMediaAdmin(mediaId)),
   );
 
   server.registerTool(
@@ -653,7 +656,7 @@ export function registerMcpTools(server) {
       description: "List bulletin archive sorted by date (newest first)",
       inputSchema: {},
     },
-    async () => run(() => bulletins.listBulletinsAdmin()),
+    async () => run("null", () => bulletins.listBulletinsAdmin()),
   );
 
   server.registerTool(
@@ -668,7 +671,7 @@ export function registerMcpTools(server) {
         downloadUrl: z.string(),
       },
     },
-    async (args) => run(() => bulletins.createBulletinAdmin(args)),
+    async (args) => run("null", () => bulletins.createBulletinAdmin(args)),
   );
 
   server.registerTool(
@@ -677,7 +680,74 @@ export function registerMcpTools(server) {
       description: "Delete a bulletin by bulletinId",
       inputSchema: { bulletinId: z.string() },
     },
-    async ({ bulletinId }) => run(() => bulletins.deleteBulletinAdmin(bulletinId)),
+    async ({ bulletinId }) => run("null", () => bulletins.deleteBulletinAdmin(bulletinId)),
+  );
+
+  const adminDocumentationNoteSchema = z.object({
+    id: z.string(),
+    title: z.string(),
+    body: z.string(),
+    order: z.number().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+  });
+
+  server.registerTool(
+    "get_admin_documentation",
+    {
+      description:
+        "Get shared admin documentation notes (domain registrar, hosting account, password locations, etc.) visible to all admins.",
+      inputSchema: {},
+    },
+    async () => run("null", () => documentation.getAdminDocumentationAdmin()),
+  );
+
+  server.registerTool(
+    "save_admin_documentation",
+    {
+      description:
+        "Replace the full admin documentation notes list. Use for reordering or bulk updates after get_admin_documentation.",
+      inputSchema: {
+        notes: z.array(adminDocumentationNoteSchema),
+      },
+    },
+    async ({ notes }) =>
+      run("null", () =>
+        documentation.saveAdminDocumentationAdmin({
+          notes,
+          updatedBy: { source: "mcp" },
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "upsert_admin_documentation_note",
+    {
+      description:
+        "Add or update a single admin documentation note. Omit id to create; pass id to update an existing note.",
+      inputSchema: {
+        id: z.string().optional(),
+        title: z.string(),
+        body: z.string(),
+        order: z.number().optional(),
+      },
+    },
+    async (args) =>
+      run("null", () =>
+        documentation.upsertAdminDocumentationNoteAdmin({
+          ...args,
+          updatedBy: { source: "mcp" },
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "delete_admin_documentation_note",
+    {
+      description: "Delete a single admin documentation note by id.",
+      inputSchema: { id: z.string() },
+    },
+    async ({ id }) => run("null", () => documentation.deleteAdminDocumentationNoteAdmin({ id })),
   );
 
   server.registerTool(
@@ -690,7 +760,7 @@ export function registerMcpTools(server) {
         limit: z.number().int().min(1).max(100).optional().describe("Max results (default 50)"),
       },
     },
-    async ({ query, limit }) => run(() => search.searchSiteContentAdmin({ query, limit })),
+    async ({ query, limit }) => run("null", () => search.searchSiteContentAdmin({ query, limit })),
   );
 
   server.registerTool(
@@ -699,7 +769,7 @@ export function registerMcpTools(server) {
       description: "Get module types, layouts, and region rules for the builder",
       inputSchema: {},
     },
-    async () => run(() => site.getBuilderCapabilities()),
+    async () => run("null", () => site.getBuilderCapabilities()),
   );
 
   server.registerTool(
@@ -708,6 +778,37 @@ export function registerMcpTools(server) {
       description: "Quick overview of site pages, nav, and design",
       inputSchema: {},
     },
-    async () => run(() => site.getSiteSummaryAdmin()),
+    async () => run("null", () => site.getSiteSummaryAdmin()),
+  );
+
+  server.registerTool(
+    "get_site_analytics",
+    {
+      description:
+        "Site-wide analytics report for a date range: page views, visitors, sessions, bounce rate, engagement, top pages, referrers, devices, and countries. Public parish pages only.",
+      inputSchema: {
+        dateFrom: z.string().describe("Start date (YYYY-MM-DD or ISO)"),
+        dateTo: z.string().describe("End date (YYYY-MM-DD or ISO)"),
+        pagePath: z.string().optional().describe("Optional page path filter (e.g. /about)"),
+      },
+    },
+    async ({ dateFrom, dateTo, pagePath }) =>
+      run("null", () => analytics.getSiteAnalyticsAdmin({ dateFrom, dateTo, pagePath })),
+  );
+
+  server.registerTool(
+    "get_page_analytics",
+    {
+      description:
+        "Per-page analytics report for a date range. Requires pagePath or pageId.",
+      inputSchema: {
+        dateFrom: z.string().describe("Start date (YYYY-MM-DD or ISO)"),
+        dateTo: z.string().describe("End date (YYYY-MM-DD or ISO)"),
+        pagePath: z.string().optional(),
+        pageId: z.string().optional(),
+      },
+    },
+    async ({ dateFrom, dateTo, pagePath, pageId }) =>
+      run("null", () => analytics.getPageAnalyticsAdmin({ dateFrom, dateTo, pagePath, pageId })),
   );
 }

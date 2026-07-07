@@ -135,8 +135,9 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
           </div>
         </div>
 
-        <ScrollArea className="max-h-[50vh] flex-1">
-          <div className="px-2 py-2">
+        <div className="min-h-0 max-h-[50vh] flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="px-2 py-2">
             {loading && (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -180,8 +181,9 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
                 ))}
               </ul>
             )}
-          </div>
-        </ScrollArea>
+            </div>
+          </ScrollArea>
+        </div>
 
         {!loading && !error && total > results.length && (
           <div className="border-t px-6 py-2 text-center text-xs text-muted-foreground">
@@ -201,9 +203,16 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
 
 export function SiteContentSearchTrigger({ onClick }) {
   return (
-    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onClick}>
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-9 shrink-0 gap-2 px-2.5 sm:px-3"
+      onClick={onClick}
+      aria-label="Search site content"
+    >
       <Search className="h-4 w-4" />
-      Search
+      <span className="hidden sm:inline">Search</span>
     </Button>
   );
 }

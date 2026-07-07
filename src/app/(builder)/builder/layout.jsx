@@ -1,16 +1,24 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { BuilderShell } from "@/components/builder/BuilderShell";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 
+const FINANCE_ALLOWED_PREFIXES = ["/builder/donations", "/builder/account"];
+const FINANCE_HOME = "/builder/donations";
+
+function isFinanceAllowedPath(pathname) {
+  return FINANCE_ALLOWED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
 export default function BuilderLayout({ children }) {
   const { user, loading, configured } = useAuth();
-  const { isAdmin, loading: profileLoading, profileReady } = useUserProfile();
+  const { canAccessBuilder, isFinance, loading: profileLoading, profileReady } = useUserProfile();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && configured && !user) {
@@ -19,10 +27,17 @@ export default function BuilderLayout({ children }) {
   }, [user, loading, configured, router]);
 
   useEffect(() => {
-    if (!loading && profileReady && configured && user && !isAdmin) {
+    if (!loading && profileReady && configured && user && !canAccessBuilder) {
       router.replace("/login?error=admin_required");
     }
-  }, [user, loading, profileReady, configured, isAdmin, router]);
+  }, [user, loading, profileReady, configured, canAccessBuilder, router]);
+
+  useEffect(() => {
+    if (!profileReady || !isFinance || !pathname) return;
+    if (!isFinanceAllowedPath(pathname)) {
+      router.replace(FINANCE_HOME);
+    }
+  }, [profileReady, isFinance, pathname, router]);
 
   if (loading || configured === null || (user && !profileReady && profileLoading)) {
     return (
@@ -42,7 +57,9 @@ export default function BuilderLayout({ children }) {
     );
   }
 
-  if (!user || !isAdmin) return null;
+  if (!user || !canAccessBuilder) return null;
+
+  if (isFinance && pathname && !isFinanceAllowedPath(pathname)) return null;
 
   return <BuilderShell>{children}</BuilderShell>;
 }

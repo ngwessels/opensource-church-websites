@@ -10,6 +10,7 @@ import {
   isHrefHidden,
   isPageHidden,
   normalizeSitePath,
+  wouldChangeHomePageType,
   wouldHideHomePage,
 } from "./visibility.js";
 import {
@@ -33,6 +34,16 @@ describe("wouldHideHomePage", () => {
     assert.equal(wouldHideHomePage({ slug: "" }, true), true);
     assert.equal(wouldHideHomePage({ slug: "about" }, true), false);
     assert.equal(wouldHideHomePage({ slug: "" }, false), false);
+  });
+});
+
+describe("wouldChangeHomePageType", () => {
+  it("blocks changing the home page type away from content", () => {
+    assert.equal(wouldChangeHomePageType({ slug: "" }, "bulletins"), true);
+    assert.equal(wouldChangeHomePageType({ slug: "" }, "donation"), true);
+    assert.equal(wouldChangeHomePageType({ slug: "" }, "content"), false);
+    assert.equal(wouldChangeHomePageType({ slug: "" }, undefined), false);
+    assert.equal(wouldChangeHomePageType({ slug: "about" }, "bulletins"), false);
   });
 });
 

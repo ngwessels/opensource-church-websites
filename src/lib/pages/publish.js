@@ -1,5 +1,6 @@
-import { deleteField, doc, getDoc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, getDoc } from "firebase/firestore";
 
+import { auditedUpdateDoc } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { normalizePageRegions } from "@/lib/pages/regions";
 
@@ -118,24 +119,31 @@ export function pageHasUnpublishedChanges(page, { baselineSnapshot } = {}) {
   return !snapshotsEqual(current, baselineSnapshot);
 }
 
-export async function publishPage(db, pageId) {
+export async function publishPage(db, pageId, audit) {
   const pageRef = doc(db, COLLECTIONS.pages, pageId);
   const snap = await getDoc(pageRef);
   if (!snap.exists()) throw new Error("Page not found");
 
   const data = snap.data();
   const now = new Date().toISOString();
-
-  await updateDoc(pageRef, {
+  const updates = {
     status: "published",
     publishedSnapshot: buildPublishedSnapshot(normalizePageRegions(data)),
     publishedAt: now,
     scheduledPublishAt: deleteField(),
     updatedAt: now,
-  });
+  };
+
+  if (audit) {
+    await auditedUpdateDoc(pageRef, updates, audit);
+    return;
+  }
+
+  const { updateDoc } = await import("firebase/firestore");
+  await updateDoc(pageRef, updates);
 }
 
-export async function revertPageDraft(db, pageId) {
+export async function revertPageDraft(db, pageId, audit) {
   const pageRef = doc(db, COLLECTIONS.pages, pageId);
   const snap = await getDoc(pageRef);
   if (!snap.exists()) throw new Error("Page not found");
@@ -143,7 +151,7 @@ export async function revertPageDraft(db, pageId) {
   const data = snap.data();
   if (!data.publishedSnapshot) return;
 
-  await updateDoc(pageRef, {
+  const updates = {
     regions: data.publishedSnapshot.regions,
     layout: data.publishedSnapshot.layout,
     contentMarginX: data.publishedSnapshot.contentMarginX,
@@ -153,5 +161,13 @@ export async function revertPageDraft(db, pageId) {
     title: data.publishedSnapshot.title,
     seo: data.publishedSnapshot.seo,
     updatedAt: new Date().toISOString(),
-  });
+  };
+
+  if (audit) {
+    await auditedUpdateDoc(pageRef, updates, audit);
+    return;
+  }
+
+  const { updateDoc } = await import("firebase/firestore");
+  await updateDoc(pageRef, updates);
 }

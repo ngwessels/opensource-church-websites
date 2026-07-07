@@ -1,10 +1,11 @@
 "use client";
 
-import { doc, updateDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 
 import { FontField } from "@/components/design/FontField";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { Button } from "@/components/ui/button";
 import { ColorInput } from "@/components/ui/color-input";
@@ -35,6 +36,7 @@ import {
 import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
 import { DEFAULT_HEADER_STYLES } from "@/lib/site/header-styles";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import { auditedUpdateDoc, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { applyQuickLinksDraft, quickLinksToDraftItems } from "@/lib/sitemap/tree";
 
@@ -360,6 +362,7 @@ export function HeaderFooterSheet({
   onSaved,
 }) {
   const { user } = useAuth();
+  const { profile } = useUserProfile();
   const isHeader = section === "header";
   const [saving, setSaving] = useState(false);
   const [siteName, setSiteName] = useState(siteConfig?.name || "");
@@ -454,7 +457,21 @@ export function HeaderFooterSheet({
         });
         const updatedNodes = applyQuickLinksDraft(navNodes, validQuickLinks);
         if (validQuickLinks.length > 0 || navNodes.some((n) => n.isQuickLink)) {
-          await persistNavNodeChanges(db, navNodes, updatedNodes);
+          const actor = buildClientAuditActor(user, profile);
+          await persistNavNodeChanges(
+            db,
+            navNodes,
+            updatedNodes,
+            actor
+              ? {
+                  actor,
+                  action: "update",
+                  resource: { type: "nav", path: "navNodes" },
+                  summary: "Updated quick links in header",
+                  context: { builderPath: "/builder/edit", section: "header" },
+                }
+              : undefined,
+          );
         }
       }
 
@@ -474,10 +491,27 @@ export function HeaderFooterSheet({
               ),
             },
           };
-      await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), {
+      const firestorePatch = {
         ...patch,
         updatedAt: now,
-      });
+      };
+      const actor = buildClientAuditActor(user, profile);
+      const configRef = doc(db, COLLECTIONS.site, SITE_CONFIG_ID);
+      if (actor) {
+        await auditedUpdateDoc(configRef, firestorePatch, {
+          actor,
+          action: "update",
+          resource: { type: "site_config", id: SITE_CONFIG_ID, path: "site/config" },
+          summary: isHeader ? "Updated header settings" : "Updated footer settings",
+          context: {
+            builderPath: "/builder/edit",
+            section: isHeader ? "header" : "footer",
+          },
+        });
+      } else {
+        const { updateDoc } = await import("firebase/firestore");
+        await updateDoc(configRef, firestorePatch);
+      }
       await requestPublicRevalidate({
         getIdToken: () => user?.getIdToken(),
         scope: "site",

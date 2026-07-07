@@ -1,7 +1,11 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { PAGE_VIEWPORTS, PAGE_VIEWPORT_LABELS } from "@/lib/pages/viewports";
+import {
+  PAGE_VIEWPORTS,
+  PAGE_VIEWPORT_LABELS,
+  PAGE_VIEWPORT_SHORT_LABELS,
+} from "@/lib/pages/viewports";
 
 export function ViewportTabs({ value, onChange, className, size = "default" }) {
   return (
@@ -22,13 +26,14 @@ export function ViewportTabs({ value, onChange, className, size = "default" }) {
           onClick={() => onChange(viewport)}
           className={cn(
             "flex-1 rounded-md capitalize transition-colors",
-            size === "compact" ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm",
+            size === "compact" ? "px-1.5 py-1 text-xs sm:px-2" : "px-3 py-1.5 text-sm",
             value === viewport
               ? "admin-tab-active bg-muted font-medium text-foreground"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {PAGE_VIEWPORT_LABELS[viewport]}
+          <span className="xl:hidden">{PAGE_VIEWPORT_SHORT_LABELS[viewport]}</span>
+          <span className="hidden xl:inline">{PAGE_VIEWPORT_LABELS[viewport]}</span>
         </button>
       ))}
     </div>

@@ -90,6 +90,7 @@ export function builderEditUrl(slug) {
  * @param {object[]} [params.navNodes]
  * @param {object[]} [params.bulletins]
  * @param {object[]} [params.media]
+ * @param {object} [params.adminDocumentation]
  * @param {number} [params.limit]
  */
 export function searchInSiteData({
@@ -99,6 +100,7 @@ export function searchInSiteData({
   navNodes = [],
   bulletins = [],
   media = [],
+  adminDocumentation = {},
   limit = 50,
 }) {
   const q = normalizeSearchQuery(query);
@@ -259,6 +261,27 @@ export function searchInSiteData({
         field: "metadata",
         snippet: makeSnippet(combined, q),
         builderUrl: "/builder/files",
+      });
+    }
+  }
+
+  for (const note of adminDocumentation.notes || []) {
+    if (note.title && textMatchesQuery(note.title, q)) {
+      push({
+        source: "adminDocumentation",
+        noteId: note.id,
+        field: "title",
+        snippet: makeSnippet(note.title, q),
+        builderUrl: "/builder/admin",
+      });
+    }
+    if (note.body && textMatchesQuery(note.body, q)) {
+      push({
+        source: "adminDocumentation",
+        noteId: note.id,
+        field: "body",
+        snippet: makeSnippet(note.body, q),
+        builderUrl: "/builder/admin",
       });
     }
   }

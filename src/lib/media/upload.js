@@ -1,7 +1,8 @@
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { doc, setDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 
 import { getFirebaseStorage } from "@/lib/firebase/storage";
+import { auditedSetDoc } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { buildMediaMetadataFields } from "@/lib/media/metadata";
 
@@ -11,8 +12,9 @@ import { buildMediaMetadataFields } from "@/lib/media/metadata";
  * @param {string} folderId
  * @param {(pct: number) => void} [onProgress]
  * @param {{ description?: string, alt?: string, tags?: string | string[] }} [metadata]
+ * @param {import('@/lib/firestore/audited-mutation').AuditMeta} [audit]
  */
-export function uploadMediaFile(db, file, folderId, onProgress, metadata = {}) {
+export function uploadMediaFile(db, file, folderId, onProgress, metadata = {}, audit) {
   const storage = getFirebaseStorage();
   const mediaId = `media_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const storagePath = `media/${folderId}/${mediaId}_${file.name}`;
@@ -42,7 +44,12 @@ export function uploadMediaFile(db, file, folderId, onProgress, metadata = {}) {
           createdAt: new Date().toISOString(),
         };
 
-        await setDoc(doc(db, COLLECTIONS.media, mediaId), record);
+        if (audit) {
+          await auditedSetDoc(doc(db, COLLECTIONS.media, mediaId), record, audit);
+        } else {
+          const { setDoc } = await import("firebase/firestore");
+          await setDoc(doc(db, COLLECTIONS.media, mediaId), record);
+        }
         resolve({ id: mediaId, ...record });
       },
     );

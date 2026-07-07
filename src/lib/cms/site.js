@@ -1,6 +1,7 @@
 import "server-only";
 
 import { revalidatePublicSite } from "@/lib/cache/revalidate-public";
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { mergeFooterConfig } from "@/lib/site/footer-styles";
@@ -30,10 +31,23 @@ export async function getSiteConfigAdmin() {
   return snap.data();
 }
 
-export async function updateSiteConfigAdmin(partial) {
+export async function updateSiteConfigAdmin(partial, { audit = true, summary = "Updated site configuration" } = {}) {
+  const before = await getSiteConfigAdmin();
   await configRef().update({ ...partial, updatedAt: now() });
   revalidatePublicSite();
-  return getSiteConfigAdmin();
+  const after = await getSiteConfigAdmin();
+
+  if (audit) {
+    await recordAuditEvent({
+      action: "update",
+      resource: { type: "site_config", id: SITE_CONFIG_ID, path: "site/config" },
+      summary,
+      before,
+      after,
+    });
+  }
+
+  return after;
 }
 
 function mergeDesign(current = {}, patch = {}) {
@@ -56,7 +70,10 @@ function mergeDesign(current = {}, patch = {}) {
 
 export async function updateSiteDesignAdmin(design) {
   const current = await getSiteConfigAdmin();
-  return updateSiteConfigAdmin({ design: mergeDesign(current.design, design) });
+  return updateSiteConfigAdmin(
+    { design: mergeDesign(current.design, design) },
+    { summary: "Updated site design" },
+  );
 }
 
 export async function updateSiteSettingsAdmin({
@@ -80,7 +97,7 @@ export async function updateSiteSettingsAdmin({
     const current = await getSiteConfigAdmin();
     patch.socialMedia = mergeSocialMedia(current.socialMedia, socialMedia);
   }
-  return updateSiteConfigAdmin(patch);
+  return updateSiteConfigAdmin(patch, { summary: "Updated site settings" });
 }
 
 export async function updateSocialMediaAdmin(socialMedia) {
@@ -244,7 +261,26 @@ export function getBuilderCapabilities() {
         "People names, calendar events, text HTML, links, form labels",
         "Site name, tagline, mass times, footer columns",
         "Navigation labels, bulletin titles/dates, media name/alt/tags",
+        "Admin documentation note titles and bodies",
       ],
+    },
+    adminDocumentation: {
+      tools: [
+        "get_admin_documentation",
+        "save_admin_documentation",
+        "upsert_admin_documentation_note",
+        "delete_admin_documentation_note",
+      ],
+      noteSchema: {
+        id: "string",
+        title: "string",
+        body: "string",
+        order: "number",
+        createdAt: "string",
+        updatedAt: "string",
+      },
+      workflow:
+        "Use get_admin_documentation before operational changes. Add facts with upsert_admin_documentation_note (e.g. domain registrar, hosting account). Reorder via save_admin_documentation.",
     },
     playbooks: {
       fullParishSiteRedesign: [

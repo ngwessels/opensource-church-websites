@@ -5,6 +5,9 @@
     },
     "src/app/api/mcp-tokens/**": {
       "maxDuration": 10
+    },
+    "src/app/api/admin/export/**": {
+      "maxDuration": 300
     }
   }
 }

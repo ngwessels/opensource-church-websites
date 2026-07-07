@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { CheckCircle2, Circle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -8,7 +8,10 @@ import { useEffect, useRef, useState } from "react";
 import { SocialMediaEditor } from "@/components/builder/SocialMediaEditor";
 import { MassTimesForm } from "@/components/mass-times/MassTimesForm";
 import { DonationsManager } from "@/components/donations/DonationsManager";
+import { AuditLogPanel } from "@/components/admin/AuditLogPanel";
+import { AdminDocumentation } from "@/components/admin/AdminDocumentation";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { SiteDataExport } from "@/components/admin/SiteDataExport";
 import { UsersAdmin } from "@/components/admin/UsersAdmin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,8 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import { auditedUpdateDoc, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { formatBytes, uploadMediaFile } from "@/lib/media/upload";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
@@ -34,6 +39,7 @@ import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
 export function AdminPanel({ siteConfig, pageCount = 0 }) {
   const { user } = useAuth();
+  const { profile } = useUserProfile();
   const [tab, setTab] = useState("overview");
   const [users, setUsers] = useState([]);
   const [config, setConfig] = useState(siteConfig || {});
@@ -62,7 +68,20 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
       ? { seo: next.seo, updatedAt: new Date().toISOString() }
       : { ...partial, updatedAt: new Date().toISOString() };
     setConfig(next);
-    await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), firestorePatch);
+    const actor = buildClientAuditActor(user, profile);
+    const configRef = doc(db, COLLECTIONS.site, SITE_CONFIG_ID);
+    if (actor) {
+      await auditedUpdateDoc(configRef, firestorePatch, {
+        actor,
+        action: "update",
+        resource: { type: "site_config", id: SITE_CONFIG_ID, path: "site/config" },
+        summary: "Updated site settings in admin",
+        context: { builderPath: "/builder/admin", section: tab },
+      });
+    } else {
+      const { updateDoc } = await import("firebase/firestore");
+      await updateDoc(configRef, firestorePatch);
+    }
     await requestPublicRevalidate({
       getIdToken: () => user?.getIdToken(),
       scope: "site",
@@ -74,7 +93,10 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
     { id: "settings", label: "Settings" },
     { id: "donations", label: "Donations" },
     { id: "users", label: "Admin Users" },
+    { id: "documentation", label: "Documentation" },
+    { id: "audit", label: "Audit Log" },
     { id: "mass", label: "Sacraments & Mass Times" },
+    { id: "export", label: "Data Export" },
   ];
 
   return (
@@ -241,9 +263,17 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
           </div>
         )}
 
-        {tab === "donations" && <DonationsManager />}
+        {tab === "donations" && (
+          <DonationsManager
+            siteName={config.name || config.seo?.title || "Donations Report"}
+          />
+        )}
 
         {tab === "users" && <UsersAdmin users={users} />}
+
+        {tab === "documentation" && <AdminDocumentation />}
+
+        {tab === "audit" && <AuditLogPanel users={users} />}
 
         {tab === "mass" && (
           <MassTimesEditor
@@ -251,6 +281,8 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
             onSave={(massTimes) => saveConfig({ massTimes })}
           />
         )}
+
+        {tab === "export" && <SiteDataExport siteName={config.name} />}
       </div>
     </div>
   );
@@ -289,6 +321,8 @@ function MassTimesEditor({ massTimes, onSave }) {
 }
 
 function SearchAppearanceEditor({ seo, onSave }) {
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
   const [description, setDescription] = useState(seo.description || "");
   const [faviconUrl, setFaviconUrl] = useState(seo.faviconUrl || "");
   const [pickingFavicon, setPickingFavicon] = useState(false);
@@ -316,11 +350,22 @@ function SearchAppearanceEditor({ seo, onSave }) {
     setUploading(true);
     try {
       const db = getFirebaseFirestore();
+      const actor = buildClientAuditActor(user, profile);
       const record = await uploadMediaFile(
         db,
         file,
         DEFAULT_MEDIA_FOLDERS.pictures,
         setProgress,
+        {},
+        actor
+          ? {
+              actor,
+              action: "create",
+              resource: { type: "media", path: "media/pictures-root" },
+              summary: `Uploaded favicon ${file.name}`,
+              context: { builderPath: "/builder/admin", section: "settings" },
+            }
+          : undefined,
       );
       saveFavicon(record.downloadUrl || "");
     } finally {

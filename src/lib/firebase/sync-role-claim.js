@@ -4,7 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 
 import { getFirebaseAdminApp } from "@/lib/firebase/admin";
 
-/** @param {string} uid @param {"admin" | "member"} role */
+/** @param {string} uid @param {import("@/types/firestore").UserRole} role */
 export async function syncUserRoleClaim(uid, role) {
   const app = getFirebaseAdminApp();
   if (!app) return false;

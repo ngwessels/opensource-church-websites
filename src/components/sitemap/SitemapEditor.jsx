@@ -9,17 +9,19 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { doc, getDoc, updateDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageSettingsSheet } from "@/components/builder/PageSettingsSheet";
 import { getPageType } from "@/lib/bulletins/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import { auditedUpdateDoc, auditedWriteBatch, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { serializeNavNode } from "@/lib/firestore/serialize";
 import {
@@ -131,6 +133,7 @@ function resolveDropParent(nodes, overData, overId) {
 export function SitemapEditor({ initialNodes }) {
   const router = useRouter();
   const { user } = useAuth();
+  const { profile } = useUserProfile();
   const { config } = useSiteConfig();
   const [nodes, setNodes] = useState(initialNodes);
   const [maxLevel, setMaxLevel] = useState(4);
@@ -276,17 +279,28 @@ export function SitemapEditor({ initialNodes }) {
       if (!settingsPage?.id) return;
       const db = getFirebaseFirestore();
       const now = new Date().toISOString();
-      await updateDoc(doc(db, COLLECTIONS.pages, settingsPage.id), {
-        ...updates,
-        updatedAt: now,
-      });
+      const pageRef = doc(db, COLLECTIONS.pages, settingsPage.id);
+      const patch = { ...updates, updatedAt: now };
+      const actor = buildClientAuditActor(user, profile);
+      if (actor) {
+        await auditedUpdateDoc(pageRef, patch, {
+          actor,
+          action: "update",
+          resource: { type: "page", id: settingsPage.id, slug: settingsPage.slug },
+          summary: `Updated page settings for ${settingsPage.title || settingsPage.id}`,
+          context: { builderPath: "/builder/sitemap", section: "page-settings" },
+        });
+      } else {
+        const { updateDoc } = await import("firebase/firestore");
+        await updateDoc(pageRef, patch);
+      }
       setSettingsPage((prev) => (prev ? { ...prev, ...updates, updatedAt: now } : prev));
       setPageTypeMap((prev) => ({
         ...prev,
         [settingsPage.id]: updates.pageType || getPageType(settingsPage),
       }));
     },
-    [settingsPage],
+    [settingsPage, user, profile],
   );
 
   const addTemplate = useCallback(
@@ -482,76 +496,93 @@ export function SitemapEditor({ initialNodes }) {
       const db = getFirebaseFirestore();
       const { nodes: syncedNodes, pageUpdates } = syncPageSlugs(nodes);
       const flat = flattenNavTree(buildNavTree(syncedNodes));
-      const batch = writeBatch(db);
 
       const existingIds = new Set(initialNodes.map((n) => n.id));
       const existingPageIds = new Set(initialNodes.map((n) => n.pageId).filter(Boolean));
       const newIds = new Set(flat.map((n) => n.id));
 
-      for (const id of existingIds) {
-        if (!newIds.has(id)) {
-          batch.delete(doc(db, COLLECTIONS.navNodes, id));
+      const applyWrites = (batch) => {
+        for (const id of existingIds) {
+          if (!newIds.has(id)) {
+            batch.delete(doc(db, COLLECTIONS.navNodes, id));
+          }
         }
-      }
 
-      for (const node of flat) {
-        batch.set(
-          doc(db, COLLECTIONS.navNodes, node.id),
-          serializeNavNode(node),
-          { merge: true },
-        );
-      }
-
-      const now = new Date().toISOString();
-      for (const [pageId, { slug, title }] of pageUpdates) {
-        const pageRef = doc(db, COLLECTIONS.pages, pageId);
-        if (existingPageIds.has(pageId)) {
+        for (const node of flat) {
           batch.set(
-            pageRef,
-            {
-              slug,
-              title,
-              seo: { title },
-              updatedAt: now,
-            },
-            { merge: true },
-          );
-        } else {
-          const navNode = syncedNodes.find((n) => n.pageId === pageId);
-          const parentNode = navNode?.parentId
-            ? syncedNodes.find((n) => n.id === navNode.parentId)
-            : null;
-          const inLinkGroup = parentNode?.type === "group";
-
-          batch.set(
-            pageRef,
-            {
-              slug,
-              title,
-              status: "draft",
-              pageType: "content",
-              layout: inLinkGroup ? "sidebar-left" : "default",
-              contentColumns: 1,
-              maxModulesPerRegion: 10,
-              regions: inLinkGroup
-                ? [
-                    { id: "features", modules: [] },
-                    { id: "content-1", modules: [] },
-                    { id: "sidebar", modules: [] },
-                  ]
-                : [
-                    { id: "features", modules: [] },
-                    { id: "content-1", modules: [] },
-                  ],
-              seo: { title },
-              updatedAt: now,
-            },
+            doc(db, COLLECTIONS.navNodes, node.id),
+            serializeNavNode(node),
             { merge: true },
           );
         }
-      }
 
-      await batch.commit();
+        const now = new Date().toISOString();
+        for (const [pageId, { slug, title }] of pageUpdates) {
+          const pageRef = doc(db, COLLECTIONS.pages, pageId);
+          if (existingPageIds.has(pageId)) {
+            batch.set(
+              pageRef,
+              {
+                slug,
+                title,
+                seo: { title },
+                updatedAt: now,
+              },
+              { merge: true },
+            );
+          } else {
+            const navNode = syncedNodes.find((n) => n.pageId === pageId);
+            const parentNode = navNode?.parentId
+              ? syncedNodes.find((n) => n.id === navNode.parentId)
+              : null;
+            const inLinkGroup = parentNode?.type === "group";
+
+            batch.set(
+              pageRef,
+              {
+                slug,
+                title,
+                status: "draft",
+                pageType: "content",
+                layout: inLinkGroup ? "sidebar-left" : "default",
+                contentColumns: 1,
+                maxModulesPerRegion: 10,
+                regions: inLinkGroup
+                  ? [
+                      { id: "features", modules: [] },
+                      { id: "content-1", modules: [] },
+                      { id: "sidebar", modules: [] },
+                    ]
+                  : [
+                      { id: "features", modules: [] },
+                      { id: "content-1", modules: [] },
+                    ],
+                seo: { title },
+                updatedAt: now,
+              },
+              { merge: true },
+            );
+          }
+        }
+      };
+
+      const actor = buildClientAuditActor(user, profile);
+      if (actor) {
+        await auditedWriteBatch(db, applyWrites, {
+          actor,
+          action: "update",
+          resource: { type: "nav", path: "navNodes" },
+          summary: `Saved sitemap (${flat.length} nodes)`,
+          context: { builderPath: "/builder/sitemap", section: "sitemap" },
+          before: initialNodes,
+          after: syncedNodes,
+        });
+      } else {
+        const { writeBatch } = await import("firebase/firestore");
+        const batch = writeBatch(db);
+        applyWrites(batch);
+        await batch.commit();
+      }
       await requestPublicRevalidate({
         getIdToken: () => user?.getIdToken(),
         scope: "site",

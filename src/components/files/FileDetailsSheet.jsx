@@ -14,11 +14,16 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import { buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_DESCRIPTION_LENGTH } from "@/lib/media/metadata";
 import { updateMediaMetadata } from "@/lib/media/update";
 import { formatBytes } from "@/lib/media/upload";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export function FileDetailsSheet({ file, open, onClose, onSaved }) {
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
   const [description, setDescription] = useState("");
   const [alt, setAlt] = useState("");
   const [tagsInput, setTagsInput] = useState("");
@@ -41,11 +46,25 @@ export function FileDetailsSheet({ file, open, onClose, onSaved }) {
     setError(null);
     try {
       const db = getFirebaseFirestore();
-      await updateMediaMetadata(db, file.id, {
-        description,
-        alt,
-        tags: tagsInput,
-      });
+      const actor = buildClientAuditActor(user, profile);
+      await updateMediaMetadata(
+        db,
+        file.id,
+        {
+          description,
+          alt,
+          tags: tagsInput,
+        },
+        actor
+          ? {
+              actor,
+              action: "update",
+              resource: { type: "media", id: file.id },
+              summary: `Updated media metadata for ${file.name}`,
+              context: { builderPath: "/builder/files", section: "media" },
+            }
+          : undefined,
+      );
       onSaved?.();
       onClose();
     } catch (err) {

@@ -6,6 +6,9 @@ import { isExternalHref, resolveFooterColumns } from "@/lib/sitemap/tree";
 
 import { SocialMediaLinks } from "./SocialMediaLinks";
 
+const OPEN_SOURCE_REPO_URL =
+  "https://github.com/ngwessels/opensource-church-websites";
+
 const FOOTER_CLASS = {
   lightColumns: "site-footer--lightColumns",
   darkBand: "site-footer--darkBand",
@@ -140,7 +143,16 @@ export function SiteFooter({
         className="border-t border-current/10 px-4 py-6 text-center text-sm opacity-75"
         style={copyrightStyle}
       >
-        {footer.text || `© ${year} ${name}. All rights reserved.`}
+        <div>{footer.text || `© ${year} ${name}. All rights reserved.`}</div>
+        <a
+          href={OPEN_SOURCE_REPO_URL}
+          className="site-footer-link mt-2 inline-block hover:text-[var(--site-accent)]"
+          style={linkStyle}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open Source Website Hosting
+        </a>
       </div>
     </footer>
   );

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  donorFromStripeCustomer,
   donorFromStripeSession,
   formatDonorAddress,
   getDonationConfig,
@@ -155,6 +156,18 @@ describe("donations/schema", () => {
 
     it("returns undefined when no identifying details exist", () => {
       assert.equal(donorFromStripeSession(null), undefined);
+    });
+  });
+
+  describe("donorFromStripeCustomer", () => {
+    it("maps customer fields", () => {
+      const donor = donorFromStripeCustomer({
+        id: "cus_1",
+        object: "customer",
+        email: "donor@example.com",
+        name: "Donor Name",
+      });
+      assert.equal(donor?.email, "donor@example.com");
     });
   });
 

@@ -221,6 +221,42 @@ export function donorFromStripeSession(customerDetails, fallbackEmail) {
 }
 
 /**
+ * Build donor info from a Stripe Customer (subscription renewals).
+ * @param {import("stripe").Stripe.Customer | import("stripe").Stripe.DeletedCustomer} customer
+ * @returns {DonorInfo | undefined}
+ */
+export function donorFromStripeCustomer(customer) {
+  if (!customer || customer.deleted) return undefined;
+
+  const email = customer.email?.trim();
+  const name = customer.name?.trim();
+  const phone = customer.phone?.trim();
+
+  if (!email && !name) return undefined;
+
+  /** @type {DonorInfo} */
+  const donor = {
+    name: name || "—",
+    email: email || "",
+  };
+
+  if (phone) donor.phone = phone;
+
+  const addr = customer.address;
+  if (addr?.line1) {
+    donor.address = {
+      line1: addr.line1,
+      ...(addr.line2 ? { line2: addr.line2 } : {}),
+      city: addr.city || "",
+      state: addr.state || "",
+      postalCode: addr.postal_code || "",
+    };
+  }
+
+  return donor;
+}
+
+/**
  * Legacy helper for donations stored with metadata-based donor fields.
  * @param {Record<string, string | undefined> | null | undefined} metadata
  * @param {object} [sessionDetails]

@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getFirebaseAdminStorage } from "@/lib/firebase/admin-storage";
 import { COLLECTIONS } from "@/lib/firestore/paths";
@@ -41,11 +42,21 @@ export async function getMediaAdmin(mediaId) {
 }
 
 export async function deleteMediaAdmin(mediaId) {
+  const before = await getMediaAdmin(mediaId);
   await getDb().collection(COLLECTIONS.media).doc(mediaId).delete();
+
+  await recordAuditEvent({
+    action: "delete",
+    resource: { type: "media", id: mediaId },
+    summary: `Deleted media ${before.name || mediaId}`,
+    before,
+  });
+
   return { deleted: mediaId };
 }
 
 export async function updateMediaAdmin(mediaId, fields) {
+  const before = await getMediaAdmin(mediaId);
   const patch = normalizeMediaMetadata(fields);
   if (Object.keys(patch).length === 0) {
     throw new Error("No metadata fields to update");
@@ -56,7 +67,17 @@ export async function updateMediaAdmin(mediaId, fields) {
     .doc(mediaId)
     .update({ ...patch, updatedAt: now() });
 
-  return getMediaAdmin(mediaId);
+  const after = await getMediaAdmin(mediaId);
+
+  await recordAuditEvent({
+    action: "update",
+    resource: { type: "media", id: mediaId },
+    summary: `Updated media ${after.name || mediaId}`,
+    before,
+    after,
+  });
+
+  return after;
 }
 
 async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, metadata = {} }) {
@@ -95,7 +116,16 @@ async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, met
   };
 
   await getDb().collection(COLLECTIONS.media).doc(mediaId).set(record);
-  return { id: mediaId, ...record };
+  const created = { id: mediaId, ...record };
+
+  await recordAuditEvent({
+    action: "create",
+    resource: { type: "media", id: mediaId },
+    summary: `Uploaded media ${filename}`,
+    after: created,
+  });
+
+  return created;
 }
 
 export async function uploadMediaAdmin({

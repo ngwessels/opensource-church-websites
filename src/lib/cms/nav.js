@@ -1,6 +1,7 @@
 import "server-only";
 
 import { revalidatePublicSite } from "@/lib/cache/revalidate-public";
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { serializeNavNode } from "@/lib/firestore/serialize";
@@ -46,8 +47,9 @@ export async function getNavTreeAdmin() {
   return buildNavTree(nodes);
 }
 
-export async function saveSitemapAdmin(flatNodes, existingNodeIds = [], existingPageIds = []) {
+export async function saveSitemapAdmin(flatNodes, existingNodeIds = [], existingPageIds = [], { audit = true } = {}) {
   const db = getDb();
+  const beforeNodes = await listNavNodesAdmin();
   const { pageUpdates } = syncPageSlugs(flatNodes);
   const batch = db.batch();
   const existingIds = new Set(existingNodeIds);
@@ -96,7 +98,19 @@ export async function saveSitemapAdmin(flatNodes, existingNodeIds = [], existing
 
   await batch.commit();
   revalidatePublicSite();
-  return listNavNodesAdmin();
+  const afterNodes = await listNavNodesAdmin();
+
+  if (audit) {
+    await recordAuditEvent({
+      action: "update",
+      resource: { type: "nav", path: "navNodes" },
+      summary: `Updated sitemap (${flatNodes.length} nodes)`,
+      before: beforeNodes,
+      after: afterNodes,
+    });
+  }
+
+  return afterNodes;
 }
 
 export async function saveSitemapFromTreeAdmin(tree) {
@@ -131,7 +145,16 @@ export async function addNavPageAdmin(input) {
     nodes,
     existing.map((n) => n.id),
     existing.map((n) => n.pageId),
+    { audit: false },
   );
+
+  await recordAuditEvent({
+    action: "create",
+    resource: { type: "nav", id: node.id, slug: node.slug },
+    summary: `Added nav page ${title}`,
+    before: existing,
+    after: await listNavNodesAdmin(),
+  });
 
   return { navNode: node, pageId: node.pageId };
 }
@@ -152,7 +175,16 @@ export async function deleteNavNodeAdmin(nodeId) {
     nodes,
     existing.map((n) => n.id),
     existing.map((n) => n.pageId),
+    { audit: false },
   );
+
+  await recordAuditEvent({
+    action: "delete",
+    resource: { type: "nav", id },
+    summary: `Deleted nav node ${id}`,
+    before: existing,
+    after: await listNavNodesAdmin(),
+  });
 
   return { deleted: [...toRemove] };
 }

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
+import { formatUserRoleLabel } from "@/lib/auth/roles";
 import { getFounderUserId, isFounderUser } from "@/lib/site/founder";
 
 /** @typedef {{ type: "success" | "error", title: string, description?: string, resetLink?: string }} StatusNotice */
@@ -206,6 +207,7 @@ export function UsersAdmin({ users }) {
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             >
               <option value="member">Member</option>
+              <option value="finance">Finance</option>
               <option value="admin">Admin</option>
             </select>
           </div>
@@ -237,8 +239,8 @@ export function UsersAdmin({ users }) {
           {users.map((u) => (
             <tr key={u.id} className="border-b">
               <td className="py-2">{u.email}</td>
-              <td className="py-2 capitalize">
-                {u.role}
+              <td className="py-2">
+                {formatUserRoleLabel(u.role)}
                 {isFounderUser(users, u.id) && (
                   <span className="ml-1.5 text-xs font-normal text-muted-foreground">(owner)</span>
                 )}
@@ -246,27 +248,21 @@ export function UsersAdmin({ users }) {
               <td className="py-2">{u.displayName}</td>
               <td className="py-2">
                 <div className="flex flex-wrap gap-2">
-                  {u.role === "admin" && !isFounderUser(users, u.id) ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={roleUpdating === u.id || removing === u.id}
-                      onClick={() => handleRoleChange(u.id, "member")}
-                    >
-                      Make member
-                    </Button>
-                  ) : u.role !== "admin" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={roleUpdating === u.id || removing === u.id}
-                      onClick={() => handleRoleChange(u.id, "admin")}
-                    >
-                      Make admin
-                    </Button>
-                  ) : null}
+                  {!isFounderUser(users, u.id) &&
+                    ["member", "finance", "admin"]
+                      .filter((nextRole) => nextRole !== u.role)
+                      .map((nextRole) => (
+                        <Button
+                          key={nextRole}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={roleUpdating === u.id || removing === u.id}
+                          onClick={() => handleRoleChange(u.id, nextRole)}
+                        >
+                          Make {nextRole}
+                        </Button>
+                      ))}
                   <Button
                     type="button"
                     variant="outline"
@@ -291,8 +287,9 @@ export function UsersAdmin({ users }) {
 
       <p className="text-xs text-muted-foreground">
         The first account on a new site becomes admin automatically. After that, invite users here.
-        Members can sign in but cannot access the builder until promoted to admin. Remove deletes
-        their profile and Firebase sign-in. The original site owner cannot be removed or demoted.
+        Members can sign in but cannot access the builder. Finance users can view donations and
+        configure giving pages. Admins have full builder access. Remove deletes their profile and
+        Firebase sign-in. The original site owner cannot be removed or demoted.
       </p>
     </div>
   );

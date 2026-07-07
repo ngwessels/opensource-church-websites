@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getAdminUserFromRequest } from "@/lib/cms/auth";
+import { getAdminActorFromRequest, getAdminUserFromRequest } from "@/lib/cms/auth";
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
@@ -81,7 +82,7 @@ export async function PATCH(request) {
     if (!isFirebaseAdminConfigured()) {
       return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
     }
-    await getAdminUserFromRequest(request);
+    const actor = await getAdminActorFromRequest(request);
 
     const body = await request.json();
     const submissionIds = Array.isArray(body.submissionIds) ? body.submissionIds : [];
@@ -96,12 +97,36 @@ export async function PATCH(request) {
       return NextResponse.json({ error: "Server is not configured." }, { status: 503 });
     }
 
+    const beforeSnapshots = [];
+    for (const id of submissionIds) {
+      if (typeof id !== "string") continue;
+      const snap = await db.collection(COLLECTIONS.formSubmissions).doc(id).get();
+      if (snap.exists) beforeSnapshots.push({ id: snap.id, ...snap.data() });
+    }
+
     const batch = db.batch();
     for (const id of submissionIds) {
       if (typeof id !== "string") continue;
       batch.update(db.collection(COLLECTIONS.formSubmissions).doc(id), { read });
     }
     await batch.commit();
+
+    const afterSnapshots = [];
+    for (const id of submissionIds) {
+      if (typeof id !== "string") continue;
+      const snap = await db.collection(COLLECTIONS.formSubmissions).doc(id).get();
+      if (snap.exists) afterSnapshots.push({ id: snap.id, ...snap.data() });
+    }
+
+    await recordAuditEvent({
+      action: "update",
+      actor,
+      source: "api",
+      resource: { type: "form_submission", apiRoute: "/api/forms/submissions" },
+      summary: `Marked ${submissionIds.length} form submission(s) as ${read ? "read" : "unread"}`,
+      before: beforeSnapshots,
+      after: afterSnapshots,
+    });
 
     return NextResponse.json({ updated: submissionIds.length, read });
   } catch (err) {

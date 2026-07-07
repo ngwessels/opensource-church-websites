@@ -175,7 +175,7 @@ export function buildSiteBootstrapData() {
 
 /**
  * @param {{ email?: string, displayName?: string }} user
- * @param {"admin" | "member"} role
+ * @param {import("@/types/firestore").UserRole} role
  * @param {{ isFounder?: boolean }} [options]
  */
 export function buildUserProfileData(user, role, options = {}) {

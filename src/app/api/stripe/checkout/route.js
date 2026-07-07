@@ -97,19 +97,22 @@ export async function POST(request) {
     },
   };
 
+  const donationMetadata = {
+    frequency,
+    fundId: fundId.trim(),
+    fundLabel: trimmedFundLabel,
+    returnPath: safeReturnPath,
+    ...(safeDonorComment ? { donorComment: safeDonorComment } : {}),
+  };
+
   const session = await stripe.checkout.sessions.create({
     mode: recurringInterval ? "subscription" : "payment",
     line_items: [lineItem],
     success_url: `${returnBase}${returnSeparator}status=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${returnBase}${returnSeparator}status=cancelled`,
     ...stripeCheckoutCustomerCollectionOptions(),
-    metadata: {
-      frequency,
-      fundId: fundId.trim(),
-      fundLabel: trimmedFundLabel,
-      returnPath: safeReturnPath,
-      ...(safeDonorComment ? { donorComment: safeDonorComment } : {}),
-    },
+    metadata: donationMetadata,
+    ...(recurringInterval ? { subscription_data: { metadata: donationMetadata } } : {}),
   });
 
   return NextResponse.json({ url: session.url });

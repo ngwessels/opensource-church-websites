@@ -1,10 +1,13 @@
 "use client";
 
-import { collection, deleteDoc, doc, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { Grid, List, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import { auditedDeleteDoc, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { formatBytes, uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
@@ -14,6 +17,8 @@ import { FileGrid } from "./FileGrid";
 import { FolderTree } from "./FolderTree";
 
 export function FileManager() {
+  const { user } = useAuth();
+  const { profile } = useUserProfile();
   const [tab, setTab] = useState("pictures");
   const [folders, setFolders] = useState([]);
   const [files, setFiles] = useState([]);
@@ -52,7 +57,23 @@ export function FileManager() {
 
     try {
       for (const file of fileList) {
-        await uploadMediaFile(db, file, selectedFolder, setProgress);
+        const actor = buildClientAuditActor(user, profile);
+        await uploadMediaFile(
+          db,
+          file,
+          selectedFolder,
+          setProgress,
+          {},
+          actor
+            ? {
+                actor,
+                action: "create",
+                resource: { type: "media", path: `media/${selectedFolder}` },
+                summary: `Uploaded ${file.name}`,
+                context: { builderPath: "/builder/files", section: "media" },
+              }
+            : undefined,
+        );
       }
     } finally {
       setUploading(false);
@@ -63,7 +84,22 @@ export function FileManager() {
 
   const handleDelete = async (fileId) => {
     const db = getFirebaseFirestore();
-    await deleteDoc(doc(db, COLLECTIONS.media, fileId));
+    const file = files.find((f) => f.id === fileId);
+    const actor = buildClientAuditActor(user, profile);
+    const mediaRef = doc(db, COLLECTIONS.media, fileId);
+    if (actor) {
+      await auditedDeleteDoc(mediaRef, {
+        actor,
+        action: "delete",
+        resource: { type: "media", id: fileId },
+        summary: `Deleted media ${file?.name || fileId}`,
+        context: { builderPath: "/builder/files", section: "media" },
+        before: file ? { id: fileId, ...file } : undefined,
+      });
+      return;
+    }
+    const { deleteDoc } = await import("firebase/firestore");
+    await deleteDoc(mediaRef);
   };
 
   const storageLimit = 5 * 1024 * 1024 * 1024;

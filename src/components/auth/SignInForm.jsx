@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
+import { getBuilderHomeHref } from "@/lib/auth/roles";
 import { getMfaResolver, isMfaError } from "@/lib/firebase/mfa";
 
 const QUERY_ERRORS = {
   signup_closed: "Public signup is closed. Contact your site administrator for an invitation.",
-  admin_required: "You do not have permission to access the website builder. Contact your administrator.",
+  admin_required:
+    "You do not have permission to access the website builder or donations area. Contact your administrator.",
 };
 
 export function SignInForm({
@@ -26,6 +28,7 @@ export function SignInForm({
   const searchParams = useSearchParams();
   const {
     user,
+    userRole,
     loading: authLoading,
     configured,
     authError,
@@ -64,18 +67,32 @@ export function SignInForm({
 
   useEffect(() => {
     if (!redirectAfterAuth || authLoading || !user) return;
+    const destination =
+      redirectTo === "/builder/edit" ? getBuilderHomeHref(userRole) : redirectTo;
+    if (redirectTo === "/builder/edit" && userRole == null) return;
     if (immediateRedirect) {
-      window.location.assign(redirectTo);
+      window.location.assign(destination);
       return;
     }
-    router.push(redirectTo);
+    router.push(destination);
     setRedirectAfterAuth(false);
-  }, [redirectAfterAuth, authLoading, user, router, redirectTo, immediateRedirect]);
+  }, [
+    redirectAfterAuth,
+    authLoading,
+    user,
+    userRole,
+    router,
+    redirectTo,
+    immediateRedirect,
+  ]);
 
   useEffect(() => {
     if (!immediateRedirect || authLoading || !user) return;
-    window.location.replace(redirectTo);
-  }, [immediateRedirect, authLoading, user, redirectTo]);
+    const destination =
+      redirectTo === "/builder/edit" ? getBuilderHomeHref(userRole) : redirectTo;
+    if (redirectTo === "/builder/edit" && userRole == null) return;
+    window.location.replace(destination);
+  }, [immediateRedirect, authLoading, user, userRole, redirectTo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,7 +125,7 @@ export function SignInForm({
         await signInWithEmail(email, password);
       }
       if (immediateRedirect) {
-        window.location.assign(redirectTo);
+        setRedirectAfterAuth(true);
         return;
       }
       setRedirectAfterAuth(true);
@@ -129,10 +146,6 @@ export function SignInForm({
 
     try {
       await signInWithGoogle();
-      if (immediateRedirect) {
-        window.location.assign(redirectTo);
-        return;
-      }
       setRedirectAfterAuth(true);
     } catch (err) {
       if (isMfaError(err)) {
@@ -146,10 +159,6 @@ export function SignInForm({
   }
 
   function handleMfaSuccess() {
-    if (immediateRedirect) {
-      window.location.assign(redirectTo);
-      return;
-    }
     setRedirectAfterAuth(true);
   }
 

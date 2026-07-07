@@ -19,6 +19,11 @@ export function wouldHideHomePage(page, hidden) {
   return hidden === true && isHomePage(page);
 }
 
+/** @param {{ slug?: string } | null | undefined} page @param {string | undefined} pageType */
+export function wouldChangeHomePageType(page, pageType) {
+  return isHomePage(page) && pageType !== undefined && pageType !== "content";
+}
+
 /** @param {Array<{ id?: string, hidden?: boolean, slug?: string }>} pages */
 export function getHiddenPageSets(pages) {
   const pageIds = new Set();

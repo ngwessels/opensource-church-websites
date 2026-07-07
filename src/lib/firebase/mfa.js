@@ -15,6 +15,10 @@ import { getFirebaseAuth } from "./auth";
 
 let recaptchaConfigPromise = null;
 
+function isRecaptchaEnterpriseUnavailableError(error) {
+  return error instanceof Error && error.message === "recaptchaKey undefined";
+}
+
 export function getEnrolledFactors(user) {
   if (!user) return [];
   return multiFactor(user).enrolledFactors;
@@ -41,6 +45,11 @@ export async function ensureRecaptchaConfig() {
   if (!recaptchaConfigPromise) {
     const auth = getFirebaseAuth();
     recaptchaConfigPromise = initializeRecaptchaConfig(auth).catch((error) => {
+      if (isRecaptchaEnterpriseUnavailableError(error)) {
+        // Firebase phone auth falls back to reCAPTCHA v2 when Enterprise is not
+        // configured for the project. Treat that as non-fatal.
+        return;
+      }
       recaptchaConfigPromise = null;
       throw error;
     });
@@ -71,6 +80,13 @@ export function clearRecaptchaVerifier(verifier) {
 
 export function formatMfaError(error) {
   const code = error?.code;
+
+  if (isRecaptchaEnterpriseUnavailableError(error)) {
+    return (
+      "Phone verification could not load reCAPTCHA. Confirm Phone auth and SMS MFA are enabled " +
+      "in Firebase Console, and add this domain under Authorized domains."
+    );
+  }
 
   if (code === "auth/invalid-app-credential") {
     if (isLocalhostPhoneAuthBlocked()) {

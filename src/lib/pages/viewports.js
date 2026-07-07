@@ -22,6 +22,13 @@ export const PAGE_VIEWPORT_LABELS = {
   desktop: "Desktop",
 };
 
+/** @type {Record<PageViewport, string>} */
+export const PAGE_VIEWPORT_SHORT_LABELS = {
+  mobile: "M",
+  tablet: "T",
+  desktop: "D",
+};
+
 /** Builder preview max-width per viewport (`null` = full width). */
 export const PAGE_VIEWPORT_PREVIEW_WIDTHS = {
   mobile: 375,

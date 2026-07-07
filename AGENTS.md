@@ -53,11 +53,23 @@ Folders: `pictures-root` (images), `documents-root` (PDFs), `unused-pictures` (s
 - `list_bulletins`, `create_bulletin`, `delete_bulletin`
 - Workflow: set page `pageType: "bulletins"` → `upload_media` (documents-root) → `create_bulletin` → `publish_page` if needed
 
+**Admin documentation**
+
+- `get_admin_documentation`, `save_admin_documentation`, `upsert_admin_documentation_note`, `delete_admin_documentation_note`
+- Shared operational notes for admins (domain registrar, hosting account, where passwords are kept, etc.). Editable in the builder under **Admin → Documentation**.
+- Workflow: `get_admin_documentation` before operational changes → `upsert_admin_documentation_note` to add a fact → `save_admin_documentation` to reorder the full list
+
+**Audit log**
+
+- Immutable `auditEvents` collection records admin create/update/delete/publish actions with actor (`uid`, `email`, `role`), timestamp, source (`ui` | `mcp` | `api`), resource, optional builder context, and full before/after snapshots in `auditEvents/{id}/snapshots/{before|after}`.
+- Browse in the builder under **Admin → Audit Log**, or via `GET /api/admin/audit` and `GET /api/admin/audit/{eventId}`.
+- Server mutations log through `src/lib/audit/record.server.js` (`lib/cms/*`, API routes). Builder UI logs through `src/lib/firestore/audited-mutation.js`.
+
 **Discovery**
 
 - `get_builder_capabilities` — module types, layouts, region rules, `moduleConfigSchemas`, design playbooks
 - `get_site_summary` — quick overview of pages, nav, and design
-- `search_site_content` — find text across all pages, modules, settings, bulletins, and media
+- `search_site_content` — find text across all pages, modules, settings, bulletins, media, and admin documentation notes
 
 **Site content search**
 
@@ -109,6 +121,15 @@ Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notif
 1. `add_nav_page` or use existing page
 2. `update_page` with `pageType: "donation"` and optional `donationConfig` (`title`, `description`, `funds`, `presetAmountsCents`, `comments`)
 3. `publish_page`
+
+**Site analytics**
+
+First-party analytics for public parish pages (alongside optional Firebase Analytics). Data is stored in Firestore `analyticsEvents`.
+
+- `get_site_analytics` — site-wide report for a date range (`dateFrom`, `dateTo`, optional `pagePath`)
+- `get_page_analytics` — per-page report (`dateFrom`, `dateTo`, plus `pagePath` or `pageId`)
+
+Reports include page views, visitors, sessions, bounce rate, average engagement, daily trend, top pages, referrers, traffic sources, devices, browsers, and countries. Builder UI: **Analytics** tab.
 
 **Full-site design playbook**
 

@@ -55,6 +55,9 @@ export function useUserProfile() {
 
   const role = user ? (profile?.role ?? userRole ?? null) : null;
   const isAdmin = role === "admin";
+  const isFinance = role === "finance";
+  const canAccessBuilder = isAdmin || isFinance;
+  const canManageDonations = canAccessBuilder;
   // Ready when Firestore resolved or server confirmed role via ensure-profile.
   const profileReady = !user || !loading || userRole != null;
 
@@ -64,5 +67,8 @@ export function useUserProfile() {
     profileReady,
     role,
     isAdmin,
+    isFinance,
+    canAccessBuilder,
+    canManageDonations,
   };
 }

@@ -39,11 +39,12 @@ import { getPageType } from "@/lib/bulletins/schema";
 import {
   getDonationConfig,
 } from "@/lib/donations/schema";
+import { isHomePage } from "@/lib/pages/visibility";
 
 import { ViewportTabs } from "./ViewportTabs";
 
 function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave, externalError }) {
-  const isHomePage = (page?.slug ?? "") === "";
+  const homePage = isHomePage(page);
   const [visibleOnSite, setVisibleOnSite] = useState(page?.hidden !== true);
   const [metaTitle, setMetaTitle] = useState(page?.seo?.title ?? "");
   const [metaDescription, setMetaDescription] = useState(page?.seo?.description ?? "");
@@ -77,8 +78,8 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
     setSaving(true);
     try {
       const updates = {
-        pageType,
-        hidden: isHomePage ? false : !visibleOnSite,
+        pageType: homePage ? "content" : pageType,
+        hidden: homePage ? false : !visibleOnSite,
         seo: {
           title: metaTitle.trim(),
           description: metaDescription.trim(),
@@ -124,7 +125,7 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
           <p className="text-xs text-muted-foreground">
             When off, visitors cannot open this page or see it in navigation and footer links.
           </p>
-          {isHomePage ? (
+          {homePage ? (
             <p className="text-xs text-muted-foreground">The home page cannot be hidden.</p>
           ) : (
             <div className="flex gap-2">
@@ -193,7 +194,11 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
 
         <div className="space-y-2">
           <Label>Page type</Label>
-          <Select value={pageType} onValueChange={setPageType}>
+          <Select
+            value={homePage ? "content" : pageType}
+            onValueChange={setPageType}
+            disabled={homePage}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -203,6 +208,11 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
               <SelectItem value="donation">Donation</SelectItem>
             </SelectContent>
           </Select>
+          {homePage && (
+            <p className="text-xs text-muted-foreground">
+              The home page must remain a content page.
+            </p>
+          )}
           {isBulletins && (
             <p className="text-xs text-muted-foreground">
               Upload and manage bulletin PDFs on the page preview.

@@ -1,6 +1,6 @@
 "use client";
 
-import { doc, updateDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { PaletteIcon, TypeIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
@@ -15,12 +15,14 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { sendDesignPreview, useDesignPreviewSender } from "@/hooks/useDesignPreviewBridge";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { designEquals, normalizeDesign } from "@/lib/design/design-utils";
 import { getThemeById } from "@/lib/design/themes";
 import { DEFAULT_HEADER_STYLES } from "@/lib/site/header-styles";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
+import { auditedUpdateDoc, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 
 import { ColorFontEditor } from "./ColorFontEditor";
@@ -28,6 +30,7 @@ import { ThemeGallery } from "./ThemeGallery";
 
 export function DesignPanel({ siteConfig }) {
   const { user } = useAuth();
+  const { profile } = useUserProfile();
   const [tab, setTab] = useState("themes");
   const [device, setDevice] = useState("desktop");
   const [design, setDesign] = useState(() => {
@@ -98,7 +101,20 @@ export function DesignPanel({ siteConfig }) {
           ...headerStyles,
         },
       };
-      await updateDoc(doc(db, COLLECTIONS.site, SITE_CONFIG_ID), patch);
+      const actor = buildClientAuditActor(user, profile);
+      const configRef = doc(db, COLLECTIONS.site, SITE_CONFIG_ID);
+      if (actor) {
+        await auditedUpdateDoc(configRef, patch, {
+          actor,
+          action: "update",
+          resource: { type: "site_config", id: SITE_CONFIG_ID, path: "site/config" },
+          summary: "Published design changes",
+          context: { builderPath: "/builder/design", section: "design" },
+        });
+      } else {
+        const { updateDoc } = await import("firebase/firestore");
+        await updateDoc(configRef, patch);
+      }
       await requestPublicRevalidate({
         getIdToken: () => user?.getIdToken(),
         scope: "site",

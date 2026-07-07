@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 
 import { syncUserRoleClaim } from "@/lib/firebase/sync-role-claim";
+import { normalizeUserRole } from "@/lib/auth/roles";
 
-import { getAdminUserFromRequest } from "@/lib/cms/auth";
+import { getAdminActorFromRequest, getAdminUserFromRequest } from "@/lib/cms/auth";
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminApp, getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { sendUserInviteEmail } from "@/lib/mailgun/invite";
 import { getSiteBaseUrl } from "@/lib/seo/site-url";
@@ -36,12 +38,12 @@ export async function POST(request) {
       return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
     }
 
-    await getAdminUserFromRequest(request);
+    const actor = await getAdminActorFromRequest(request);
 
     const body = await request.json();
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
-    const role = body?.role === "admin" ? "admin" : "member";
+    const role = normalizeUserRole(body?.role);
 
     if (!email) {
       return NextResponse.json({ error: "email is required" }, { status: 400 });
@@ -73,6 +75,7 @@ export async function POST(request) {
     const now = new Date().toISOString();
     const userRef = db.collection(COLLECTIONS.users).doc(uid);
     const existingProfile = await userRef.get();
+    const before = existingProfile.exists ? { id: uid, ...existingProfile.data() } : null;
 
     if (existingProfile.exists) {
       await userRef.update({
@@ -84,6 +87,19 @@ export async function POST(request) {
     } else {
       await userRef.set(buildUserProfileData({ email, displayName }, role));
     }
+
+    const afterSnap = await userRef.get();
+    const after = { id: uid, ...afterSnap.data() };
+
+    await recordAuditEvent({
+      action: before ? "update" : "create",
+      actor,
+      source: "api",
+      resource: { type: "user", id: uid, apiRoute: "/api/admin/users" },
+      summary: before ? `Updated user ${email}` : `Invited user ${email}`,
+      before: before ?? undefined,
+      after,
+    });
 
     let inviteSent = false;
     let resetLink = null;
@@ -125,10 +141,14 @@ export async function PATCH(request) {
     }
 
     const adminUser = await getAdminUserFromRequest(request);
+    const actor = await getAdminActorFromRequest(request);
 
     const body = await request.json();
     const uid = typeof body?.uid === "string" ? body.uid.trim() : "";
-    const role = body?.role === "admin" ? "admin" : body?.role === "member" ? "member" : null;
+    const requestedRole = normalizeUserRole(body?.role);
+    const role = body?.role === "admin" || body?.role === "finance" || body?.role === "member"
+      ? requestedRole
+      : null;
 
     if (!uid || !role) {
       return NextResponse.json({ error: "uid and role are required" }, { status: 400 });
@@ -163,8 +183,22 @@ export async function PATCH(request) {
       }
     }
 
+    const before = { id: uid, ...userSnap.data() };
     await userRef.update({ role, updatedAt: new Date().toISOString() });
     await syncUserRoleClaim(uid, role);
+
+    const afterSnap = await userRef.get();
+    const after = { id: uid, ...afterSnap.data() };
+
+    await recordAuditEvent({
+      action: "update",
+      actor,
+      source: "api",
+      resource: { type: "user", id: uid, apiRoute: "/api/admin/users" },
+      summary: `Changed user role to ${role}`,
+      before,
+      after,
+    });
 
     return NextResponse.json({ uid, role });
   } catch (err) {
@@ -184,6 +218,7 @@ export async function DELETE(request) {
     }
 
     const adminUser = await getAdminUserFromRequest(request);
+    const actor = await getAdminActorFromRequest(request);
 
     const body = await request.json();
     const uid = typeof body?.uid === "string" ? body.uid.trim() : "";
@@ -222,6 +257,7 @@ export async function DELETE(request) {
       }
     }
 
+    const before = { id: uid, ...userSnap.data() };
     const auth = getAuth(app);
     try {
       await auth.deleteUser(uid);
@@ -233,6 +269,15 @@ export async function DELETE(request) {
     }
 
     await userRef.delete();
+
+    await recordAuditEvent({
+      action: "delete",
+      actor,
+      source: "api",
+      resource: { type: "user", id: uid, apiRoute: "/api/admin/users" },
+      summary: `Removed user ${before.email || uid}`,
+      before,
+    });
 
     return NextResponse.json({ uid, removed: true });
   } catch (err) {

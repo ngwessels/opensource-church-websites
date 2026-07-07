@@ -96,4 +96,23 @@ describe("cms/content-search", () => {
     assert.ok(result.total >= 1);
     assert.equal(result.results[0].moduleType, "calendar");
   });
+
+  it("searchInSiteData finds admin documentation notes", () => {
+    const result = searchInSiteData({
+      query: "Network Solutions",
+      adminDocumentation: {
+        notes: [
+          {
+            id: "note_1",
+            title: "Domain registrar",
+            body: "Hosted on Network Solutions under the parish account.",
+          },
+        ],
+      },
+    });
+
+    assert.ok(result.total >= 1);
+    assert.equal(result.results[0].source, "adminDocumentation");
+    assert.equal(result.results[0].builderUrl, "/builder/admin");
+  });
 });

@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 
+import { SiteAnalyticsTracker } from "@/components/analytics/SiteAnalyticsTracker";
 import { BulletinsPageView } from "@/components/bulletins/BulletinsPageView";
 import { useAdminPublicRedirect } from "@/hooks/useAdminPublicRedirect";
 import { getPageType } from "@/lib/bulletins/schema";
@@ -91,6 +92,14 @@ export function PublicSite({
         data-header-layout={headerLayout}
         data-nav-style={navStyle}
       >
+        {!editing && !designPreview && (
+          <SiteAnalyticsTracker
+            pagePath={pageSlug || "/"}
+            pageTitle={page?.title}
+            pageId={pageId}
+            pageType={getPageType(page)}
+          />
+        )}
         <SiteHeader
           siteConfig={siteConfig}
           navTree={navTree}

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { revalidateAfterPagePublish } from "@/lib/cache/revalidate-public";
+import { recordAuditEvent } from "@/lib/audit/record.server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { normalizeButtonsConfig } from "@/lib/buttons/schema";
@@ -16,7 +17,7 @@ import {
   normalizePageRegions,
 } from "@/lib/pages/regions";
 import { getMaxContentColumns } from "@/lib/pages/viewports";
-import { wouldHideHomePage } from "@/lib/pages/visibility";
+import { wouldChangeHomePageType, wouldHideHomePage } from "@/lib/pages/visibility";
 import { generateId } from "@/lib/sitemap/tree";
 
 function getDb() {
@@ -50,15 +51,19 @@ export async function getPageAdmin({ pageId, slug }) {
   throw new Error("pageId or slug required");
 }
 
-export async function updatePageAdmin(pageId, updates) {
+export async function updatePageAdmin(pageId, updates, { audit = true } = {}) {
   const db = getDb();
   const ref = db.collection(COLLECTIONS.pages).doc(pageId);
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Page not found");
 
   const data = snap.data();
+  const before = { id: snap.id, ...data };
   if (wouldHideHomePage(data, updates.hidden)) {
     throw new Error("The home page cannot be hidden");
+  }
+  if (wouldChangeHomePageType(data, updates.pageType)) {
+    throw new Error("The home page must remain a content page");
   }
 
   if (updates.contentColumns !== undefined) {
@@ -81,7 +86,19 @@ export async function updatePageAdmin(pageId, updates) {
 
   await ref.update({ ...updates, updatedAt: now() });
   const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+  const after = { id: updated.id, ...updated.data() };
+
+  if (audit) {
+    await recordAuditEvent({
+      action: "update",
+      resource: { type: "page", id: pageId, slug: after.slug },
+      summary: `Updated page ${after.title || pageId}`,
+      before,
+      after,
+    });
+  }
+
+  return after;
 }
 
 export async function addModuleAdmin(pageId, { type, region = "content-1", insertIndex }) {
@@ -97,7 +114,17 @@ export async function addModuleAdmin(pageId, { type, region = "content-1", inser
     config: getDefaultConfig(type),
   };
   const regions = insertModuleAt(page.regions || [], region, mod, insertIndex);
-  return updatePageAdmin(pageId, { regions });
+  const updated = await updatePageAdmin(pageId, { regions }, { audit: false });
+
+  await recordAuditEvent({
+    action: "create",
+    resource: { type: "module", id: mod.id, pageId, moduleId: mod.id, slug: updated.slug },
+    summary: `Added ${type} module on ${updated.title || pageId}`,
+    before: page,
+    after: updated,
+  });
+
+  return updated;
 }
 
 /**
@@ -132,7 +159,16 @@ export async function addModulesBatchAdmin(pageId, modules) {
     created.push(mod);
   }
 
-  const updated = await updatePageAdmin(pageId, { regions });
+  const updated = await updatePageAdmin(pageId, { regions }, { audit: false });
+
+  await recordAuditEvent({
+    action: "create",
+    resource: { type: "module", id: created[0]?.id, pageId, slug: updated.slug },
+    summary: `Added ${created.length} module(s) on ${updated.title || pageId}`,
+    before: page,
+    after: updated,
+  });
+
   return { page: updated, modules: created };
 }
 
@@ -154,7 +190,17 @@ export async function updateModuleAdmin(pageId, moduleId, config) {
       return { ...m, config: normalized };
     }),
   }));
-  return updatePageAdmin(pageId, { regions });
+  const updated = await updatePageAdmin(pageId, { regions }, { audit: false });
+
+  await recordAuditEvent({
+    action: "update",
+    resource: { type: "module", id: moduleId, pageId, moduleId, slug: updated.slug },
+    summary: `Updated module on ${updated.title || pageId}`,
+    before: page,
+    after: updated,
+  });
+
+  return updated;
 }
 
 export async function moveModuleAdmin(pageId, { moduleId, toRegionId, insertIndex }) {
@@ -166,7 +212,17 @@ export async function moveModuleAdmin(pageId, { moduleId, toRegionId, insertInde
   if (error) throw new Error(error);
 
   const regions = moveModule(page.regions || [], moduleId, toRegionId, insertIndex);
-  return updatePageAdmin(pageId, { regions });
+  const updated = await updatePageAdmin(pageId, { regions }, { audit: false });
+
+  await recordAuditEvent({
+    action: "update",
+    resource: { type: "module", id: moduleId, pageId, moduleId, slug: updated.slug },
+    summary: `Moved module on ${updated.title || pageId}`,
+    before: page,
+    after: updated,
+  });
+
+  return updated;
 }
 
 export async function removeModuleAdmin(pageId, moduleId) {
@@ -175,7 +231,17 @@ export async function removeModuleAdmin(pageId, moduleId) {
     ...r,
     modules: (r.modules || []).filter((m) => m.id !== moduleId).map((m, i) => ({ ...m, order: i })),
   }));
-  return updatePageAdmin(pageId, { regions });
+  const updated = await updatePageAdmin(pageId, { regions }, { audit: false });
+
+  await recordAuditEvent({
+    action: "delete",
+    resource: { type: "module", id: moduleId, pageId, moduleId, slug: updated.slug },
+    summary: `Removed module on ${updated.title || pageId}`,
+    before: page,
+    after: updated,
+  });
+
+  return updated;
 }
 
 function buildPublishedSnapshot(data) {
@@ -200,13 +266,14 @@ function buildPublishedSnapshot(data) {
   return snapshot;
 }
 
-export async function publishPageAdmin(pageId) {
+export async function publishPageAdmin(pageId, { audit = true } = {}) {
   const db = getDb();
   const ref = db.collection(COLLECTIONS.pages).doc(pageId);
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Page not found");
 
   const data = snap.data();
+  const before = { id: snap.id, ...data };
   const ts = now();
   await ref.update({
     status: "published",
@@ -217,7 +284,19 @@ export async function publishPageAdmin(pageId) {
   });
   revalidateAfterPagePublish(data.slug ?? "");
   const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+  const after = { id: updated.id, ...updated.data() };
+
+  if (audit) {
+    await recordAuditEvent({
+      action: "publish",
+      resource: { type: "page", id: pageId, slug: after.slug },
+      summary: `Published page ${after.title || pageId}`,
+      before,
+      after,
+    });
+  }
+
+  return after;
 }
 
 export async function revertPageAdmin(pageId) {
@@ -229,6 +308,7 @@ export async function revertPageAdmin(pageId) {
   const data = snap.data();
   if (!data.publishedSnapshot) throw new Error("No published snapshot to revert to");
 
+  const before = { id: snap.id, ...data };
   await ref.update({
     regions: data.publishedSnapshot.regions,
     layout: data.publishedSnapshot.layout,
@@ -241,17 +321,38 @@ export async function revertPageAdmin(pageId) {
     updatedAt: now(),
   });
   const updated = await ref.get();
-  return { id: updated.id, ...updated.data() };
+  const after = { id: updated.id, ...updated.data() };
+
+  await recordAuditEvent({
+    action: "revert",
+    resource: { type: "page", id: pageId, slug: after.slug },
+    summary: `Reverted page draft ${after.title || pageId}`,
+    before,
+    after,
+  });
+
+  return after;
 }
 
 export async function publishAllPagesAdmin() {
   const allPages = await listPagesAdmin();
+  const before = allPages;
   const published = [];
 
   for (const page of allPages) {
-    const result = await publishPageAdmin(page.id);
+    const result = await publishPageAdmin(page.id, { audit: false });
     published.push(result.id);
   }
+
+  const after = await listPagesAdmin();
+
+  await recordAuditEvent({
+    action: "publish_all",
+    resource: { type: "page", path: "pages" },
+    summary: `Published all pages (${published.length})`,
+    before,
+    after,
+  });
 
   return { published, count: published.length };
 }

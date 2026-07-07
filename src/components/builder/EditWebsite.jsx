@@ -10,13 +10,15 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { deleteField, doc, updateDoc } from "firebase/firestore";
+import { deleteField, doc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PublicSite } from "@/components/site/PublicSite";
 import { getPageType } from "@/lib/bulletins/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { auditedUpdateDoc, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { useBulletins } from "@/hooks/useBulletins";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
@@ -68,6 +70,7 @@ import { RemoveModuleDialog } from "./RemoveModuleDialog";
 export function EditWebsite({ slug = "" }) {
   const router = useRouter();
   const { user } = useAuth();
+  const { profile } = useUserProfile();
   const { config } = useSiteConfig();
   const { nodes } = useNavNodes();
   const [page, setPage] = useState(null);
@@ -101,6 +104,20 @@ export function EditWebsite({ slug = "" }) {
     [page, loadedSnapshot],
   );
   const canRevert = useMemo(() => pageDiffersFromPublished(page), [page]);
+
+  const builderPath = slug ? `/builder/edit/${slug}` : "/builder/edit";
+
+  const pageAuditMeta = (action, summary, section = "modules") => {
+    const actor = buildClientAuditActor(user, profile);
+    if (!actor || !pageId) return null;
+    return {
+      actor,
+      action,
+      resource: { type: "page", id: pageId, slug: page?.slug ?? slug },
+      summary,
+      context: { builderPath, section },
+    };
+  };
 
   const showToast = (message) => {
     setToast(message);
@@ -136,7 +153,14 @@ export function EditWebsite({ slug = "" }) {
         if (raw.status === "published") {
           updates.publishedSnapshot = buildPublishedSnapshot({ ...raw, ...updates });
         }
-        await updateDoc(doc(db, COLLECTIONS.pages, d.id), updates);
+        const audit = pageAuditMeta("update", "Normalized page regions on load", "load");
+        const pageRef = doc(db, COLLECTIONS.pages, d.id);
+        if (audit) {
+          await auditedUpdateDoc(pageRef, updates, audit);
+        } else {
+          const { updateDoc } = await import("firebase/firestore");
+          await updateDoc(pageRef, updates);
+        }
         setPage({
           ...normalized,
           publishedSnapshot: updates.publishedSnapshot ?? raw.publishedSnapshot,
@@ -145,7 +169,7 @@ export function EditWebsite({ slug = "" }) {
         setPage(normalized);
       }
     }
-  }, [slug]);
+  }, [slug, user, profile, page?.slug, pageId]);
 
   useEffect(() => {
     loadPage();
@@ -161,7 +185,14 @@ export function EditWebsite({ slug = "" }) {
     ) {
       payload.contentStackOrderByViewport = deleteField();
     }
-    await updateDoc(doc(db, COLLECTIONS.pages, pageId), payload);
+    const audit = pageAuditMeta("update", "Updated page content");
+    const pageRef = doc(db, COLLECTIONS.pages, pageId);
+    if (audit) {
+      await auditedUpdateDoc(pageRef, payload, audit);
+    } else {
+      const { updateDoc } = await import("firebase/firestore");
+      await updateDoc(pageRef, payload);
+    }
     setPage((prev) => {
       const next = { ...prev, ...updates };
       if (
@@ -248,7 +279,8 @@ export function EditWebsite({ slug = "" }) {
     if (!pageId || !canPublish || isPublishing) return;
     setIsPublishing(true);
     try {
-      await publishPage(getFirebaseFirestore(), pageId);
+      const audit = pageAuditMeta("publish", `Published page ${page?.title || slug || pageId}`);
+      await publishPage(getFirebaseFirestore(), pageId, audit ?? undefined);
       await requestPublicRevalidate({
         getIdToken: () => user?.getIdToken(),
         slug,
@@ -264,7 +296,8 @@ export function EditWebsite({ slug = "" }) {
 
   const handleRevert = async () => {
     if (pageId) {
-      await revertPageDraft(getFirebaseFirestore(), pageId);
+      const audit = pageAuditMeta("revert", `Reverted page draft ${page?.title || slug || pageId}`);
+      await revertPageDraft(getFirebaseFirestore(), pageId, audit ?? undefined);
       await loadPage();
     }
   };

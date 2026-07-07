@@ -92,6 +92,8 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 
 Copy the webhook signing secret into `STRIPE_WEBHOOK_SECRET` in `.env.local`. Test donations at `/give`.
 
+Configure your Stripe webhook endpoint to listen for `checkout.session.completed` and `invoice.paid` (recurring renewals).
+
 Prefer a restricted API key (`rk_test_...`) for `STRIPE_SECRET_KEY` in development.
 
 ## reCAPTCHA v3 (local)

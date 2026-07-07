@@ -3,9 +3,10 @@ import "server-only";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { syncUserRoleClaim } from "@/lib/firebase/sync-role-claim";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
+import { normalizeUserRole } from "@/lib/auth/roles";
 import { buildSiteBootstrapData, buildUserProfileData } from "@/lib/site/bootstrap-data";
 
-/** @param {string} uid @param {"admin" | "member"} role */
+/** @param {string} uid @param {import("@/types/firestore").UserRole} role */
 async function ensureRoleClaim(uid, role) {
   await syncUserRoleClaim(uid, role);
 }
@@ -22,7 +23,7 @@ export class SiteInitializedError extends Error {
  * First user becomes admin and bootstraps the site; subsequent unsolicited signups are rejected.
  *
  * @param {{ uid: string, email?: string, displayName?: string }} user
- * @returns {Promise<{ role: "admin" | "member", bootstrapped: boolean }>}
+ * @returns {Promise<{ role: import("@/types/firestore").UserRole, bootstrapped: boolean }>}
  */
 export async function ensureUserProfileServer(user) {
   const db = getFirebaseAdminFirestore();
@@ -32,7 +33,7 @@ export async function ensureUserProfileServer(user) {
 
   const existing = await userRef.get();
   if (existing.exists) {
-    const role = existing.data()?.role === "admin" ? "admin" : "member";
+    const role = normalizeUserRole(existing.data()?.role);
     await ensureRoleClaim(user.uid, role);
     return { role, bootstrapped: false };
   }
@@ -48,7 +49,7 @@ export async function ensureUserProfileServer(user) {
       const legacy = emailMatch.docs[0];
       const data = legacy.data();
       const now = new Date().toISOString();
-      const role = data?.role === "admin" ? "admin" : "member";
+      const role = normalizeUserRole(data?.role);
       await userRef.set({
         email: data.email || user.email,
         displayName: data.displayName || user.displayName || "",

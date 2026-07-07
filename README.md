@@ -353,7 +353,7 @@ firebase apphosting:secrets:set stripePublishableKey --project YOUR_PROJECT_ID
 
 4. In Stripe Dashboard → **Developers → Webhooks → Add endpoint**:
    - URL: `https://www.yourparish.org/api/stripe/webhook`
-   - Events: at minimum `checkout.session.completed`
+   - Events: `checkout.session.completed` and `invoice.paid` (for recurring gift renewals)
    - Copy the **signing secret** into `STRIPE_WEBHOOK_SECRET`
 5. Redeploy your site, then test at **`/give`**.
 

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
+import { formatUserRoleLabel } from "@/lib/auth/roles";
 
 export function ProfileSection({ role }) {
   const { user, updateDisplayName } = useAuth();
@@ -58,7 +59,7 @@ export function ProfileSection({ role }) {
           <div className="flex flex-wrap items-center gap-2">
             <Label className="mb-0">Role</Label>
             <Badge variant={role === "admin" ? "default" : "secondary"}>
-              {role || "member"}
+              {formatUserRoleLabel(role)}
             </Badge>
             {user?.emailVerified ? (
               <Badge variant="outline">Email verified</Badge>
