@@ -20,6 +20,7 @@ import {
   isLocalhostPhoneAuthBlocked,
   startPhoneEnrollment,
 } from "@/lib/firebase/mfa";
+import { preventDialogDismissForRecaptcha } from "@/lib/recaptcha/dialog-outside-events";
 
 const RECAPTCHA_CONTAINER_ID = "mfa-recaptcha-enroll";
 
@@ -86,8 +87,12 @@ export function MfaEnrollDialog({ open, onOpenChange, user, onEnrolled }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange} modal={false}>
+      <DialogContent
+        className="sm:max-w-md"
+        onPointerDownOutside={preventDialogDismissForRecaptcha}
+        onInteractOutside={preventDialogDismissForRecaptcha}
+      >
         <DialogHeader>
           <DialogTitle>Add phone for SMS verification</DialogTitle>
           <DialogDescription>
