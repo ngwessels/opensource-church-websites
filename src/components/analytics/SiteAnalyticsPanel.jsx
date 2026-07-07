@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { usePages } from "@/hooks/usePages";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 const PRESETS = [
   { id: "7d", label: "Last 7 days", days: 7 },
@@ -104,7 +105,8 @@ function DataTable({ title, rows, columns }) {
 }
 
 export function SiteAnalyticsPanel() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { isAdmin, profileReady } = useUserProfile();
   const { pages } = usePages();
   const [preset, setPreset] = useState("30d");
   const [dateFrom, setDateFrom] = useState(formatDateInput(30));
@@ -125,24 +127,40 @@ export function SiteAnalyticsPanel() {
   }, [pages]);
 
   const loadReport = useCallback(async () => {
-    if (!user) return;
+    if (authLoading || !profileReady || !user || !isAdmin) {
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
-    try {
-      const token = await user.getIdToken();
+    async function fetchReport(forceRefresh) {
+      const token = await user.getIdToken(forceRefresh);
       const params = new URLSearchParams({ from: dateFrom, to: dateTo });
       const selected = pageOptions.find((page) => page.id === pageFilter);
       if (selected && pageFilter !== "all") {
         params.set("pagePath", selected.path);
       }
 
-      const res = await fetch(`/api/admin/analytics?${params.toString()}`, {
+      return fetch(`/api/admin/analytics?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+    }
+
+    try {
+      let res = await fetchReport(false);
+      if (res.status === 401) {
+        res = await fetchReport(true);
+      }
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load analytics");
+      if (!res.ok) {
+        const message = data.error || "Failed to load analytics";
+        if (res.status === 401) {
+          throw new Error("Your session expired. Sign in again, then refresh this page.");
+        }
+        throw new Error(message);
+      }
       setReport(data);
     } catch (err) {
       setReport(null);
@@ -150,11 +168,16 @@ export function SiteAnalyticsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [user, dateFrom, dateTo, pageFilter, pageOptions]);
+  }, [authLoading, profileReady, user, isAdmin, dateFrom, dateTo, pageFilter, pageOptions]);
 
   useEffect(() => {
+    if (authLoading || !profileReady) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     loadReport();
-  }, [loadReport]);
+  }, [loadReport, authLoading, profileReady, user]);
 
   function applyPreset(nextPreset) {
     const match = PRESETS.find((item) => item.id === nextPreset);

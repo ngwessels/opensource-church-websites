@@ -8,7 +8,7 @@ import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 
 export function useUserProfile() {
-  const { user, userRole } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,17 +21,20 @@ export function useUserProfile() {
 
     let unsub = () => {};
     let cancelled = false;
+    let retryTimer = null;
     setLoading(true);
 
-    async function subscribe() {
+    async function attachListener(forceTokenRefresh = false) {
       try {
-        await user.getIdToken(true);
+        await user.getIdToken(forceTokenRefresh);
       } catch {
-        // Continue — listener may still succeed with cached token.
+        // Listener may still succeed with a cached token.
       }
       if (cancelled) return;
 
       const db = getFirebaseFirestore();
+      unsub();
+
       unsub = onSnapshot(
         doc(db, COLLECTIONS.users, user.uid),
         (snap) => {
@@ -40,15 +43,23 @@ export function useUserProfile() {
         },
         (err) => {
           console.warn("[useUserProfile] snapshot error", err);
+          if (!forceTokenRefresh && err?.code === "permission-denied") {
+            retryTimer = window.setTimeout(() => {
+              if (!cancelled) void attachListener(true);
+            }, 400);
+            return;
+          }
           setProfile(null);
           setLoading(false);
         },
       );
     }
 
-    subscribe();
+    void attachListener(false);
+
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       unsub();
     };
   }, [user]);
@@ -58,12 +69,11 @@ export function useUserProfile() {
   const isFinance = role === "finance";
   const canAccessBuilder = isAdmin || isFinance;
   const canManageDonations = canAccessBuilder;
-  // Ready when Firestore resolved or server confirmed role via ensure-profile.
-  const profileReady = !user || !loading || userRole != null;
+  const profileReady = !user || (!authLoading && role != null);
 
   return {
     profile: user ? profile : null,
-    loading: user ? loading && userRole == null : false,
+    loading: user ? !profileReady && loading : false,
     profileReady,
     role,
     isAdmin,
