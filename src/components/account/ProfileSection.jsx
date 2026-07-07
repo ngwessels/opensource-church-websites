@@ -11,9 +11,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatUserRoleLabel } from "@/lib/auth/roles";
 
 export function ProfileSection({ role }) {
-  const { user, updateDisplayName } = useAuth();
+  const { user, updateDisplayName, sendVerificationEmail } = useAuth();
   const [editedName, setEditedName] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
 
@@ -32,6 +33,20 @@ export function ProfileSection({ role }) {
       setError(err instanceof Error ? err.message : "Failed to update display name.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    setMessage(null);
+    setError(null);
+    setResendingVerification(true);
+    try {
+      await sendVerificationEmail();
+      setMessage("Verification email sent. Check your inbox.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send verification email.");
+    } finally {
+      setResendingVerification(false);
     }
   }
 
@@ -64,7 +79,18 @@ export function ProfileSection({ role }) {
             {user?.emailVerified ? (
               <Badge variant="outline">Email verified</Badge>
             ) : (
-              <Badge variant="destructive">Email not verified</Badge>
+              <>
+                <Badge variant="destructive">Email not verified</Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={resendingVerification}
+                  onClick={handleResendVerification}
+                >
+                  {resendingVerification ? "Sending…" : "Resend verification email"}
+                </Button>
+              </>
             )}
           </div>
           {message && <p className="text-sm text-green-700">{message}</p>}
