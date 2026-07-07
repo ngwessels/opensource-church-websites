@@ -3,6 +3,7 @@
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { CheckCircle2, Circle } from "lucide-react";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { SocialMediaEditor } from "@/components/builder/SocialMediaEditor";
@@ -37,9 +38,21 @@ import { sanitizeSocialMediaConfig } from "@/lib/site/social-media";
 import { DEFAULT_SITE_TIMEZONE, SITE_TIMEZONE_OPTIONS } from "@/lib/site/timezone";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
+const ADMIN_PANEL_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "settings", label: "Settings" },
+  { id: "donations", label: "Donations" },
+  { id: "users", label: "Admin Users" },
+  { id: "documentation", label: "Documentation" },
+  { id: "audit", label: "Audit Log" },
+  { id: "mass", label: "Sacraments & Mass Times" },
+  { id: "export", label: "Data Export" },
+];
+
 export function AdminPanel({ siteConfig, pageCount = 0 }) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState("overview");
   const [users, setUsers] = useState([]);
   const [config, setConfig] = useState(siteConfig || {});
@@ -58,6 +71,13 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
       unsubMedia();
     };
   }, []);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && ADMIN_PANEL_TABS.some((item) => item.id === tabParam)) {
+      setTab(tabParam);
+    }
+  }, [searchParams]);
 
   const saveConfig = async (partial) => {
     const db = getFirebaseFirestore();
@@ -88,16 +108,7 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
     });
   };
 
-  const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "settings", label: "Settings" },
-    { id: "donations", label: "Donations" },
-    { id: "users", label: "Admin Users" },
-    { id: "documentation", label: "Documentation" },
-    { id: "audit", label: "Audit Log" },
-    { id: "mass", label: "Sacraments & Mass Times" },
-    { id: "export", label: "Data Export" },
-  ];
+  const tabs = ADMIN_PANEL_TABS;
 
   return (
     <div className="flex h-full flex-col bg-muted">

@@ -128,7 +128,7 @@ export function searchInSiteData({
         source: "site",
         field,
         snippet: makeSnippet(text, q),
-        builderUrl: "/builder/admin",
+        builderUrl: "/builder/admin?tab=settings",
       });
     }
   }
@@ -142,7 +142,7 @@ export function searchInSiteData({
         source: "site",
         field: "massTimes",
         snippet: makeSnippet(massText, q),
-        builderUrl: "/builder/admin",
+        builderUrl: "/builder/admin?tab=mass",
       });
     }
   }
@@ -272,7 +272,7 @@ export function searchInSiteData({
         noteId: note.id,
         field: "title",
         snippet: makeSnippet(note.title, q),
-        builderUrl: "/builder/admin",
+        builderUrl: "/builder/admin?tab=documentation",
       });
     }
     if (note.body && textMatchesQuery(note.body, q)) {
@@ -281,7 +281,7 @@ export function searchInSiteData({
         noteId: note.id,
         field: "body",
         snippet: makeSnippet(note.body, q),
-        builderUrl: "/builder/admin",
+        builderUrl: "/builder/admin?tab=documentation",
       });
     }
   }

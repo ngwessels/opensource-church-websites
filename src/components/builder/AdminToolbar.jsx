@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ADMIN_TOOLBAR_HEIGHT } from "@/lib/design/admin-tokens";
+import { ADMIN_DOCUMENTATION_HREF } from "@/lib/builder/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -41,7 +42,7 @@ function initials(email) {
 export function AdminToolbar() {
   const pathname = usePathname();
   const { user, logOut } = useAuth();
-  const { isFinance } = useUserProfile();
+  const { isFinance, isAdmin } = useUserProfile();
   const { config } = useSiteConfig({ enabled: !isFinance });
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -150,13 +151,16 @@ export function AdminToolbar() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <button
-          type="button"
-          className="hidden rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground lg:inline-flex"
-          aria-label="Help"
-        >
-          <HelpCircle className="h-5 w-5" />
-        </button>
+        {isAdmin && (
+          <Link
+            href={ADMIN_DOCUMENTATION_HREF}
+            className="hidden rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground lg:inline-flex"
+            aria-label="Documentation"
+            title="Site documentation"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </Link>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring">

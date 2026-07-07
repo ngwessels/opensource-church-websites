@@ -1,6 +1,6 @@
 import "server-only";
 
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import { PassThrough } from "node:stream";
 
 import {
@@ -208,7 +208,7 @@ export async function getSiteExportPreview({ siteName = "" } = {}) {
 export async function buildSiteExportZip({ siteName = "" } = {}) {
   const data = await loadSiteExportData({ siteName });
   const output = new PassThrough();
-  const archive = archiver("zip", { zlib: { level: 6 } });
+  const archive = new ZipArchive({ zlib: { level: 6 } });
 
   archive.on("error", (error) => {
     output.destroy(error);

@@ -7,6 +7,14 @@ export function slugFromBuilderEditPath(pathname) {
   return rest.replace(/^\/+/, "");
 }
 
+/** @param {string} [tab] Admin panel tab id (e.g. documentation, settings). */
+export function adminPanelHref(tab) {
+  if (!tab) return "/builder/admin";
+  return `/builder/admin?tab=${encodeURIComponent(tab)}`;
+}
+
+export const ADMIN_DOCUMENTATION_HREF = adminPanelHref("documentation");
+
 /** Rewrite internal site paths to stay in the builder when editing. */
 export function toBuilderHref(href, editing = false) {
   if (!editing || !href || href === "#" || isExternalHref(href)) {

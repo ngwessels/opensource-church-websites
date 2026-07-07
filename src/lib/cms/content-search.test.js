@@ -113,6 +113,6 @@ describe("cms/content-search", () => {
 
     assert.ok(result.total >= 1);
     assert.equal(result.results[0].source, "adminDocumentation");
-    assert.equal(result.results[0].builderUrl, "/builder/admin");
+    assert.equal(result.results[0].builderUrl, "/builder/admin?tab=documentation");
   });
 });
