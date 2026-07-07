@@ -12,6 +12,8 @@ export const COLLECTIONS = {
   mcpOAuthClients: "mcpOAuthClients",
   mcpOAuthCodes: "mcpOAuthCodes",
   analyticsEvents: "analyticsEvents",
+  analyticsHeatmapRollups: "analyticsHeatmapRollups",
+  analyticsHeatmapSessions: "analyticsHeatmapSessions",
   auditEvents: "auditEvents",
 };
 

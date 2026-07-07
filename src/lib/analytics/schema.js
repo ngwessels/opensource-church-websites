@@ -1,7 +1,12 @@
 /** @typedef {import('@/types/firestore').AnalyticsEventType} AnalyticsEventType */
 /** @typedef {import('@/types/firestore').PageType} PageType */
+/** @typedef {import('@/types/firestore').HeatmapDeviceType} HeatmapDeviceType */
 
-export const ANALYTICS_EVENT_TYPES = ["page_view", "engagement"];
+import { HEATMAP_DEVICE_TYPES } from "./heatmap-grid.js";
+
+export const ANALYTICS_EVENT_TYPES = ["page_view", "engagement", "heatmap_batch"];
+
+export const HEATMAP_MAX_BATCH_POINTS = 50;
 
 export const EXCLUDED_PATH_PREFIXES = ["/builder", "/login", "/dashboard"];
 
@@ -128,6 +133,9 @@ export function validateCollectPayload(body) {
   }
 
   const type = optionalString(body.type, 32) || "page_view";
+  if (type === "heatmap_batch") {
+    throw new Error("Use validateHeatmapBatchPayload for heatmap_batch");
+  }
   if (!ANALYTICS_EVENT_TYPES.includes(type)) {
     throw new Error("Invalid event type");
   }
@@ -187,4 +195,95 @@ export function getCountryFromHeaders(headers) {
     headers.get("x-country-code");
   if (!country || country === "XX") return undefined;
   return country.slice(0, 2).toUpperCase();
+}
+
+/**
+ * @typedef {{ kind: 'click', x: number, y: number } | { kind: 'scroll', depth: number }} HeatmapPoint
+ */
+
+/**
+ * @param {unknown} value
+ * @returns {number | undefined}
+ */
+function optionalUnitFloat(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0 || num > 1) return undefined;
+  return num;
+}
+
+/**
+ * @param {unknown} body
+ * @returns {{
+ *   type: 'heatmap_batch',
+ *   pagePath: string,
+ *   pageId?: string,
+ *   sessionId: string,
+ *   visitorId: string,
+ *   deviceType: HeatmapDeviceType,
+ *   points: HeatmapPoint[],
+ * }}
+ */
+export function validateHeatmapBatchPayload(body) {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid payload");
+  }
+
+  const pagePath = normalizePagePath(
+    typeof body.pagePath === "string" ? body.pagePath : "",
+  );
+  if (isExcludedAnalyticsPath(pagePath)) {
+    throw new Error("Path is not tracked");
+  }
+
+  const sessionId = requireUuid(body.sessionId, "sessionId");
+  const visitorId = requireUuid(body.visitorId, "visitorId");
+
+  const deviceType = optionalString(body.deviceType, 16);
+  if (!deviceType || !HEATMAP_DEVICE_TYPES.includes(deviceType)) {
+    throw new Error("Invalid deviceType");
+  }
+
+  if (!Array.isArray(body.points) || body.points.length === 0) {
+    throw new Error("points are required");
+  }
+  if (body.points.length > HEATMAP_MAX_BATCH_POINTS) {
+    throw new Error("Too many points in batch");
+  }
+
+  /** @type {HeatmapPoint[]} */
+  const points = [];
+  for (const point of body.points) {
+    if (!point || typeof point !== "object") {
+      throw new Error("Invalid point");
+    }
+    const kind = optionalString(point.kind, 16);
+    if (kind === "click") {
+      const x = optionalUnitFloat(point.x);
+      const y = optionalUnitFloat(point.y);
+      if (x === undefined || y === undefined) {
+        throw new Error("Invalid click coordinates");
+      }
+      points.push({ kind: "click", x, y });
+      continue;
+    }
+    if (kind === "scroll") {
+      const depth = optionalUnitFloat(point.depth);
+      if (depth === undefined) {
+        throw new Error("Invalid scroll depth");
+      }
+      points.push({ kind: "scroll", depth });
+      continue;
+    }
+    throw new Error("Invalid point kind");
+  }
+
+  return {
+    type: "heatmap_batch",
+    pagePath,
+    pageId: optionalUuid(body.pageId),
+    sessionId,
+    visitorId,
+    deviceType: /** @type {HeatmapDeviceType} */ (deviceType),
+    points,
+  };
 }

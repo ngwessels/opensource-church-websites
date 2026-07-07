@@ -3,12 +3,9 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
+import { sendAnalytics } from "@/lib/analytics/analytics-client";
+import { getOrCreateSessionId, getOrCreateVisitorId } from "@/lib/analytics/analytics-ids";
 import { EXCLUDED_PATH_PREFIXES, normalizePagePath } from "@/lib/analytics/schema";
-
-const VISITOR_ID_KEY = "parish_analytics_visitor";
-const SESSION_ID_KEY = "parish_analytics_session";
-const SESSION_LAST_KEY = "parish_analytics_session_last";
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * @param {string} path
@@ -18,63 +15,6 @@ function isExcludedPath(path) {
   return EXCLUDED_PATH_PREFIXES.some(
     (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
   );
-}
-
-function readUuid(storage, key) {
-  try {
-    const value = storage.getItem(key);
-    if (value && /^[0-9a-f-]{36}$/i.test(value)) return value;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function writeUuid(storage, key, value) {
-  try {
-    storage.setItem(key, value);
-  } catch {
-    // ignore
-  }
-}
-
-function getOrCreateVisitorId() {
-  const existing = readUuid(localStorage, VISITOR_ID_KEY);
-  if (existing) return { visitorId: existing, isNewVisitor: false };
-  const visitorId = crypto.randomUUID();
-  writeUuid(localStorage, VISITOR_ID_KEY, visitorId);
-  return { visitorId, isNewVisitor: true };
-}
-
-function getOrCreateSessionId() {
-  const now = Date.now();
-  const lastActive = Number(sessionStorage.getItem(SESSION_LAST_KEY) || 0);
-  const existing = readUuid(sessionStorage, SESSION_ID_KEY);
-  if (existing && lastActive && now - lastActive < SESSION_TIMEOUT_MS) {
-    sessionStorage.setItem(SESSION_LAST_KEY, String(now));
-    return existing;
-  }
-  const sessionId = crypto.randomUUID();
-  writeUuid(sessionStorage, SESSION_ID_KEY, sessionId);
-  sessionStorage.setItem(SESSION_LAST_KEY, String(now));
-  return sessionId;
-}
-
-/**
- * @param {Record<string, unknown>} payload
- */
-function sendAnalytics(payload) {
-  const body = JSON.stringify(payload);
-  if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-    const blob = new Blob([body], { type: "application/json" });
-    if (navigator.sendBeacon("/api/analytics/collect", blob)) return;
-  }
-  fetch("/api/analytics/collect", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true,
-  }).catch(() => {});
 }
 
 function getUtmParams() {
@@ -151,13 +91,7 @@ export function SiteAnalyticsTracker({
       screenWidth: typeof window !== "undefined" ? window.screen?.width : undefined,
       screenHeight: typeof window !== "undefined" ? window.screen?.height : undefined,
     });
-  }, [
-    enabled,
-    pagePath,
-    pageTitleProp,
-    pageId,
-    pageType,
-  ]);
+  }, [enabled, pagePath, pageTitleProp, pageId, pageType]);
 
   useEffect(() => {
     if (!enabled || isExcludedPath(pagePath)) return;

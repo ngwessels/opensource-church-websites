@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 
+import { PageHeatmapTracker } from "@/components/analytics/PageHeatmapTracker";
 import { SiteAnalyticsTracker } from "@/components/analytics/SiteAnalyticsTracker";
 import { BulletinsPageView } from "@/components/bulletins/BulletinsPageView";
 import { useAdminPublicRedirect } from "@/hooks/useAdminPublicRedirect";
@@ -93,12 +94,18 @@ export function PublicSite({
         data-nav-style={navStyle}
       >
         {!editing && !designPreview && (
-          <SiteAnalyticsTracker
-            pagePath={pageSlug || "/"}
-            pageTitle={page?.title}
-            pageId={pageId}
-            pageType={getPageType(page)}
-          />
+          <>
+            <SiteAnalyticsTracker
+              pagePath={pageSlug || "/"}
+              pageTitle={page?.title}
+              pageId={pageId}
+              pageType={getPageType(page)}
+            />
+            <PageHeatmapTracker
+              pagePath={pageSlug || "/"}
+              pageId={pageId}
+            />
+          </>
         )}
         <SiteHeader
           siteConfig={siteConfig}

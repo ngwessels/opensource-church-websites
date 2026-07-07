@@ -124,12 +124,15 @@ Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notif
 
 **Site analytics**
 
-First-party analytics for public parish pages (alongside optional Firebase Analytics). Data is stored in Firestore `analyticsEvents`.
+First-party analytics for public parish pages (alongside optional Firebase Analytics). Data is stored in Firestore `analyticsEvents` (page views, engagement) and `analyticsHeatmapRollups` (click/scroll heatmaps).
 
 - `get_site_analytics` — site-wide report for a date range (`dateFrom`, `dateTo`, optional `pagePath`)
 - `get_page_analytics` — per-page report (`dateFrom`, `dateTo`, plus `pagePath` or `pageId`)
+- `get_page_heatmap` — per-page click/tap and scroll-depth heatmap (`dateFrom`, `dateTo`, plus `pagePath` or `pageId`, optional `deviceType`: `mobile`, `tablet`, or `desktop`)
 
 Reports include page views, visitors, sessions, bounce rate, average engagement, daily trend, top pages, referrers, traffic sources, devices, browsers, and countries. Builder UI: **Analytics** tab.
+
+Heatmap responses include `totalClicks`, `totalSessions`, `clicks` (grid cells with `xPercent`/`yPercent`), `scrollBuckets` (depth reached per 10% step), and `hotspots` (top tap areas with verbal labels like `upper-right`). Coordinates are document-relative percentages, not pixel-perfect element IDs. The builder heatmap viewer overlays data on a live iframe of the published page.
 
 **Full-site design playbook**
 

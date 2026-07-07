@@ -82,6 +82,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /analyticsHeatmapRollups/{rollupId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /analyticsHeatmapSessions/{sessionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /auditEvents/{eventId} {
       allow read: if isAdmin();
       allow create: if isAdmin();

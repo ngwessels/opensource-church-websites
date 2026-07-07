@@ -8,8 +8,9 @@ import * as site from "@/lib/cms/site";
 import * as media from "@/lib/cms/media";
 import * as bulletins from "@/lib/cms/bulletins";
 import * as documentation from "@/lib/cms/documentation";
-import { setMcpToolName } from "@/lib/cms/auth";
+import * as analytics from "@/lib/cms/analytics";
 import * as search from "@/lib/cms/content-search";
+import { setMcpToolName } from "@/lib/cms/auth";
 import { MODULE_TYPES } from "@/lib/modules/registry";
 
 function jsonResult(data) {
@@ -810,5 +811,27 @@ export function registerMcpTools(server) {
     },
     async ({ dateFrom, dateTo, pagePath, pageId }) =>
       run("null", () => analytics.getPageAnalyticsAdmin({ dateFrom, dateTo, pagePath, pageId })),
+  );
+
+  server.registerTool(
+    "get_page_heatmap",
+    {
+      description:
+        "Per-page click/tap and scroll-depth heatmap for a date range. Returns grid clicks, scroll buckets, and top hotspots (document-relative percentages, not element IDs). Requires pagePath or pageId.",
+      inputSchema: {
+        dateFrom: z.string().describe("Start date (YYYY-MM-DD or ISO)"),
+        dateTo: z.string().describe("End date (YYYY-MM-DD or ISO)"),
+        pagePath: z.string().optional().describe("Public page path (e.g. /about)"),
+        pageId: z.string().optional(),
+        deviceType: z
+          .enum(["mobile", "tablet", "desktop"])
+          .optional()
+          .describe("Device bucket; omit to merge all devices"),
+      },
+    },
+    async ({ dateFrom, dateTo, pagePath, pageId, deviceType }) =>
+      run("null", () =>
+        analytics.getPageHeatmapAdmin({ dateFrom, dateTo, pagePath, pageId, deviceType }),
+      ),
   );
 }

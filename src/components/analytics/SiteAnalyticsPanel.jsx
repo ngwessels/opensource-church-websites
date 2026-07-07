@@ -17,6 +17,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePages } from "@/hooks/usePages";
 import { useUserProfile } from "@/hooks/useUserProfile";
 
+import { PageHeatmapViewer } from "./PageHeatmapViewer";
+
 const PRESETS = [
   { id: "7d", label: "Last 7 days", days: 7 },
   { id: "30d", label: "Last 30 days", days: 30 },
@@ -112,6 +114,7 @@ export function SiteAnalyticsPanel() {
   const [dateFrom, setDateFrom] = useState(formatDateInput(30));
   const [dateTo, setDateTo] = useState(todayInput());
   const [pageFilter, setPageFilter] = useState("all");
+  const [heatmapDevice, setHeatmapDevice] = useState("all");
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -188,6 +191,16 @@ export function SiteAnalyticsPanel() {
   }
 
   const summary = report?.summary;
+  const selectedPage =
+    pageFilter !== "all" ? pageOptions.find((page) => page.id === pageFilter) : null;
+
+  const getIdToken = useCallback(
+    async (forceRefresh = false) => {
+      if (!user) throw new Error("Not signed in");
+      return user.getIdToken(forceRefresh);
+    },
+    [user],
+  );
 
   return (
     <Card className="mx-auto max-w-7xl">
@@ -335,6 +348,31 @@ export function SiteAnalyticsPanel() {
                 { key: "label", label: "Country", render: (row) => row.label },
                 { key: "count", label: "Views", render: (row) => row.count },
               ]}
+            />
+          </div>
+        )}
+        {selectedPage && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="heatmap-device">Heatmap device</Label>
+              <Select value={heatmapDevice} onValueChange={setHeatmapDevice}>
+                <SelectTrigger id="heatmap-device" className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All devices</SelectItem>
+                  <SelectItem value="mobile">Mobile</SelectItem>
+                  <SelectItem value="tablet">Tablet</SelectItem>
+                  <SelectItem value="desktop">Desktop</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <PageHeatmapViewer
+              pagePath={selectedPage.path}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              deviceType={heatmapDevice}
+              getIdToken={getIdToken}
             />
           </div>
         )}

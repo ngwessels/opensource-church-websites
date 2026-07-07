@@ -1,13 +1,19 @@
 import "server-only";
 
+import { isBotUserAgent } from "./user-agent.js";
+import {
+  getCountryFromHeaders,
+  getDateInTimezone,
+  validateCollectPayload,
+  validateHeatmapBatchPayload,
+} from "./schema.js";
+import { ingestHeatmapBatch } from "./heatmap-collect.js";
+import { getSiteConfigAdmin } from "@/lib/cms/site";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { generateId } from "@/lib/sitemap/tree";
-import { getSiteConfigAdmin } from "@/lib/cms/site";
 import { normalizeSiteTimezone } from "@/lib/site/timezone";
-
-import { getDateInTimezone, getCountryFromHeaders, validateCollectPayload } from "./schema.js";
-import { isBotUserAgent, parseUserAgent } from "./user-agent.js";
+import { parseUserAgent } from "./user-agent.js";
 
 /** @typedef {import('@/types/firestore').AnalyticsEventRecord} AnalyticsEventRecord */
 
@@ -33,21 +39,11 @@ function checkRateLimit(key) {
 }
 
 /**
+ * @param {AnalyticsEventRecord} payload
  * @param {Request} request
- * @param {unknown} body
  */
-export async function collectAnalyticsEvent(request, body) {
+async function storeAnalyticsEvent(payload, request) {
   const userAgent = request.headers.get("user-agent");
-  if (isBotUserAgent(userAgent)) {
-    return { ok: true, skipped: "bot" };
-  }
-
-  const rateKey = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (!checkRateLimit(rateKey)) {
-    throw new Error("Rate limit exceeded");
-  }
-
-  const payload = validateCollectPayload(body);
   const parsedUa = parseUserAgent(userAgent);
   const country = getCountryFromHeaders(request.headers);
   const timestamp = new Date().toISOString();
@@ -90,6 +86,32 @@ export async function collectAnalyticsEvent(request, body) {
 
   const eventId = `evt_${generateId()}`;
   await db.collection(COLLECTIONS.analyticsEvents).doc(eventId).set(record);
-
   return { ok: true, eventId };
+}
+
+/**
+ * @param {Request} request
+ * @param {unknown} body
+ */
+export async function collectAnalyticsEvent(request, body) {
+  const userAgent = request.headers.get("user-agent");
+  if (isBotUserAgent(userAgent)) {
+    return { ok: true, skipped: "bot" };
+  }
+
+  const rateKey = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (!checkRateLimit(rateKey)) {
+    throw new Error("Rate limit exceeded");
+  }
+
+  const type =
+    body && typeof body === "object" && typeof body.type === "string" ? body.type : "page_view";
+
+  if (type === "heatmap_batch") {
+    const payload = validateHeatmapBatchPayload(body);
+    return ingestHeatmapBatch(request, payload);
+  }
+
+  const payload = validateCollectPayload(body);
+  return storeAnalyticsEvent(payload, request);
 }

@@ -189,7 +189,7 @@
  * @property {string} updatedAt
  */
 
-/** @typedef {'page_view' | 'engagement'} AnalyticsEventType */
+/** @typedef {'page_view' | 'engagement' | 'heatmap_batch'} AnalyticsEventType */
 
 /**
  * @typedef {object} AnalyticsEventRecord
@@ -217,6 +217,21 @@
  * @property {number} [screenWidth]
  * @property {number} [screenHeight]
  * @property {number} [engagementMs]
+ */
+
+/** @typedef {'mobile' | 'tablet' | 'desktop'} HeatmapDeviceType */
+
+/**
+ * @typedef {object} AnalyticsHeatmapRollupRecord
+ * @property {string} date
+ * @property {string} pagePath
+ * @property {string} [pageId]
+ * @property {HeatmapDeviceType} deviceType
+ * @property {number} gridSize
+ * @property {Record<string, number>} [clicks]
+ * @property {Record<string, number>} [scrollBuckets]
+ * @property {number} [sessions]
+ * @property {string} updatedAt
  */
 
 /** @typedef {'text' | 'links' | 'image' | 'gallery' | 'photo_albums' | 'slideshow' | 'feature_tiles' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'calendar' | 'documents' | 'people' | 'buttons' | 'form' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */
