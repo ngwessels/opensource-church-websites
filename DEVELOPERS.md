@@ -168,7 +168,7 @@ Parish deployment guides (Vercel and Firebase App Hosting) are in [README.md](RE
 Key technical notes:
 
 - **Vercel:** All variables from `.env.example` including `FIREBASE_ADMIN_*`. [`vercel.json`](vercel.json) sets longer timeouts for MCP routes.
-- **Firebase App Hosting:** Secrets via [`apphosting.yaml`](apphosting.yaml) and Cloud Secret Manager. `FIREBASE_ADMIN_*` optional (ADC).
+- **Firebase App Hosting:** Secrets via [`apphosting.yaml`](apphosting.yaml) and Cloud Secret Manager. `FIREBASE_ADMIN_*` optional (ADC). **Do not** duplicate those variables as plaintext in the Firebase Console — Console overrides win, and the preparer step logs resolved values in Cloud Build (`Final app hosting schema`). Keep server secrets (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `MCP_OAUTH_COOKIE_SECRET`, `RECAPTCHA_SECRET_KEY`, Mailgun, etc.) on `RUNTIME` only in `apphosting.yaml`.
 - Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_APP_URL` to the canonical production domain.
 - Stripe webhook: `https://yourdomain.org/api/stripe/webhook`
 

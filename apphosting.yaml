@@ -21,6 +21,10 @@
 #   5. Remove duplicate env vars from the Firebase Console that reference secrets you have not created.
 #   6. Do not add env vars in the Console with blank values — every entry needs a value or secret
 #      (e.g. delete empty NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID if you are not using Analytics).
+#   7. Never store sensitive values as plaintext in the Firebase Console. Console env vars override
+#      apphosting.yaml and the App Hosting preparer prints resolved values in Cloud Build logs
+#      ("Final app hosting schema"). Use secret: references here + firebase apphosting:secrets:set
+#      instead. Keep server-only secrets on RUNTIME availability only (not BUILD).
 
 runConfig:
   cpu: 1

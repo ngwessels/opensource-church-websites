@@ -311,6 +311,7 @@ firebase apphosting:secrets:set stripePublishableKey --project YOUR_PROJECT_ID
 
 #### Common App Hosting pitfalls
 
+- **Do not paste secrets into the Firebase Console.** Console env vars override `apphosting.yaml` and App Hosting prints their **resolved values in Cloud Build logs** during the preparer step (`Final app hosting schema`). Use `firebase apphosting:secrets:set` and the `secret:` entries in `apphosting.yaml` instead. If secrets were ever logged, rotate them (Stripe keys, webhook secret, MCP OAuth cookie secret, reCAPTCHA secret, etc.).
 - **Do not leave blank environment variables** in the Firebase Console backend settings. If you are not using Google Analytics, **delete** `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` rather than leaving it empty.
 - **Use your own Firebase values** — do not copy another parish's configuration.
 - **Permission denied on build?** Grant secret access:
