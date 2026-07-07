@@ -107,13 +107,13 @@ export function EditWebsite({ slug = "" }) {
 
   const builderPath = slug ? `/builder/edit/${slug}` : "/builder/edit";
 
-  const pageAuditMeta = (action, summary, section = "modules") => {
+  const pageAuditMeta = (action, summary, section = "modules", resourcePageId = pageId) => {
     const actor = buildClientAuditActor(user, profile);
-    if (!actor || !pageId) return null;
+    if (!actor || !resourcePageId) return null;
     return {
       actor,
       action,
-      resource: { type: "page", id: pageId, slug: page?.slug ?? slug },
+      resource: { type: "page", id: resourcePageId, slug: page?.slug ?? slug },
       summary,
       context: { builderPath, section },
     };
@@ -153,7 +153,7 @@ export function EditWebsite({ slug = "" }) {
         if (raw.status === "published") {
           updates.publishedSnapshot = buildPublishedSnapshot({ ...raw, ...updates });
         }
-        const audit = pageAuditMeta("update", "Normalized page regions on load", "load");
+        const audit = pageAuditMeta("update", "Normalized page regions on load", "load", d.id);
         const pageRef = doc(db, COLLECTIONS.pages, d.id);
         if (audit) {
           await auditedUpdateDoc(pageRef, updates, audit);
@@ -169,7 +169,7 @@ export function EditWebsite({ slug = "" }) {
         setPage(normalized);
       }
     }
-  }, [slug, user, profile, page?.slug, pageId]);
+  }, [slug]);
 
   useEffect(() => {
     loadPage();
