@@ -16,6 +16,7 @@ import {
 import { AnalyticsProvider } from "@/components/providers/AnalyticsProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { TooltipProvider } from "@/components/providers/TooltipProvider";
+import { getSiteIconsMetadata } from "@/lib/seo/site-icons.server";
 
 import "./globals.css";
 
@@ -89,10 +90,14 @@ const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata = {
-  title: "Open Source Church Websites",
-  description: "An open-source church website builder with Firebase and Stripe donations.",
-};
+export async function generateMetadata() {
+  const iconsMetadata = await getSiteIconsMetadata();
+  return {
+    title: "Open Source Church Websites",
+    description: "An open-source church website builder with Firebase and Stripe donations.",
+    ...iconsMetadata,
+  };
+}
 
 export default function RootLayout({ children }) {
   return (

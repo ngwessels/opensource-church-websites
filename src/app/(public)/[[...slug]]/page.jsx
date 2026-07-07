@@ -52,11 +52,9 @@ export async function generateMetadata({ params }) {
     return { title: "Page not found" };
   }
   const site = await getCachedSiteConfig();
-  const faviconUrl = site?.seo?.faviconUrl;
   return {
     title: publicPage?.seo?.title || publicPage?.title || site?.name || "Parish",
     description: publicPage?.seo?.description || site?.seo?.description,
-    ...(faviconUrl ? { icons: { icon: faviconUrl } } : {}),
   };
 }
 
