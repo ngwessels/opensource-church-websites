@@ -63,6 +63,7 @@ export async function collectHeatmapBatch(payload, date) {
   };
 
   let clickCount = 0;
+  let scrollCount = 0;
   for (const point of payload.points) {
     if (point.kind === "click") {
       const { row, col } = coordsToCell(point.x, point.y, HEATMAP_GRID_SIZE);
@@ -72,6 +73,7 @@ export async function collectHeatmapBatch(payload, date) {
     }
     const bucket = String(scrollDepthToBucket(point.depth));
     increments[`scrollBuckets.${bucket}`] = FieldValue.increment(1);
+    scrollCount += 1;
   }
 
   const sessionDocId = heatmapSessionId(
@@ -101,7 +103,7 @@ export async function collectHeatmapBatch(payload, date) {
   };
   if (payload.pageId) baseFields.pageId = payload.pageId;
 
-  if (clickCount > 0 || Object.keys(increments).some((key) => key.startsWith("scrollBuckets."))) {
+  if (clickCount > 0 || scrollCount > 0) {
     await rollupRef.set(
       {
         ...baseFields,

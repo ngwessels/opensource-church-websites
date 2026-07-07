@@ -36,8 +36,21 @@ function documentCoordsFromEvent(event) {
 
 function currentScrollDepth() {
   const doc = document.documentElement;
+  const scrollTop = window.scrollY || doc.scrollTop || document.body.scrollTop || 0;
   const height = Math.max(doc.scrollHeight - window.innerHeight, 1);
-  return Math.min(1, Math.max(0, window.scrollY / height));
+  return Math.min(1, Math.max(0, scrollTop / height));
+}
+
+/**
+ * @param {number} depth
+ * @param {number} lastFlushedDepth
+ * @param {number} clickCount
+ * @param {boolean} final
+ */
+function shouldAttachScroll(depth, lastFlushedDepth, clickCount, final) {
+  if (final) return true;
+  if (clickCount > 0) return true;
+  return depth > lastFlushedDepth && depth > 0;
 }
 
 /**
@@ -51,6 +64,7 @@ export function PageHeatmapTracker({ pagePath: pagePathProp, pageId, enabled = t
   const pagePath = normalizePagePath(pagePathProp || pathname || "/");
   const pointsRef = useRef(/** @type {Array<{ kind: string, x?: number, y?: number, depth?: number }>} */ ([]));
   const maxScrollRef = useRef(0);
+  const lastFlushedScrollRef = useRef(-1);
   const idsRef = useRef({ visitorId: "", sessionId: "" });
   const flushTimerRef = useRef(/** @type {ReturnType<typeof setInterval> | null} */ (null));
 
@@ -62,20 +76,21 @@ export function PageHeatmapTracker({ pagePath: pagePathProp, pageId, enabled = t
     idsRef.current = { visitorId, sessionId };
     pointsRef.current = [];
     maxScrollRef.current = currentScrollDepth();
+    lastFlushedScrollRef.current = -1;
 
-    function pushPoint(point) {
-      pointsRef.current.push(point);
-      if (pointsRef.current.length >= MAX_BATCH_POINTS) {
-        flush();
-      }
-    }
-
-    function flush() {
+    /**
+     * @param {{ final?: boolean }} [options]
+     */
+    function flush(options = {}) {
+      const { final = false } = options;
       const points = pointsRef.current.splice(0, MAX_BATCH_POINTS);
       const depth = maxScrollRef.current;
-      if (depth > 0) {
+      const clickCount = points.filter((point) => point.kind === "click").length;
+
+      if (shouldAttachScroll(depth, lastFlushedScrollRef.current, clickCount, final)) {
         points.push({ kind: "scroll", depth });
       }
+
       if (points.length === 0) return;
 
       const { visitorId: vid, sessionId: sid } = idsRef.current;
@@ -90,7 +105,17 @@ export function PageHeatmapTracker({ pagePath: pagePathProp, pageId, enabled = t
         deviceType: getViewportBucket(window.innerWidth),
         points,
       });
-      maxScrollRef.current = 0;
+
+      if (points.some((point) => point.kind === "scroll")) {
+        lastFlushedScrollRef.current = depth;
+      }
+    }
+
+    function pushPoint(point) {
+      pointsRef.current.push(point);
+      if (pointsRef.current.length >= MAX_BATCH_POINTS) {
+        flush();
+      }
     }
 
     function onPointerUp(event) {
@@ -105,22 +130,26 @@ export function PageHeatmapTracker({ pagePath: pagePathProp, pageId, enabled = t
     }
 
     function onVisibilityHidden() {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") flush({ final: true });
+    }
+
+    function onPageHide() {
+      flush({ final: true });
     }
 
     document.addEventListener("pointerup", onPointerUp, { passive: true });
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
     document.addEventListener("visibilitychange", onVisibilityHidden);
-    window.addEventListener("pagehide", flush);
-    flushTimerRef.current = window.setInterval(flush, FLUSH_INTERVAL_MS);
+    window.addEventListener("pagehide", onPageHide);
+    flushTimerRef.current = window.setInterval(() => flush(), FLUSH_INTERVAL_MS);
 
     return () => {
       document.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScroll, { capture: true });
       document.removeEventListener("visibilitychange", onVisibilityHidden);
-      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("pagehide", onPageHide);
       if (flushTimerRef.current) window.clearInterval(flushTimerRef.current);
-      flush();
+      flush({ final: true });
     };
   }, [enabled, pagePath, pageId]);
 

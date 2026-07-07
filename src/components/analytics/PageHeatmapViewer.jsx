@@ -17,6 +17,23 @@ function heatColor(count, max) {
   return `rgba(220, 38, 38, ${alpha})`;
 }
 
+const SCROLL_DEPTH_STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+/**
+ * @param {Array<{ depthPercent: number, sessions: number }>} scrollBuckets
+ */
+function buildScrollDepthRows(scrollBuckets) {
+  const byDepth = new Map(
+    (scrollBuckets || []).map((bucket) => [bucket.depthPercent, bucket.sessions]),
+  );
+  if (byDepth.size === 0) return [];
+
+  return SCROLL_DEPTH_STEPS.map((depthPercent) => ({
+    depthPercent,
+    sessions: byDepth.get(depthPercent) || 0,
+  }));
+}
+
 /**
  * @param {object} props
  * @param {string} props.pagePath
@@ -141,10 +158,8 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
     return () => iframe.removeEventListener("load", onLoad);
   }, [previewSrc]);
 
-  const maxScrollSessions = Math.max(
-    ...(report?.scrollBuckets || []).map((bucket) => bucket.sessions),
-    1,
-  );
+  const scrollDepthRows = buildScrollDepthRows(report?.scrollBuckets);
+  const maxScrollSessions = Math.max(...scrollDepthRows.map((bucket) => bucket.sessions), 1);
 
   return (
     <div className="space-y-3 rounded-lg border border-border p-4">
@@ -187,7 +202,10 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
 
         <div className="w-40 shrink-0 space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Scroll depth</p>
-          {(report?.scrollBuckets || []).map((bucket) => (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Max scroll reached per visit (recorded when visitors scroll or leave the page).
+          </p>
+          {scrollDepthRows.map((bucket) => (
             <div key={bucket.depthPercent} className="space-y-1">
               <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>{bucket.depthPercent}%</span>
@@ -201,8 +219,11 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
               </div>
             </div>
           ))}
-          {!report?.scrollBuckets?.length && !loading && (
-            <p className="text-xs text-muted-foreground">No scroll data yet.</p>
+          {!scrollDepthRows.length && !loading && (
+            <p className="text-xs text-muted-foreground">
+              No scroll data yet. Visit the public page, scroll, then leave — data appears after the
+              next analytics sync.
+            </p>
           )}
         </div>
       </div>
