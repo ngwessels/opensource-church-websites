@@ -120,14 +120,25 @@ export function SiteAnalyticsPanel() {
   const [error, setError] = useState(null);
 
   const pageOptions = useMemo(() => {
-    return pages
-      .filter((page) => page.slug !== undefined)
-      .map((page) => {
-        const path = page.slug ? `/${String(page.slug).replace(/^\/+/, "")}` : "/";
-        return { id: page.id, path, title: page.title || path };
-      })
-      .sort((a, b) => a.path.localeCompare(b.path));
+    /** @type {Map<string, { path: string, title: string }>} */
+    const byPath = new Map();
+
+    for (const page of pages) {
+      const slug = page.slug ?? "";
+      const path = slug ? `/${String(slug).replace(/^\/+/, "")}` : "/";
+      byPath.set(path, { path, title: page.title || path });
+    }
+
+    return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
   }, [pages]);
+
+  const selectedPage =
+    pageFilter !== "all"
+      ? pageOptions.find((page) => page.path === pageFilter) || {
+          path: pageFilter,
+          title: pageFilter,
+        }
+      : null;
 
   const loadReport = useCallback(async () => {
     if (authLoading || !profileReady || !user || !isAdmin) {
@@ -140,9 +151,8 @@ export function SiteAnalyticsPanel() {
     async function fetchReport(forceRefresh) {
       const token = await user.getIdToken(forceRefresh);
       const params = new URLSearchParams({ from: dateFrom, to: dateTo });
-      const selected = pageOptions.find((page) => page.id === pageFilter);
-      if (selected && pageFilter !== "all") {
-        params.set("pagePath", selected.path);
+      if (pageFilter !== "all") {
+        params.set("pagePath", pageFilter);
       }
 
       return fetch(`/api/admin/analytics?${params.toString()}`, {
@@ -171,7 +181,7 @@ export function SiteAnalyticsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, profileReady, user, isAdmin, dateFrom, dateTo, pageFilter, pageOptions]);
+  }, [authLoading, profileReady, user, isAdmin, dateFrom, dateTo, pageFilter]);
 
   useEffect(() => {
     if (authLoading || !profileReady) return;
@@ -191,8 +201,6 @@ export function SiteAnalyticsPanel() {
   }
 
   const summary = report?.summary;
-  const selectedPage =
-    pageFilter !== "all" ? pageOptions.find((page) => page.id === pageFilter) : null;
 
   const getIdToken = useCallback(
     async (forceRefresh = false) => {
@@ -265,12 +273,15 @@ export function SiteAnalyticsPanel() {
               <SelectContent>
                 <SelectItem value="all">All pages</SelectItem>
                 {pageOptions.map((page) => (
-                  <SelectItem key={page.id} value={page.id}>
+                  <SelectItem key={page.path} value={page.path}>
                     {page.title} ({page.path})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              Select a page to view click and scroll heatmaps below.
+            </p>
           </div>
 
           <Button type="button" onClick={loadReport} disabled={loading}>
@@ -289,6 +300,63 @@ export function SiteAnalyticsPanel() {
             <StatCard label="Avg engagement" value={formatEngagement(summary.avgEngagementMs)} />
           </div>
         )}
+
+        <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Page heatmaps</h3>
+            <p className="text-xs text-muted-foreground">
+              Click and scroll heatmaps for a single public page. Data is shown on a live preview of
+              the published page.
+            </p>
+          </div>
+
+          {!selectedPage ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Choose a page from the filter above to load its heatmap.
+              </p>
+              {report?.topPages?.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {report.topPages.slice(0, 8).map((page) => (
+                    <Button
+                      key={page.pagePath}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPageFilter(page.pagePath)}
+                    >
+                      {page.pageTitle || page.pagePath}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="heatmap-device">Heatmap device</Label>
+                <Select value={heatmapDevice} onValueChange={setHeatmapDevice}>
+                  <SelectTrigger id="heatmap-device" className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All devices</SelectItem>
+                    <SelectItem value="mobile">Mobile</SelectItem>
+                    <SelectItem value="tablet">Tablet</SelectItem>
+                    <SelectItem value="desktop">Desktop</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <PageHeatmapViewer
+                pagePath={selectedPage.path}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                deviceType={heatmapDevice}
+                getIdToken={getIdToken}
+              />
+            </>
+          )}
+        </div>
 
         {report && (
           <div className="grid gap-6 xl:grid-cols-2">
@@ -348,31 +416,6 @@ export function SiteAnalyticsPanel() {
                 { key: "label", label: "Country", render: (row) => row.label },
                 { key: "count", label: "Views", render: (row) => row.count },
               ]}
-            />
-          </div>
-        )}
-        {selectedPage && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="heatmap-device">Heatmap device</Label>
-              <Select value={heatmapDevice} onValueChange={setHeatmapDevice}>
-                <SelectTrigger id="heatmap-device" className="w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All devices</SelectItem>
-                  <SelectItem value="mobile">Mobile</SelectItem>
-                  <SelectItem value="tablet">Tablet</SelectItem>
-                  <SelectItem value="desktop">Desktop</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <PageHeatmapViewer
-              pagePath={selectedPage.path}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              deviceType={heatmapDevice}
-              getIdToken={getIdToken}
             />
           </div>
         )}

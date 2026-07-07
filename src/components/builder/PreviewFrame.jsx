@@ -2,11 +2,7 @@
 
 import { forwardRef } from "react";
 
-function buildPreviewSrc(src) {
-  const base = src || "/";
-  const separator = base.includes("?") ? "&" : "?";
-  return `${base}${separator}designPreview=1`;
-}
+import { buildPublicPreviewSrc } from "@/lib/builder/preview-url";
 
 export const PreviewFrame = forwardRef(function PreviewFrame(
   { src = "/", device = "desktop", onLoad },
@@ -20,7 +16,7 @@ export const PreviewFrame = forwardRef(function PreviewFrame(
       <iframe
         ref={ref}
         title="Site preview"
-        src={buildPreviewSrc(src)}
+        src={buildPublicPreviewSrc(src)}
         onLoad={onLoad}
         className="h-full rounded border border-border bg-card shadow"
         style={{ width, maxWidth: "100%" }}

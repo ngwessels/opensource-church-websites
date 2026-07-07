@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { buildPublicPreviewSrc } from "@/lib/builder/preview-url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,6 +32,7 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [iframeReady, setIframeReady] = useState(false);
+  const previewSrc = buildPublicPreviewSrc(pagePath);
 
   const loadHeatmap = useCallback(async () => {
     setLoading(true);
@@ -112,6 +114,10 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
   }, [iframeReady, report, drawOverlay]);
 
   useEffect(() => {
+    setIframeReady(false);
+  }, [previewSrc]);
+
+  useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
@@ -133,7 +139,7 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
 
     iframe.addEventListener("load", onLoad);
     return () => iframe.removeEventListener("load", onLoad);
-  }, [pagePath]);
+  }, [previewSrc]);
 
   const maxScrollSessions = Math.max(
     ...(report?.scrollBuckets || []).map((bucket) => bucket.sessions),
@@ -164,9 +170,10 @@ export function PageHeatmapViewer({ pagePath, dateFrom, dateTo, deviceType, getI
       <div className="flex gap-4">
         <div className="relative min-h-[480px] flex-1 overflow-auto rounded-md border border-border bg-muted/20">
           <iframe
+            key={previewSrc}
             ref={iframeRef}
             title={`Heatmap preview ${pagePath}`}
-            src={pagePath}
+            src={previewSrc}
             className="block w-full min-h-[480px] border-0 bg-white"
           />
           <canvas
