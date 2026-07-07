@@ -1,4 +1,4 @@
-/** @typedef {'admin' | 'finance' | 'member'} UserRole */
+/** @typedef {'admin' | 'finance' | 'member' | 'donor'} UserRole */
 
 /** @typedef {'page' | 'link' | 'group' | 'secure_page'} NavNodeType */
 
@@ -138,8 +138,32 @@
  * @property {string} [returnPath]
  * @property {DonorInfo} [donor]
  * @property {string} [donorEmail] - legacy flat field
+ * @property {string} [donorEmailNormalized]
+ * @property {string} [donorUid]
  * @property {string} [donorComment]
  * @property {string} createdAt
+ */
+
+/** @typedef {'active' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete' | 'trialing' | 'paused'} SubscriptionStatus */
+
+/**
+ * @typedef {object} SubscriptionRecord
+ * @property {string} stripeSubscriptionId
+ * @property {string} stripeCustomerId
+ * @property {string} [donorUid]
+ * @property {string} [donorEmail]
+ * @property {SubscriptionStatus} status
+ * @property {number} amountCents
+ * @property {string} currency
+ * @property {'weekly' | 'monthly'} frequency
+ * @property {string} [fundId]
+ * @property {string} [fundLabel]
+ * @property {string} [stripeProductId]
+ * @property {string} [stripeSubscriptionItemId]
+ * @property {string} [currentPeriodEnd]
+ * @property {boolean} [cancelAtPeriodEnd]
+ * @property {string} createdAt
+ * @property {string} updatedAt
  */
 
 /**

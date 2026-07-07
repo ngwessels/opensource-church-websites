@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { RecaptchaNotice } from "@/components/recaptcha/RecaptchaNotice";
+import { useAuth } from "@/hooks/useAuth";
 import { useRecaptchaV3 } from "@/hooks/useRecaptchaV3";
+import { canAccessDonorPortal } from "@/lib/auth/roles";
 import { DEFAULT_DONATION_COMMENTS, DEFAULT_PRESET_AMOUNTS_CENTS, DONOR_COMMENT_MAX_LENGTH } from "@/lib/donations/schema";
 import { RECAPTCHA_ACTIONS, RECAPTCHA_TOKEN_FIELD } from "@/lib/recaptcha/constants";
 
@@ -35,6 +38,7 @@ export function DonationForm({
   const [donorComment, setDonorComment] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { user, userRole } = useAuth();
   const { enabled: recaptchaEnabled, ready: recaptchaReady, error: recaptchaError, execute: executeRecaptcha } =
     useRecaptchaV3();
 
@@ -70,9 +74,14 @@ export function DonationForm({
     try {
       const trimmedComment = donorComment.trim();
       const recaptchaToken = await executeRecaptcha(RECAPTCHA_ACTIONS.donationCheckout);
+      const idToken =
+        user && canAccessDonorPortal(userRole) ? await user.getIdToken() : null;
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           amountCents: cents,
           frequency,
@@ -234,6 +243,12 @@ export function DonationForm({
       </button>
 
       <RecaptchaNotice />
+
+      <p className="text-center text-sm text-zinc-600">
+        <Link href="/give/account/login" className="font-medium text-zinc-900 hover:underline">
+          Sign in to manage your giving
+        </Link>
+      </p>
     </form>
   );
 }

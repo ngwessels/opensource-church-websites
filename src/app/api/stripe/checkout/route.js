@@ -5,6 +5,7 @@ import {
   sanitizeReturnPath,
   stripeCheckoutCustomerCollectionOptions,
 } from "@/lib/donations/schema";
+import { getDonorPortalUserFromRequest } from "@/lib/donors/auth.server";
 import { RECAPTCHA_ACTIONS, RECAPTCHA_TOKEN_FIELD } from "@/lib/recaptcha/constants";
 import { assertRecaptchaOrSkip } from "@/lib/recaptcha/server";
 import { getStripe, isStripeConfigured, joinAppUrl } from "@/lib/stripe/server";
@@ -80,6 +81,22 @@ export async function POST(request) {
   const safeDonorComment = sanitizeDonorComment(donorComment);
   const recurringInterval = RECURRING_INTERVALS[frequency];
 
+  let donorUid;
+  let stripeCustomerId;
+
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    try {
+      const { decoded, profile } = await getDonorPortalUserFromRequest(request);
+      donorUid = decoded.uid;
+      if (Array.isArray(profile?.stripeCustomerIds) && profile.stripeCustomerIds.length > 0) {
+        stripeCustomerId = profile.stripeCustomerIds[0];
+      }
+    } catch {
+      // Continue as guest checkout when auth is invalid or not a donor portal user.
+    }
+  }
+
   const stripe = getStripe();
   const returnBase = joinAppUrl(safeReturnPath);
   const returnSeparator = returnBase.includes("?") ? "&" : "?";
@@ -103,6 +120,7 @@ export async function POST(request) {
     fundLabel: trimmedFundLabel,
     returnPath: safeReturnPath,
     ...(safeDonorComment ? { donorComment: safeDonorComment } : {}),
+    ...(donorUid ? { donorUid } : {}),
   };
 
   const session = await stripe.checkout.sessions.create({
@@ -111,6 +129,7 @@ export async function POST(request) {
     success_url: `${returnBase}${returnSeparator}status=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${returnBase}${returnSeparator}status=cancelled`,
     ...stripeCheckoutCustomerCollectionOptions(),
+    ...(stripeCustomerId ? { customer: stripeCustomerId } : {}),
     metadata: donationMetadata,
     ...(recurringInterval ? { subscription_data: { metadata: donationMetadata } } : {}),
   });

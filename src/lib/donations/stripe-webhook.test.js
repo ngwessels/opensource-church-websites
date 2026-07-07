@@ -52,6 +52,12 @@ describe("persistDonationFromInvoice", () => {
 
     const db = {
       collection: () => ({
+        where: () => ({
+          limit: () => ({
+            get: async () => ({ empty: true, docs: [] }),
+          }),
+          get: async () => ({ empty: true, docs: [] }),
+        }),
         doc: (id) => ({
           get: async () => ({ exists: Boolean(docs[id]) }),
           set: async (data) => {
@@ -65,11 +71,29 @@ describe("persistDonationFromInvoice", () => {
       subscriptions: {
         retrieve: async () => ({
           id: "sub_123",
+          status: "active",
+          currency: "usd",
+          customer: "cus_123",
           metadata: {
             frequency: "weekly",
             fundId: "general",
             fundLabel: "General Fund",
           },
+          items: {
+            data: [
+              {
+                id: "si_123",
+                price: {
+                  unit_amount: 2500,
+                  recurring: { interval: "week" },
+                  product: "prod_123",
+                },
+              },
+            ],
+          },
+          current_period_end: 1_700_086_400,
+          cancel_at_period_end: false,
+          created: 1_699_000_000,
         }),
       },
       customers: {

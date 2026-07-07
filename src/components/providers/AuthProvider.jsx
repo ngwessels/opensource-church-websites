@@ -13,23 +13,31 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { ensureUserProfileClientFallback } from "@/lib/site/bootstrap";
 
 export const AuthContext = createContext(null);
 
-async function ensureProfileViaApi(user) {
+async function ensureProfileViaApi(user, mode) {
   const token = await user.getIdToken();
-  const res = await fetch("/api/auth/ensure-profile", {
+  const endpoint =
+    mode === "donor" ? "/api/auth/ensure-donor-profile" : "/api/auth/ensure-profile";
+  const res = await fetch(endpoint, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
 
   if (res.status === 403) {
     const data = await res.json().catch(() => ({}));
-    const err = new Error(data.message || "This site is closed to new signups. Contact your administrator.");
-    err.code = "site_initialized";
+    const err = new Error(
+      data.message ||
+        (mode === "donor"
+          ? "Unable to create a donor account with this email."
+          : "This site is closed to new signups. Contact your administrator."),
+    );
+    err.code = data.error || (mode === "donor" ? "donor_signup_blocked" : "site_initialized");
     throw err;
   }
 
@@ -46,6 +54,8 @@ async function ensureProfileViaApi(user) {
 }
 
 export function AuthProvider({ children }) {
+  const pathname = usePathname();
+  const profileBootstrapMode = pathname?.startsWith("/give/account") ? "donor" : "staff";
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +90,7 @@ export function AuthProvider({ children }) {
 
           void (async () => {
             try {
-              const result = await ensureProfileViaApi(nextUser);
+              const result = await ensureProfileViaApi(nextUser, profileBootstrapMode);
               if (result?.fallback) {
                 console.warn("[auth] Admin SDK unavailable — using client fallback for profile bootstrap");
                 const db = getFirebaseFirestore();
@@ -104,6 +114,14 @@ export function AuthProvider({ children }) {
                 await signOut(auth);
                 setUser(null);
                 setUserRole(null);
+              } else if (
+                profileBootstrapMode === "donor" &&
+                (err?.code === "staff_account_exists" || err?.code === "donor_signup_blocked")
+              ) {
+                setAuthError(err.message);
+                await signOut(auth);
+                setUser(null);
+                setUserRole(null);
               }
             }
           })();
@@ -117,7 +135,7 @@ export function AuthProvider({ children }) {
 
     initAuth().catch(() => setLoading(false));
     return () => unsubscribe();
-  }, [configured]);
+  }, [configured, profileBootstrapMode]);
 
   const signInWithEmail = useCallback(async (email, password) => {
     const { getFirebaseAuth } = await import("@/lib/firebase/auth");

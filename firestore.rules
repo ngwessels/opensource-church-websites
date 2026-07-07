@@ -22,6 +22,19 @@ service cloud.firestore {
       return isAdmin() || isFinance();
     }
 
+    function isDonor() {
+      return isSignedIn() && userDoc().data.role == 'donor';
+    }
+
+    function isDonationOwner() {
+      return isSignedIn() && (
+        (isDonor() || isAdmin() || isFinance()) && (
+          resource.data.donorUid == request.auth.uid ||
+          resource.data.donorEmail == request.auth.token.email
+        )
+      );
+    }
+
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow write: if false;
@@ -61,7 +74,12 @@ service cloud.firestore {
     }
 
     match /donations/{donationId} {
-      allow read: if canManageDonations();
+      allow read: if canManageDonations() || isDonationOwner();
+      allow write: if false;
+    }
+
+    match /subscriptions/{subscriptionId} {
+      allow read: if canManageDonations() || (isSignedIn() && resource.data.donorUid == request.auth.uid);
       allow write: if false;
     }
 

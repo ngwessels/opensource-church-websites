@@ -78,9 +78,34 @@ Each deployment is a single parish. Data lives in one Firebase project.
 | `pages/{id}` | Page content and modules |
 | `media/{id}` | File metadata |
 | `mediaFolders/{id}` | File folders |
-| `users/{uid}` | Admin/member roles |
+| `users/{uid}` | Admin, finance, member, and donor roles |
 | `donations/{id}` | Stripe donation records |
+| `subscriptions/{id}` | Active recurring gift state (synced from Stripe webhooks) |
 | `formSubmissions/{id}` | CMS form responses |
+
+## Donor accounts (My Giving)
+
+Parishioners can create a **donor account** separate from staff builder access:
+
+- Sign up / sign in: `/give/account/signup`, `/give/account/login`
+- Portal: `/give/account` — donation history, cancel/edit recurring gifts, update card
+
+Staff signup at `/signup` remains first-user / invite-only. Donor signup is always open.
+
+When a donor signs in, past gifts with the same email are linked automatically (`donorUid`, `stripeCustomerIds`).
+
+### Stripe setup for donor self-service
+
+1. Enable **Customer Portal** in the Stripe Dashboard (payment method updates).
+2. Configure webhook events on `/api/stripe/webhook`:
+   - `checkout.session.completed`
+   - `invoice.paid`
+   - `invoice.payment_failed`
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+
+Recurring amount/frequency changes use the Stripe Subscriptions API (dynamic Price creation per update). Deploy Firestore indexes (`firestore.indexes.json`) for donor portal queries.
 
 ## Stripe (local webhook testing)
 
@@ -92,7 +117,7 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 
 Copy the webhook signing secret into `STRIPE_WEBHOOK_SECRET` in `.env.local`. Test donations at `/give`.
 
-Configure your Stripe webhook endpoint to listen for `checkout.session.completed` and `invoice.paid` (recurring renewals).
+Configure your Stripe webhook endpoint to listen for `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, and subscription lifecycle events (`customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`).
 
 Prefer a restricted API key (`rk_test_...`) for `STRIPE_SECRET_KEY` in development.
 

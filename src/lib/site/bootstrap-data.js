@@ -1,6 +1,7 @@
 import { DEFAULT_FOOTER_STYLES } from "@/lib/site/footer-styles";
 import { DEFAULT_SITE_TIMEZONE } from "@/lib/site/timezone";
 import { DEFAULT_SOCIAL_MEDIA } from "@/lib/site/social-media";
+import { normalizeDonorEmail } from "@/lib/donors/email";
 import { normalizeDesign } from "@/lib/design/design-utils";
 import { getThemeById } from "@/lib/design/themes";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
@@ -185,7 +186,23 @@ export function buildUserProfileData(user, role, options = {}) {
     displayName: user.displayName || "",
     role,
     ...(options.isFounder ? { isFounder: true } : {}),
+    ...(options.stripeCustomerIds ? { stripeCustomerIds: options.stripeCustomerIds } : {}),
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * @param {{ email?: string, displayName?: string }} user
+ * @param {string[]} [stripeCustomerIds]
+ */
+export function buildDonorProfileData(user, stripeCustomerIds = []) {
+  const normalizedEmail = normalizeDonorEmail(user.email) || user.email || "";
+  return buildUserProfileData(
+    { ...user, email: normalizedEmail },
+    "donor",
+    {
+      stripeCustomerIds: stripeCustomerIds.length > 0 ? stripeCustomerIds : undefined,
+    },
+  );
 }

@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 
 import {
   canAccessBuilder,
+  canAccessDonorPortal,
   canManageDonations,
   formatUserRoleLabel,
   getBuilderHomeHref,
   isAdminRole,
+  isDonorRole,
   isFinanceRole,
   normalizeUserRole,
   USER_ROLES,
@@ -14,7 +16,7 @@ import {
 
 describe("auth/roles", () => {
   it("exports all supported roles", () => {
-    assert.deepEqual(USER_ROLES, ["admin", "finance", "member"]);
+    assert.deepEqual(USER_ROLES, ["admin", "finance", "member", "donor"]);
   });
 
   describe("normalizeUserRole", () => {
@@ -22,6 +24,7 @@ describe("auth/roles", () => {
       assert.equal(normalizeUserRole("admin"), "admin");
       assert.equal(normalizeUserRole("finance"), "finance");
       assert.equal(normalizeUserRole("member"), "member");
+      assert.equal(normalizeUserRole("donor"), "donor");
     });
 
     it("falls back to member for unknown values", () => {
@@ -43,6 +46,10 @@ describe("auth/roles", () => {
       assert.equal(canAccessBuilder("admin"), true);
       assert.equal(canAccessBuilder("finance"), true);
       assert.equal(canAccessBuilder("member"), false);
+      assert.equal(canAccessBuilder("donor"), false);
+      assert.equal(canAccessDonorPortal("donor"), true);
+      assert.equal(canAccessDonorPortal("admin"), true);
+      assert.equal(isDonorRole("donor"), true);
       assert.equal(canManageDonations("finance"), true);
       assert.equal(canManageDonations("member"), false);
     });
@@ -67,6 +74,7 @@ describe("auth/roles", () => {
       assert.equal(formatUserRoleLabel("admin"), "Admin");
       assert.equal(formatUserRoleLabel("finance"), "Finance");
       assert.equal(formatUserRoleLabel("member"), "Member");
+      assert.equal(formatUserRoleLabel("donor"), "Donor");
       assert.equal(formatUserRoleLabel("unknown"), "Member");
     });
   });

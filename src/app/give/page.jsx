@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 
 import { PageHeatmapTracker } from "@/components/analytics/PageHeatmapTracker";
@@ -16,10 +17,20 @@ export default function GivePage() {
       <SiteAnalyticsTracker pagePath="/give" pageTitle="Give" />
       <PageHeatmapTracker pagePath="/give" />
       <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-zinc-900">Give</h1>
-        <p className="mt-2 text-sm text-zinc-600">
-          Support our parish with a secure online donation.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900">Give</h1>
+            <p className="mt-2 text-sm text-zinc-600">
+              Support our parish with a secure online donation.
+            </p>
+          </div>
+          <Link
+            href="/give/account"
+            className="shrink-0 text-sm font-medium text-emerald-700 hover:underline"
+          >
+            My Giving
+          </Link>
+        </div>
         <Suspense fallback={null}>
           <GivePageStatus />
         </Suspense>

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import {
   persistDonationFromCheckoutSession,
   persistDonationFromInvoice,
+  persistInvoicePaymentFailed,
+  persistSubscriptionLifecycleEvent,
 } from "@/lib/donations/stripe-webhook";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getStripe } from "@/lib/stripe/server";
@@ -51,6 +53,22 @@ export async function POST(request) {
     const invoice = event.data.object;
     const result = await persistDonationFromInvoice(db, stripe, invoice);
     return NextResponse.json({ received: true, ...result });
+  }
+
+  if (
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    const subscription = event.data.object;
+    await persistSubscriptionLifecycleEvent(db, subscription);
+    return NextResponse.json({ received: true, persisted: true });
+  }
+
+  if (event.type === "invoice.payment_failed") {
+    const invoice = event.data.object;
+    await persistInvoicePaymentFailed(db, invoice);
+    return NextResponse.json({ received: true, persisted: true });
   }
 
   return NextResponse.json({ received: true });
