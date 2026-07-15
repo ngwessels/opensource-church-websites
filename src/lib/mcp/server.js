@@ -187,6 +187,12 @@ const mediaUploadFileSchema = z.object({
   mimeType: z.string().optional(),
   base64: z.string().optional(),
   sourceUrl: z.string().url().optional(),
+  expectedSizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Original file size in bytes. Required when using base64 so truncated payloads are rejected."),
   description: z.string().max(500).optional(),
   alt: z.string().max(200).optional(),
   tags: z.array(z.string()).max(20).optional(),
@@ -601,13 +607,19 @@ export function registerMcpTools(server) {
     "upload_media",
     {
       description:
-        "Upload media via base64 (max ~3MB) or sourceUrl. Optional description, alt, and tags help identify the file later. For documents modules, use folderId documents-root, set item url to the returned downloadUrl and mediaId to the returned id; use displayMode inline on the item to embed PDFs on the page.",
+        "Upload media via sourceUrl (preferred, max 10MB — fetch is server-side) or small base64 (max ~1MB decoded). MCP runs on Vercel with a ~4.5 MB request body limit, so large base64 in one call will fail or truncate. For base64, expectedSizeBytes is REQUIRED. For local files over ~100KB use begin_media_upload/upload_media_chunk/complete_media_upload (~96KB chunks). folderId: documents-root for PDFs, pictures-root for images.",
       inputSchema: {
         folderId: z.string(),
         filename: z.string(),
         mimeType: z.string().optional(),
         base64: z.string().optional(),
         sourceUrl: z.string().url().optional(),
+        expectedSizeBytes: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Required with base64: original file size in bytes."),
         description: z.string().max(500).optional(),
         alt: z.string().max(200).optional(),
         tags: z.array(z.string()).max(20).optional(),
@@ -620,12 +632,56 @@ export function registerMcpTools(server) {
     "upload_media_batch",
     {
       description:
-        "Upload multiple files in one call. Each file uses base64 (max ~3MB) or sourceUrl (max ~10MB). Returns uploaded records and per-file errors (partial success allowed). Use pictures-root for images, documents-root for PDFs.",
+        "Upload multiple small files. Prefer sourceUrl per file. Base64 max ~1MB each and requires expectedSizeBytes. Vercel ~4.5 MB body limit applies to the whole batch request — do not batch large base64 payloads. Use chunked upload for larger local files.",
       inputSchema: {
         files: z.array(mediaUploadFileSchema),
       },
     },
     async ({ files }) => run("null", () => media.uploadMediaBatchAdmin({ files })),
+  );
+
+  server.registerTool(
+    "begin_media_upload",
+    {
+      description:
+        "Start a chunked media upload for local files. Required when base64 cannot fit in one Vercel MCP request (~4.5 MB body limit). Pass expectedSizeBytes. Then upload_media_chunk with ~96KB binary chunks (base64 each chunk separately), then complete_media_upload. Prefer sourceUrl if the file is already hosted.",
+      inputSchema: {
+        folderId: z.string(),
+        filename: z.string(),
+        mimeType: z.string().optional(),
+        expectedSizeBytes: z.number().int().positive(),
+        description: z.string().max(500).optional(),
+        alt: z.string().max(200).optional(),
+        tags: z.array(z.string()).max(20).optional(),
+      },
+    },
+    async (args) => run("null", () => media.beginMediaUploadAdmin(args)),
+  );
+
+  server.registerTool(
+    "upload_media_chunk",
+    {
+      description:
+        "Append one base64-encoded binary chunk (~96KB recommended, hard cap ~260KB decoded). Keeps each Vercel MCP POST under the ~4.5 MB body limit. Chunks must be sequential from index 0. Encode each raw chunk separately — do not split one base64 string of the whole file.",
+      inputSchema: {
+        uploadId: z.string(),
+        chunkIndex: z.number().int().min(0),
+        base64: z.string(),
+      },
+    },
+    async (args) => run("null", () => media.uploadMediaChunkAdmin(args)),
+  );
+
+  server.registerTool(
+    "complete_media_upload",
+    {
+      description:
+        "Assemble chunks from begin_media_upload, validate size and file signature, and create the media library record. Returns the same shape as upload_media (id, downloadUrl, sizeBytes, …).",
+      inputSchema: {
+        uploadId: z.string(),
+      },
+    },
+    async ({ uploadId }) => run("null", () => media.completeMediaUploadAdmin({ uploadId })),
   );
 
   server.registerTool(

@@ -243,13 +243,23 @@ export function getBuilderCapabilities() {
       unused: DEFAULT_MEDIA_FOLDERS.unused,
     },
     mediaUpload: {
-      tools: ["upload_media", "upload_media_batch"],
+      tools: [
+        "upload_media",
+        "upload_media_batch",
+        "begin_media_upload",
+        "upload_media_chunk",
+        "complete_media_upload",
+      ],
       limits: {
-        base64MaxMb: 3,
+        vercelRequestBodyMaxMb: 4.5,
+        singleShotBase64MaxMb: 1,
         sourceUrlMaxMb: 10,
+        chunkedUploadMaxMb: 10,
+        recommendedChunkBytes: 96 * 1024,
+        maxChunkBase64Chars: 350_000,
       },
       workflow:
-        "Upload images to pictures-root, PDFs to documents-root. Use returned downloadUrl in module configs (slideshow src, gallery images, image src, logoUrl, people photoUrl, documents url).",
+        "MCP is hosted on Vercel (~4.5 MB request body). Prefer sourceUrl (server-side fetch, up to 10MB). For local files use chunked upload: begin_media_upload → upload_media_chunk (~96KB binary each) → complete_media_upload. Single-shot base64 max ~1MB and requires expectedSizeBytes. Upload images to pictures-root, PDFs to documents-root.",
     },
     designTools: ["list_design_themes", "apply_design_theme", "update_site_design"],
     batchTools: ["add_modules_batch", "upload_media_batch", "publish_all_pages"],

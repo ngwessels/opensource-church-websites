@@ -43,15 +43,36 @@ Call `get_site_summary` or `get_builder_capabilities` first when exploring an un
 **Media library**
 
 - `list_media`, `get_media`, `list_media_folders` — browse files
-- `upload_media`, `upload_media_batch` — base64 (≤3 MB each) or `sourceUrl` (≤10 MB each)
+- `upload_media`, `upload_media_batch` — prefer `sourceUrl` (≤10 MB); single-shot base64 ≤**1 MB** and **requires `expectedSizeBytes`**
+- `begin_media_upload` → `upload_media_chunk` → `complete_media_upload` — **required for local files over ~100KB**
 - `update_media`, `delete_media` — metadata and removal
 
 Folders: `pictures-root` (images), `documents-root` (PDFs), `unused-pictures` (staging). Use returned `downloadUrl` in module configs.
 
+**Vercel payload limits**
+
+The MCP server is hosted on Vercel. Each tool call is an HTTP request with a **~4.5 MB body limit**. Large base64 in one `upload_media` call will 413 or get truncated by the client — that produced the corrupt undersized files.
+
+| Method | Limit | Notes |
+|--------|-------|--------|
+| `sourceUrl` | 10 MB | **Preferred** — server fetches; not limited by request body |
+| Single-shot `base64` | ~1 MB decoded | Requires `expectedSizeBytes` |
+| Chunked upload | 10 MB total | ~**96 KB** binary per chunk (~128 KB base64) |
+
+**Reliable local file upload (chunked)**
+
+1. Measure the file → `expectedSizeBytes`
+2. `begin_media_upload` with `folderId`, `filename`, `mimeType`, `expectedSizeBytes`
+3. Split the **raw binary** into ~96KB chunks; base64-encode **each chunk separately**
+4. `upload_media_chunk` for `chunkIndex` 0, 1, 2… until `remainingBytes` is 0
+5. `complete_media_upload` → verify returned `sizeBytes` matches the original
+
+If the file is already on the public web, use `upload_media` with `sourceUrl` instead.
+
 **Bulletins**
 
 - `list_bulletins`, `create_bulletin`, `delete_bulletin`
-- Workflow: set page `pageType: "bulletins"` → `upload_media` (documents-root) → `create_bulletin` → `publish_page` if needed
+- Workflow: set page `pageType: "bulletins"` → chunked upload or `upload_media` (documents-root) → `create_bulletin` → `publish_page` if needed
 
 **Admin documentation**
 
@@ -88,7 +109,7 @@ Config shape: `{ items: [{ label, href }] }`. No section title. Use sitemap path
 Config shape: `{ title, items: [{ label, url }] }`. Items use `url` (not `href`).
 
 1. `add_module` with `type: "documents"`
-2. `upload_media` with `folderId: "documents-root"` (returns `downloadUrl`)
+2. Upload PDF via chunked upload (`begin_media_upload` → chunks → `complete_media_upload`) or `upload_media` with `sourceUrl` / base64+`expectedSizeBytes` (`folderId: "documents-root"`)
 3. `update_module` with `config: { title, items: [{ label, url: downloadUrl }] }`
 4. `publish_page`
 
