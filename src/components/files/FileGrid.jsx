@@ -1,8 +1,9 @@
 "use client";
 
-import { Link2, Play, Trash2 } from "lucide-react";
+import { Download, Link2, Play, Trash2 } from "lucide-react";
 import Image from "next/image";
 
+import { downloadMediaFile } from "@/lib/media/download";
 import { formatBytes } from "@/lib/media/upload";
 
 export function FileGrid({
@@ -47,16 +48,32 @@ export function FileGrid({
               <td className="py-2">{formatBytes(file.sizeBytes)}</td>
               {!selectable && (
                 <td className="py-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(file.id);
-                    }}
-                    className="text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {file.downloadUrl && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadMediaFile(file);
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Download"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(file.id);
+                      }}
+                      className="text-red-600"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </td>
               )}
             </tr>
@@ -105,16 +122,32 @@ export function FileGrid({
       ) : null}
       <p className="text-xs text-muted-foreground">{formatBytes(file.sizeBytes)}</p>
       {!selectable && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(file.id);
-          }}
-          className="absolute right-2 top-2 hidden rounded bg-red-600 p-1 text-white group-hover:block"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
+          {file.downloadUrl && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void downloadMediaFile(file);
+              }}
+              className="rounded bg-foreground p-1 text-background"
+              title="Download"
+            >
+              <Download className="h-3 w-3" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(file.id);
+            }}
+            className="rounded bg-red-600 p-1 text-white"
+            title="Delete"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
       )}
     </>
   );

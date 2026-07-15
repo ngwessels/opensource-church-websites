@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { buildClientAuditActor } from "@/lib/firestore/audited-mutation";
 import { MAX_MEDIA_ALT_LENGTH, MAX_MEDIA_DESCRIPTION_LENGTH } from "@/lib/media/metadata";
 import { updateMediaMetadata } from "@/lib/media/update";
+import { downloadMediaFile } from "@/lib/media/download";
 import { formatBytes } from "@/lib/media/upload";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -28,6 +30,7 @@ export function FileDetailsSheet({ file, open, onClose, onSaved }) {
   const [alt, setAlt] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -37,6 +40,20 @@ export function FileDetailsSheet({ file, open, onClose, onSaved }) {
     setTagsInput((file.tags || []).join(", "));
     setError(null);
   }, [open, file]);
+
+  async function handleDownload() {
+    if (!file?.downloadUrl) return;
+
+    setDownloading(true);
+    setError(null);
+    try {
+      await downloadMediaFile(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download file.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function handleSave(event) {
     event.preventDefault();
@@ -130,13 +147,29 @@ export function FileDetailsSheet({ file, open, onClose, onSaved }) {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <SheetFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
+          <SheetFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+            {file.downloadUrl ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownload}
+                disabled={downloading}
+                className="w-full sm:w-auto"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {downloading ? "Downloading…" : "Download"}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1 sm:flex-none">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving} className="flex-1 sm:flex-none">
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
           </SheetFooter>
         </form>
       </SheetContent>
