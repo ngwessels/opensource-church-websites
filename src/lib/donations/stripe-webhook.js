@@ -58,6 +58,10 @@ export async function persistDonationFromCheckoutSession(db, session) {
   const metadataDonorUid = session.metadata?.donorUid?.trim();
   const stripeSubscriptionId =
     typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+  const stripePaymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id;
 
   const donor = donorFromStripeSession(
     session.customer_details,
@@ -69,6 +73,11 @@ export async function persistDonationFromCheckoutSession(db, session) {
     metadataDonorUid ||
     (donorEmail ? await resolveDonorUidByEmail(db, donorEmail) : undefined);
 
+  const createdAt =
+    typeof session.created === "number" && session.created > 0
+      ? new Date(session.created * 1000).toISOString()
+      : new Date().toISOString();
+
   await db
     .collection("donations")
     .doc(session.id)
@@ -79,6 +88,7 @@ export async function persistDonationFromCheckoutSession(db, session) {
       status: "completed",
       stripeSessionId: session.id,
       stripeCustomerId: typeof session.customer === "string" ? session.customer : undefined,
+      ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
       ...(stripeSubscriptionId ? { stripeSubscriptionId } : {}),
       ...(donor ? { donor } : {}),
       donorEmail,
@@ -88,7 +98,7 @@ export async function persistDonationFromCheckoutSession(db, session) {
       ...(fundLabel ? { fundLabel } : {}),
       ...(returnPath ? { returnPath } : {}),
       ...(donorComment ? { donorComment } : {}),
-      createdAt: new Date().toISOString(),
+      createdAt,
     });
 
   if (stripeSubscriptionId && session.subscription) {
@@ -103,6 +113,122 @@ export async function persistDonationFromCheckoutSession(db, session) {
       donorEmail: donorEmailNormalized,
     });
   }
+}
+
+/**
+ * True when a PaymentIntent is clearly a subscription invoice charge (not a one-time gift).
+ * @param {import("stripe").Stripe.PaymentIntent | Record<string, unknown>} paymentIntent
+ */
+export function isSubscriptionPaymentIntent(paymentIntent) {
+  const invoice = /** @type {{ invoice?: string | { id?: string } | null }} */ (paymentIntent).invoice;
+  if (typeof invoice === "string" && invoice) return true;
+  if (invoice && typeof invoice === "object" && invoice.id) return true;
+
+  const description =
+    typeof paymentIntent.description === "string" ? paymentIntent.description.trim() : "";
+  return /^subscription\b/i.test(description);
+}
+
+/**
+ * Persist a one-time gift from a succeeded PaymentIntent that has no Checkout Session
+ * (e.g. Stripe Payment Links / Link payments created outside `/api/stripe/checkout`).
+ *
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {import("stripe").Stripe} stripe
+ * @param {import("stripe").Stripe.PaymentIntent} paymentIntent
+ * @returns {Promise<{ persisted: boolean; reason?: string; id?: string }>}
+ */
+export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent) {
+  if (paymentIntent.status !== "succeeded") {
+    return { persisted: false, reason: "not_succeeded" };
+  }
+  if (isSubscriptionPaymentIntent(paymentIntent)) {
+    return { persisted: false, reason: "subscription_payment" };
+  }
+
+  const paymentIntentId = paymentIntent.id;
+  if (!paymentIntentId) {
+    return { persisted: false, reason: "no_id" };
+  }
+
+  const existingById = await db.collection("donations").doc(paymentIntentId).get();
+  if (existingById.exists) {
+    return { persisted: false, reason: "duplicate", id: paymentIntentId };
+  }
+
+  const alreadyLinked = await db
+    .collection("donations")
+    .where("stripePaymentIntentId", "==", paymentIntentId)
+    .limit(1)
+    .get();
+  if (!alreadyLinked.empty) {
+    return { persisted: false, reason: "duplicate", id: alreadyLinked.docs[0]?.id };
+  }
+
+  const metadata = paymentIntent.metadata ?? {};
+  const frequency = metadata.frequency === "weekly" || metadata.frequency === "monthly"
+    ? metadata.frequency
+    : "once";
+  const fundId = metadata.fundId?.trim() || undefined;
+  const fundLabel = metadata.fundLabel?.trim() || undefined;
+  const returnPath = metadata.returnPath?.trim() || undefined;
+  const donorComment = metadata.donorComment?.trim() || undefined;
+  const metadataDonorUid = metadata.donorUid?.trim() || undefined;
+
+  let donor;
+  const chargeId =
+    typeof paymentIntent.latest_charge === "string"
+      ? paymentIntent.latest_charge
+      : paymentIntent.latest_charge?.id;
+  if (chargeId) {
+    const charge = await stripe.charges.retrieve(chargeId);
+    donor = donorFromStripeSession(charge.billing_details, charge.billing_details?.email ?? undefined);
+  }
+
+  const customerId =
+    typeof paymentIntent.customer === "string"
+      ? paymentIntent.customer
+      : paymentIntent.customer?.id;
+  if (!donor && customerId) {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer.deleted) {
+      donor = donorFromStripeCustomer(customer);
+    }
+  }
+
+  const donorEmail = donor?.email || undefined;
+  const donorEmailNormalized = normalizeDonorEmail(donorEmail);
+  const donorUid =
+    metadataDonorUid ||
+    (donorEmail ? await resolveDonorUidByEmail(db, donorEmail) : undefined);
+
+  const createdAt =
+    typeof paymentIntent.created === "number" && paymentIntent.created > 0
+      ? new Date(paymentIntent.created * 1000).toISOString()
+      : new Date().toISOString();
+
+  await db
+    .collection("donations")
+    .doc(paymentIntentId)
+    .set({
+      amountCents: paymentIntent.amount_received || paymentIntent.amount || 0,
+      currency: paymentIntent.currency ?? "usd",
+      frequency,
+      status: "completed",
+      stripePaymentIntentId: paymentIntentId,
+      ...(customerId ? { stripeCustomerId: customerId } : {}),
+      ...(donor ? { donor } : {}),
+      donorEmail,
+      ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
+      ...(donorUid ? { donorUid } : {}),
+      ...(fundId ? { fundId } : {}),
+      ...(fundLabel ? { fundLabel } : {}),
+      ...(returnPath ? { returnPath } : {}),
+      ...(donorComment ? { donorComment } : {}),
+      createdAt,
+    });
+
+  return { persisted: true, id: paymentIntentId };
 }
 
 /**

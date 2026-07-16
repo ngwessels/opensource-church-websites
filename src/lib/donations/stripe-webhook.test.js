@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import { donorFromStripeCustomer } from "./schema.js";
 import {
   getInvoiceSubscriptionId,
+  isSubscriptionPaymentIntent,
   persistDonationFromInvoice,
+  persistDonationFromPaymentIntent,
 } from "./stripe-webhook.js";
 
 describe("getInvoiceSubscriptionId", () => {
@@ -26,6 +28,94 @@ describe("getInvoiceSubscriptionId", () => {
 
   it("returns undefined when no subscription is present", () => {
     assert.equal(getInvoiceSubscriptionId({ parent: { type: "quote_details" } }), undefined);
+  });
+});
+
+describe("isSubscriptionPaymentIntent", () => {
+  it("detects subscription invoice descriptions", () => {
+    assert.equal(
+      isSubscriptionPaymentIntent({ description: "Subscription update" }),
+      true,
+    );
+    assert.equal(
+      isSubscriptionPaymentIntent({ description: "Subscription creation" }),
+      true,
+    );
+  });
+
+  it("allows one-time payment intents", () => {
+    assert.equal(
+      isSubscriptionPaymentIntent({ id: "pi_abc", description: "pi_abc" }),
+      false,
+    );
+  });
+});
+
+describe("persistDonationFromPaymentIntent", () => {
+  it("persists succeeded one-time payment intents", async () => {
+    /** @type {Record<string, object>} */
+    const docs = {};
+    const db = {
+      collection: () => ({
+        where: () => ({
+          limit: () => ({
+            get: async () => ({ empty: true, docs: [] }),
+          }),
+        }),
+        doc: (id) => ({
+          get: async () => ({ exists: Boolean(docs[id]) }),
+          set: async (data) => {
+            docs[id] = data;
+          },
+        }),
+      }),
+    };
+    const stripe = {
+      charges: {
+        retrieve: async () => ({
+          billing_details: {
+            name: "Lish Donor",
+            email: "lish.6@frontier.com",
+          },
+        }),
+      },
+    };
+
+    const result = await persistDonationFromPaymentIntent(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe} */ (stripe),
+      /** @type {import("stripe").Stripe.PaymentIntent} */ ({
+        id: "pi_200",
+        status: "succeeded",
+        amount: 20000,
+        amount_received: 20000,
+        currency: "usd",
+        created: 1_700_000_000,
+        description: "pi_200",
+        latest_charge: "ch_200",
+        metadata: {},
+      }),
+    );
+
+    assert.equal(result.persisted, true);
+    assert.equal(docs.pi_200.amountCents, 20000);
+    assert.equal(docs.pi_200.frequency, "once");
+    assert.equal(docs.pi_200.donor.email, "lish.6@frontier.com");
+  });
+
+  it("skips subscription payment intents", async () => {
+    const result = await persistDonationFromPaymentIntent(
+      /** @type {import("firebase-admin/firestore").Firestore} */ ({}),
+      /** @type {import("stripe").Stripe} */ ({}),
+      /** @type {import("stripe").Stripe.PaymentIntent} */ ({
+        id: "pi_sub",
+        status: "succeeded",
+        description: "Subscription update",
+      }),
+    );
+
+    assert.equal(result.persisted, false);
+    assert.equal(result.reason, "subscription_payment");
   });
 });
 

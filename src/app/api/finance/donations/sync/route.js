@@ -35,8 +35,13 @@ export async function POST(request) {
     }
 
     const summary = await syncDonationsFromStripe(db, getStripe(), { lookbackDays });
-    const created = summary.checkouts.created + summary.renewals.created;
-    const errors = [...summary.checkouts.errors, ...summary.renewals.errors];
+    const created =
+      summary.checkouts.created + summary.payments.created + summary.renewals.created;
+    const errors = [
+      ...summary.checkouts.errors,
+      ...summary.payments.errors,
+      ...summary.renewals.errors,
+    ];
 
     return NextResponse.json({
       ok: errors.length === 0,

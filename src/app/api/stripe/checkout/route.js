@@ -131,7 +131,9 @@ export async function POST(request) {
     ...stripeCheckoutCustomerCollectionOptions(),
     ...(stripeCustomerId ? { customer: stripeCustomerId } : {}),
     metadata: donationMetadata,
-    ...(recurringInterval ? { subscription_data: { metadata: donationMetadata } } : {}),
+    ...(recurringInterval
+      ? { subscription_data: { metadata: donationMetadata } }
+      : { payment_intent_data: { metadata: donationMetadata } }),
   });
 
   return NextResponse.json({ url: session.url });
