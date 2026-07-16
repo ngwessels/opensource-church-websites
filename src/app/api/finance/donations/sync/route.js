@@ -43,6 +43,13 @@ export async function POST(request) {
       ...summary.renewals.errors,
     ];
 
+    console.info("[finance/donations/sync]", {
+      created,
+      checkouts: summary.checkouts,
+      payments: summary.payments,
+      renewals: summary.renewals,
+    });
+
     return NextResponse.json({
       ok: errors.length === 0,
       created,

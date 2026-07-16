@@ -66,7 +66,7 @@ describe("syncDonationsFromStripe", () => {
           }),
         },
       },
-      paymentIntents: {
+      charges: {
         list: async () => ({ has_more: false, data: [] }),
       },
       invoices: {
@@ -143,55 +143,88 @@ describe("syncDonationsFromStripe", () => {
     assert.equal(docs.in_create, undefined);
   });
 
-  it("imports one-time PaymentIntents that have no Checkout Session", async () => {
+  it("imports one-time Charges even when Checkout Session is not importable", async () => {
     const { db, docs } = createMemoryDb();
 
     const stripe = {
       checkout: {
         sessions: {
           list: async (params = {}) => {
-            if (params.payment_intent) {
-              return { has_more: false, data: [] };
+            if (params.payment_intent === "pi_one_time") {
+              return {
+                has_more: false,
+                data: [
+                  {
+                    // Incomplete session previously blocked Charge import.
+                    id: "cs_open",
+                    status: "open",
+                    payment_status: "unpaid",
+                    mode: "payment",
+                    payment_intent: "pi_one_time",
+                    metadata: {},
+                  },
+                ],
+              };
             }
             return { has_more: false, data: [] };
           },
         },
       },
-      paymentIntents: {
+      charges: {
         list: async () => ({
           has_more: false,
           data: [
             {
-              id: "pi_one_time",
+              id: "ch_50",
               status: "succeeded",
+              paid: true,
               amount: 5000,
-              amount_received: 5000,
               currency: "usd",
               created: 1_700_100_000,
               description: "pi_one_time",
-              latest_charge: "ch_1",
-              metadata: {},
+              payment_intent: "pi_one_time",
+              billing_details: {
+                name: "Amy Donor",
+                email: "amyp828@comcast.net",
+              },
+              receipt_email: "amyp828@comcast.net",
             },
             {
-              id: "pi_subscription",
+              id: "ch_sub",
               status: "succeeded",
+              paid: true,
               amount: 500,
-              amount_received: 500,
               currency: "usd",
               created: 1_700_200_000,
               description: "Subscription update",
-              metadata: {},
+              payment_intent: "pi_sub",
+              billing_details: {
+                email: "nwessels16@gmail.com",
+              },
+            },
+            {
+              id: "ch_200",
+              status: "succeeded",
+              paid: true,
+              amount: 20000,
+              currency: "usd",
+              created: 1_700_050_000,
+              description: "pi_200",
+              payment_intent: "pi_200",
+              billing_details: {
+                name: "Lish Donor",
+                email: "lish.6@frontier.com",
+              },
             },
           ],
         }),
       },
-      charges: {
-        retrieve: async () => ({
-          id: "ch_1",
-          billing_details: {
-            name: "Amy Donor",
-            email: "amyp828@comcast.net",
-          },
+      paymentIntents: {
+        retrieve: async (id) => ({
+          id,
+          status: "succeeded",
+          metadata: {},
+          description: id.startsWith("pi_sub") ? "Subscription update" : id,
         }),
       },
       invoices: {
@@ -205,10 +238,12 @@ describe("syncDonationsFromStripe", () => {
       { lookbackDays: 30 },
     );
 
-    assert.equal(summary.payments.created, 1);
-    assert.ok(summary.payments.skipped >= 1);
+    assert.equal(summary.payments.created, 2);
     assert.equal(docs.pi_one_time.amountCents, 5000);
     assert.equal(docs.pi_one_time.donor.email, "amyp828@comcast.net");
-    assert.equal(docs.pi_subscription, undefined);
+    assert.equal(docs.pi_200.amountCents, 20000);
+    assert.equal(docs.pi_200.donor.email, "lish.6@frontier.com");
+    assert.equal(docs.pi_sub, undefined);
+    assert.equal(docs.ch_sub, undefined);
   });
 });

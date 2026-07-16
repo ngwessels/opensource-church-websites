@@ -116,6 +116,13 @@ export async function persistDonationFromCheckoutSession(db, session) {
 }
 
 /**
+ * @param {string | null | undefined} description
+ */
+export function isSubscriptionPaymentDescription(description) {
+  return typeof description === "string" && /^subscription\b/i.test(description.trim());
+}
+
+/**
  * True when a PaymentIntent is clearly a subscription invoice charge (not a one-time gift).
  * @param {import("stripe").Stripe.PaymentIntent | Record<string, unknown>} paymentIntent
  */
@@ -123,10 +130,130 @@ export function isSubscriptionPaymentIntent(paymentIntent) {
   const invoice = /** @type {{ invoice?: string | { id?: string } | null }} */ (paymentIntent).invoice;
   if (typeof invoice === "string" && invoice) return true;
   if (invoice && typeof invoice === "object" && invoice.id) return true;
+  return isSubscriptionPaymentDescription(
+    typeof paymentIntent.description === "string" ? paymentIntent.description : undefined,
+  );
+}
 
-  const description =
-    typeof paymentIntent.description === "string" ? paymentIntent.description.trim() : "";
-  return /^subscription\b/i.test(description);
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} docId
+ * @param {Set<string>} [knownPaymentIntentIds]
+ */
+async function donationDocExists(db, docId, knownPaymentIntentIds) {
+  if (knownPaymentIntentIds?.has(docId)) return true;
+  const existing = await db.collection("donations").doc(docId).get();
+  return existing.exists;
+}
+
+/**
+ * Persist a one-time gift from a succeeded Stripe Charge (Payments dashboard row).
+ *
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {import("stripe").Stripe} stripe
+ * @param {import("stripe").Stripe.Charge} charge
+ * @param {{ knownPaymentIntentIds?: Set<string> }} [options]
+ * @returns {Promise<{ persisted: boolean; reason?: string; id?: string }>}
+ */
+export async function persistDonationFromCharge(db, stripe, charge, options = {}) {
+  if (charge.status !== "succeeded" || charge.paid === false) {
+    return { persisted: false, reason: "not_succeeded" };
+  }
+  if (isSubscriptionPaymentDescription(charge.description)) {
+    return { persisted: false, reason: "subscription_payment" };
+  }
+
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+  const docId = paymentIntentId || charge.id;
+  if (!docId) {
+    return { persisted: false, reason: "no_id" };
+  }
+
+  if (await donationDocExists(db, docId, options.knownPaymentIntentIds)) {
+    return { persisted: false, reason: "duplicate", id: docId };
+  }
+  if (paymentIntentId && options.knownPaymentIntentIds?.has(paymentIntentId)) {
+    return { persisted: false, reason: "duplicate", id: paymentIntentId };
+  }
+
+  /** @type {Record<string, string>} */
+  let metadata = {};
+  if (paymentIntentId) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      metadata = paymentIntent.metadata ?? {};
+      if (isSubscriptionPaymentIntent(paymentIntent)) {
+        return { persisted: false, reason: "subscription_payment" };
+      }
+    } catch {
+      // Charge billing details are enough when PaymentIntent retrieval fails.
+    }
+  }
+
+  const frequency =
+    metadata.frequency === "weekly" || metadata.frequency === "monthly"
+      ? metadata.frequency
+      : "once";
+  const fundId = metadata.fundId?.trim() || undefined;
+  const fundLabel = metadata.fundLabel?.trim() || undefined;
+  const returnPath = metadata.returnPath?.trim() || undefined;
+  const donorComment = metadata.donorComment?.trim() || undefined;
+  const metadataDonorUid = metadata.donorUid?.trim() || undefined;
+
+  let donor = donorFromStripeSession(
+    charge.billing_details,
+    charge.billing_details?.email || charge.receipt_email || undefined,
+  );
+
+  const customerId =
+    typeof charge.customer === "string" ? charge.customer : charge.customer?.id;
+  if (!donor && customerId) {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer.deleted) {
+      donor = donorFromStripeCustomer(customer);
+    }
+  }
+
+  const donorEmail = donor?.email || charge.receipt_email || undefined;
+  const donorEmailNormalized = normalizeDonorEmail(donorEmail);
+  const donorUid =
+    metadataDonorUid ||
+    (donorEmail ? await resolveDonorUidByEmail(db, donorEmail) : undefined);
+
+  const createdAt =
+    typeof charge.created === "number" && charge.created > 0
+      ? new Date(charge.created * 1000).toISOString()
+      : new Date().toISOString();
+
+  await db
+    .collection("donations")
+    .doc(docId)
+    .set({
+      amountCents: typeof charge.amount === "number" ? charge.amount : 0,
+      currency: charge.currency ?? "usd",
+      frequency,
+      status: "completed",
+      stripeChargeId: charge.id,
+      ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
+      ...(customerId ? { stripeCustomerId: customerId } : {}),
+      ...(donor ? { donor } : {}),
+      donorEmail,
+      ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
+      ...(donorUid ? { donorUid } : {}),
+      ...(fundId ? { fundId } : {}),
+      ...(fundLabel ? { fundLabel } : {}),
+      ...(returnPath ? { returnPath } : {}),
+      ...(donorComment ? { donorComment } : {}),
+      createdAt,
+    });
+
+  options.knownPaymentIntentIds?.add(docId);
+  if (paymentIntentId) options.knownPaymentIntentIds?.add(paymentIntentId);
+
+  return { persisted: true, id: docId };
 }
 
 /**
@@ -136,9 +263,10 @@ export function isSubscriptionPaymentIntent(paymentIntent) {
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {import("stripe").Stripe} stripe
  * @param {import("stripe").Stripe.PaymentIntent} paymentIntent
+ * @param {{ knownPaymentIntentIds?: Set<string>, charge?: import("stripe").Stripe.Charge }} [options]
  * @returns {Promise<{ persisted: boolean; reason?: string; id?: string }>}
  */
-export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent) {
+export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent, options = {}) {
   if (paymentIntent.status !== "succeeded") {
     return { persisted: false, reason: "not_succeeded" };
   }
@@ -151,45 +279,45 @@ export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent
     return { persisted: false, reason: "no_id" };
   }
 
-  const existingById = await db.collection("donations").doc(paymentIntentId).get();
-  if (existingById.exists) {
+  if (await donationDocExists(db, paymentIntentId, options.knownPaymentIntentIds)) {
     return { persisted: false, reason: "duplicate", id: paymentIntentId };
   }
 
-  const alreadyLinked = await db
-    .collection("donations")
-    .where("stripePaymentIntentId", "==", paymentIntentId)
-    .limit(1)
-    .get();
-  if (!alreadyLinked.empty) {
-    return { persisted: false, reason: "duplicate", id: alreadyLinked.docs[0]?.id };
+  let charge = options.charge;
+  if (!charge) {
+    const chargeId =
+      typeof paymentIntent.latest_charge === "string"
+        ? paymentIntent.latest_charge
+        : paymentIntent.latest_charge?.id;
+    if (chargeId) {
+      charge = await stripe.charges.retrieve(chargeId);
+    }
+  }
+
+  if (charge) {
+    return persistDonationFromCharge(db, stripe, charge, {
+      knownPaymentIntentIds: options.knownPaymentIntentIds,
+    });
   }
 
   const metadata = paymentIntent.metadata ?? {};
-  const frequency = metadata.frequency === "weekly" || metadata.frequency === "monthly"
-    ? metadata.frequency
-    : "once";
+  const frequency =
+    metadata.frequency === "weekly" || metadata.frequency === "monthly"
+      ? metadata.frequency
+      : "once";
   const fundId = metadata.fundId?.trim() || undefined;
   const fundLabel = metadata.fundLabel?.trim() || undefined;
   const returnPath = metadata.returnPath?.trim() || undefined;
   const donorComment = metadata.donorComment?.trim() || undefined;
   const metadataDonorUid = metadata.donorUid?.trim() || undefined;
 
-  let donor;
-  const chargeId =
-    typeof paymentIntent.latest_charge === "string"
-      ? paymentIntent.latest_charge
-      : paymentIntent.latest_charge?.id;
-  if (chargeId) {
-    const charge = await stripe.charges.retrieve(chargeId);
-    donor = donorFromStripeSession(charge.billing_details, charge.billing_details?.email ?? undefined);
-  }
-
   const customerId =
     typeof paymentIntent.customer === "string"
       ? paymentIntent.customer
       : paymentIntent.customer?.id;
-  if (!donor && customerId) {
+
+  let donor;
+  if (customerId) {
     const customer = await stripe.customers.retrieve(customerId);
     if (!customer.deleted) {
       donor = donorFromStripeCustomer(customer);
@@ -228,6 +356,7 @@ export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent
       createdAt,
     });
 
+  options.knownPaymentIntentIds?.add(paymentIntentId);
   return { persisted: true, id: paymentIntentId };
 }
 

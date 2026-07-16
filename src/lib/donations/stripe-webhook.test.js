@@ -73,10 +73,25 @@ describe("persistDonationFromPaymentIntent", () => {
     const stripe = {
       charges: {
         retrieve: async () => ({
+          id: "ch_200",
+          status: "succeeded",
+          paid: true,
+          amount: 20000,
+          currency: "usd",
+          created: 1_700_000_000,
+          description: "pi_200",
+          payment_intent: "pi_200",
           billing_details: {
             name: "Lish Donor",
             email: "lish.6@frontier.com",
           },
+        }),
+      },
+      paymentIntents: {
+        retrieve: async () => ({
+          id: "pi_200",
+          status: "succeeded",
+          metadata: {},
         }),
       },
     };

@@ -1,7 +1,7 @@
 import {
+  persistDonationFromCharge,
   persistDonationFromCheckoutSession,
   persistDonationFromInvoice,
-  persistDonationFromPaymentIntent,
 } from "./stripe-webhook.js";
 
 const DEFAULT_LOOKBACK_DAYS = 90;
@@ -37,28 +37,49 @@ export function isDonationCheckoutSession(session) {
 }
 
 /**
+ * @param {import("stripe").Stripe.Checkout.Session} session
+ * @param {Set<string>} knownPaymentIntentIds
+ */
+function rememberSessionPaymentIntent(session, knownPaymentIntentIds) {
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id;
+  if (paymentIntentId) knownPaymentIntentIds.add(paymentIntentId);
+  knownPaymentIntentIds.add(session.id);
+}
+
+/**
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {import("stripe").Stripe.Checkout.Session} session
  * @param {{ created: number, skipped: number, errors: string[] }} bucket
+ * @param {Set<string>} knownPaymentIntentIds
+ * @returns {Promise<'created' | 'duplicate' | 'skipped' | 'error'>}
  */
-async function importCheckoutSession(db, session, bucket) {
+async function importCheckoutSession(db, session, bucket, knownPaymentIntentIds) {
   if (!isDonationCheckoutSession(session)) {
     bucket.skipped += 1;
-    return;
+    return "skipped";
   }
   try {
     const existing = await db.collection("donations").doc(session.id).get();
     await persistDonationFromCheckoutSession(db, session);
-    if (existing.exists) bucket.skipped += 1;
-    else bucket.created += 1;
+    rememberSessionPaymentIntent(session, knownPaymentIntentIds);
+    if (existing.exists) {
+      bucket.skipped += 1;
+      return "duplicate";
+    }
+    bucket.created += 1;
+    return "created";
   } catch (err) {
     const message = err instanceof Error ? err.message : "Checkout sync failed";
     bucket.errors.push(`${session.id}: ${message}`);
+    return "error";
   }
 }
 
 /**
- * Pull recent Stripe Checkout completions, one-time PaymentIntents, and renewals into Firestore.
+ * Pull recent Stripe Checkout completions, Charges (Payments dashboard), and renewals.
  * Safe to re-run (docs overwrite / skip duplicates).
  *
  * @param {import("firebase-admin/firestore").Firestore} db
@@ -67,6 +88,8 @@ async function importCheckoutSession(db, session, bucket) {
  */
 export async function syncDonationsFromStripe(db, stripe, options = {}) {
   const createdGte = resolveCreatedGte(options.lookbackDays);
+  /** @type {Set<string>} */
+  const knownPaymentIntentIds = new Set();
 
   /** @type {{ checkouts: { created: number, skipped: number, errors: string[] }, payments: { created: number, skipped: number, errors: string[] }, renewals: { created: number, skipped: number, errors: string[] } }} */
   const summary = {
@@ -84,7 +107,7 @@ export async function syncDonationsFromStripe(db, stripe, options = {}) {
     });
 
     for (const session of page.data) {
-      await importCheckoutSession(db, session, summary.checkouts);
+      await importCheckoutSession(db, session, summary.checkouts, knownPaymentIntentIds);
     }
 
     if (!page.has_more || page.data.length === 0) break;
@@ -92,44 +115,61 @@ export async function syncDonationsFromStripe(db, stripe, options = {}) {
     if (!checkoutStartingAfter) break;
   }
 
-  let paymentStartingAfter;
+  // Mirror Stripe Dashboard → Payments: import succeeded Charges that are not subscription invoices.
+  let chargeStartingAfter;
   for (;;) {
-    const page = await stripe.paymentIntents.list({
+    const page = await stripe.charges.list({
       limit: PAGE_LIMIT,
       created: { gte: createdGte },
-      ...(paymentStartingAfter ? { starting_after: paymentStartingAfter } : {}),
+      ...(chargeStartingAfter ? { starting_after: chargeStartingAfter } : {}),
     });
 
-    for (const paymentIntent of page.data) {
-      if (paymentIntent.status !== "succeeded") {
+    for (const charge of page.data) {
+      if (charge.status !== "succeeded" || charge.paid === false) {
         summary.payments.skipped += 1;
         continue;
       }
 
+      const paymentIntentId =
+        typeof charge.payment_intent === "string"
+          ? charge.payment_intent
+          : charge.payment_intent?.id;
+
       try {
-        const sessions = await stripe.checkout.sessions.list({
-          payment_intent: paymentIntent.id,
-          limit: 1,
-        });
-        const session = sessions.data[0];
-        if (session) {
-          // Prefer Checkout Session docs (`cs_…`) when a session exists.
-          await importCheckoutSession(db, session, summary.payments);
-          continue;
+        if (paymentIntentId) {
+          const sessions = await stripe.checkout.sessions.list({
+            payment_intent: paymentIntentId,
+            limit: 1,
+          });
+          const session = sessions.data[0];
+          if (session) {
+            const outcome = await importCheckoutSession(
+              db,
+              session,
+              summary.payments,
+              knownPaymentIntentIds,
+            );
+            // Only skip Charge import when the Checkout Session actually landed (or already exists).
+            if (outcome === "created" || outcome === "duplicate") {
+              continue;
+            }
+          }
         }
 
-        const result = await persistDonationFromPaymentIntent(db, stripe, paymentIntent);
+        const result = await persistDonationFromCharge(db, stripe, charge, {
+          knownPaymentIntentIds,
+        });
         if (result.persisted) summary.payments.created += 1;
         else summary.payments.skipped += 1;
       } catch (err) {
-        const message = err instanceof Error ? err.message : "PaymentIntent sync failed";
-        summary.payments.errors.push(`${paymentIntent.id}: ${message}`);
+        const message = err instanceof Error ? err.message : "Charge sync failed";
+        summary.payments.errors.push(`${charge.id}: ${message}`);
       }
     }
 
     if (!page.has_more || page.data.length === 0) break;
-    paymentStartingAfter = page.data[page.data.length - 1]?.id;
-    if (!paymentStartingAfter) break;
+    chargeStartingAfter = page.data[page.data.length - 1]?.id;
+    if (!chargeStartingAfter) break;
   }
 
   let invoiceStartingAfter;

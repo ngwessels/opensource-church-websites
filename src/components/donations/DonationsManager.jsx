@@ -110,11 +110,24 @@ export function DonationsManager({ siteName = "Donations Report" }) {
       if (!res.ok) throw new Error(data.error || "Failed to sync donations from Stripe");
 
       const created = typeof data.created === "number" ? data.created : 0;
-      setSyncMessage(
-        created > 0
-          ? `Imported ${created} missing gift${created === 1 ? "" : "s"} from Stripe.`
-          : "Ledger is already up to date with Stripe.",
-      );
+      const summary = data.summary || {};
+      const errorCount = typeof data.errorCount === "number" ? data.errorCount : 0;
+      const paymentErrors = Array.isArray(summary.payments?.errors)
+        ? summary.payments.errors.slice(0, 3)
+        : [];
+      if (created > 0) {
+        setSyncMessage(
+          `Imported ${created} missing gift${created === 1 ? "" : "s"} from Stripe.` +
+            (errorCount > 0 ? ` ${errorCount} error(s) during sync.` : ""),
+        );
+      } else if (errorCount > 0) {
+        setSyncMessage(
+          `Sync finished with ${errorCount} error(s)` +
+            (paymentErrors.length ? `: ${paymentErrors.join("; ")}` : "."),
+        );
+      } else {
+        setSyncMessage("Ledger is already up to date with Stripe.");
+      }
     } catch (err) {
       setSyncMessage(err instanceof Error ? err.message : "Failed to sync donations from Stripe.");
     } finally {
