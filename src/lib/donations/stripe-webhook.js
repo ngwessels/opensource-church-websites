@@ -6,6 +6,45 @@ import {
 import { donorFromStripeCustomer, donorFromStripeSession } from "./schema.js";
 
 /**
+ * Stripe API 2025-03-31+ removed top-level `invoice.subscription` in favor of
+ * `invoice.parent.subscription_details.subscription`.
+ *
+ * @param {import("stripe").Stripe.Invoice | Record<string, unknown>} invoice
+ * @returns {string | undefined}
+ */
+export function getInvoiceSubscriptionId(invoice) {
+  const legacy = /** @type {{ subscription?: string | { id?: string } }} */ (invoice).subscription;
+  if (typeof legacy === "string" && legacy) return legacy;
+  if (legacy && typeof legacy === "object" && typeof legacy.id === "string") return legacy.id;
+
+  const parent = /** @type {{ parent?: { type?: string, subscription_details?: { subscription?: string | { id?: string } } } }} */ (
+    invoice
+  ).parent;
+  const details = parent?.subscription_details;
+  const subscription = details?.subscription;
+  if (typeof subscription === "string" && subscription) return subscription;
+  if (subscription && typeof subscription === "object" && typeof subscription.id === "string") {
+    return subscription.id;
+  }
+  return undefined;
+}
+
+/**
+ * Immutable subscription metadata snapshot from the invoice parent (Basil+),
+ * when present.
+ *
+ * @param {import("stripe").Stripe.Invoice | Record<string, unknown>} invoice
+ * @returns {Record<string, string>}
+ */
+export function getInvoiceSubscriptionMetadata(invoice) {
+  const parent = /** @type {{ parent?: { subscription_details?: { metadata?: Record<string, string> | null } } }} */ (
+    invoice
+  ).parent;
+  const metadata = parent?.subscription_details?.metadata;
+  return metadata && typeof metadata === "object" ? { ...metadata } : {};
+}
+
+/**
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {import("stripe").Stripe.Checkout.Session} session
  */
@@ -111,7 +150,8 @@ export async function persistDonationFromInvoice(db, stripe, invoice) {
     return { persisted: false, reason: "not_renewal" };
   }
 
-  if (!invoice.subscription) {
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  if (!subscriptionId) {
     return { persisted: false, reason: "no_subscription" };
   }
 
@@ -121,14 +161,12 @@ export async function persistDonationFromInvoice(db, stripe, invoice) {
     return { persisted: false, reason: "duplicate" };
   }
 
-  const subscriptionId =
-    typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
-
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const invoiceMetadata = getInvoiceSubscriptionMetadata(invoice);
   const resolved = await resolveSubscriptionDonationMetadata(
     stripe,
     subscriptionId,
-    subscription.metadata ?? {},
+    { ...(subscription.metadata ?? {}), ...invoiceMetadata },
   );
 
   const frequency = resolved.frequency ?? "once";
@@ -218,10 +256,8 @@ export async function persistSubscriptionLifecycleEvent(db, subscription) {
  * @param {import("stripe").Stripe.Invoice} invoice
  */
 export async function persistInvoicePaymentFailed(db, invoice) {
-  if (!invoice.subscription) return;
-
-  const subscriptionId =
-    typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  if (!subscriptionId) return;
 
   await db.collection("subscriptions").doc(subscriptionId).set(
     {

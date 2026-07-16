@@ -1,12 +1,13 @@
 "use client";
 
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { DonationsFilters } from "@/components/donations/DonationsFilters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
 import { downloadDonationsCsv, downloadDonationsPdf } from "@/lib/donations/export";
 import {
   emptyDonationFilters,
@@ -29,11 +30,14 @@ import { COLLECTIONS } from "@/lib/firestore/paths";
  * @param {string} [props.siteName]
  */
 export function DonationsManager({ siteName = "Donations Report" }) {
+  const { user } = useAuth();
   const [donations, setDonations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState(emptyDonationFilters);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   useEffect(() => {
     const db = getFirebaseFirestore();
@@ -88,6 +92,36 @@ export function DonationsManager({ siteName = "Donations Report" }) {
     });
   }
 
+  async function handleSyncFromStripe() {
+    if (!user || syncing) return;
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/finance/donations/sync", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ lookbackDays: 90 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to sync donations from Stripe");
+
+      const created = typeof data.created === "number" ? data.created : 0;
+      setSyncMessage(
+        created > 0
+          ? `Imported ${created} missing gift${created === 1 ? "" : "s"} from Stripe.`
+          : "Ledger is already up to date with Stripe.",
+      );
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Failed to sync donations from Stripe.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <Card className="mx-auto max-w-7xl">
       <CardHeader>
@@ -99,35 +133,52 @@ export function DonationsManager({ siteName = "Donations Report" }) {
               checkout; recurring gifts also appear after each successful renewal charge.
             </CardDescription>
           </div>
-          {donations.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!canExport}
-                onClick={handleExportCsv}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!canExport || exportingPdf}
-                onClick={handleExportPdf}
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                {exportingPdf ? "Exporting…" : "Export PDF"}
-              </Button>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!user || syncing}
+              onClick={handleSyncFromStripe}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing…" : "Sync from Stripe"}
+            </Button>
+            {donations.length > 0 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canExport}
+                  onClick={handleExportCsv}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export CSV
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canExport || exportingPdf}
+                  onClick={handleExportPdf}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  {exportingPdf ? "Exporting…" : "Export PDF"}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         {loading && <p className="text-sm text-muted-foreground">Loading donations…</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {syncMessage && (
+          <p className="mb-4 text-sm text-muted-foreground" role="status">
+            {syncMessage}
+          </p>
+        )}
 
         {!loading && !error && donations.length === 0 && (
           <p className="text-sm text-muted-foreground">No donations recorded yet.</p>
