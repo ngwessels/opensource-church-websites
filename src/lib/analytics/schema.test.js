@@ -66,4 +66,16 @@ describe("analytics/schema", () => {
     assert.equal(payload.points.length, 2);
     assert.equal(payload.deviceType, "desktop");
   });
+
+  it("accepts client-provided userAgent on page_view payloads", () => {
+    const payload = validateCollectPayload({
+      type: "page_view",
+      pagePath: "/about",
+      sessionId: "550e8400-e29b-41d4-a716-446655440000",
+      visitorId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/605.1.15",
+    });
+    assert.match(payload.userAgent || "", /Safari/);
+  });
 });

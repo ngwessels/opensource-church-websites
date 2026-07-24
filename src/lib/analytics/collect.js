@@ -43,8 +43,12 @@ function checkRateLimit(key) {
  * @param {Request} request
  */
 async function storeAnalyticsEvent(payload, request) {
-  const userAgent = request.headers.get("user-agent");
-  const parsedUa = parseUserAgent(userAgent);
+  // Prefer client-sent UA: some hosts/proxies omit or alter the request User-Agent,
+  // which previously stored every visit as browser "Unknown" / device "desktop".
+  const userAgent = payload.userAgent || request.headers.get("user-agent") || "";
+  const parsedUa = parseUserAgent(userAgent, {
+    secChUa: request.headers.get("sec-ch-ua"),
+  });
   const country = getCountryFromHeaders(request.headers);
   const timestamp = new Date().toISOString();
 
@@ -94,7 +98,11 @@ async function storeAnalyticsEvent(payload, request) {
  * @param {unknown} body
  */
 export async function collectAnalyticsEvent(request, body) {
-  const userAgent = request.headers.get("user-agent");
+  const bodyUa =
+    body && typeof body === "object" && typeof body.userAgent === "string"
+      ? body.userAgent
+      : "";
+  const userAgent = bodyUa || request.headers.get("user-agent") || "";
   if (isBotUserAgent(userAgent)) {
     return { ok: true, skipped: "bot" };
   }

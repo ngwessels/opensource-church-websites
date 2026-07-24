@@ -67,6 +67,7 @@ export function SiteAnalyticsTracker({
           sessionId,
           visitorId,
           engagementMs,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
         });
       }
     }
@@ -88,6 +89,7 @@ export function SiteAnalyticsTracker({
       referrer: typeof document !== "undefined" ? document.referrer : undefined,
       ...utm,
       language: typeof navigator !== "undefined" ? navigator.language : undefined,
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       screenWidth: typeof window !== "undefined" ? window.screen?.width : undefined,
       screenHeight: typeof window !== "undefined" ? window.screen?.height : undefined,
     });
@@ -107,6 +109,7 @@ export function SiteAnalyticsTracker({
         sessionId,
         visitorId,
         engagementMs: elapsed,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       });
     }
 

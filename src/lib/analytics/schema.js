@@ -125,6 +125,7 @@ export function parseReportDate(dateValue) {
  *   screenWidth?: number,
  *   screenHeight?: number,
  *   engagementMs?: number,
+ *   userAgent?: string,
  * }}
  */
 export function validateCollectPayload(body) {
@@ -182,6 +183,8 @@ export function validateCollectPayload(body) {
     screenWidth: optionalPositiveInt(body.screenWidth, 10000),
     screenHeight: optionalPositiveInt(body.screenHeight, 10000),
     engagementMs,
+    // Client-provided UA — preferred when proxies strip the request User-Agent header.
+    userAgent: optionalString(body.userAgent, 1000),
   };
 }
 
@@ -192,8 +195,12 @@ export function getCountryFromHeaders(headers) {
   const country =
     headers.get("x-vercel-ip-country") ||
     headers.get("cf-ipcountry") ||
+    headers.get("cloudfront-viewer-country") ||
+    headers.get("x-appengine-country") ||
     headers.get("x-country-code");
-  if (!country || country === "XX") return undefined;
+  if (!country || country === "XX" || country === "ZZ" || country === "??") {
+    return undefined;
+  }
   return country.slice(0, 2).toUpperCase();
 }
 
