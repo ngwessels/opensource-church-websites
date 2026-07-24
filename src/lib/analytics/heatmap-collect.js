@@ -10,14 +10,9 @@ import { COLLECTIONS } from "@/lib/firestore/paths";
 import { normalizeSiteTimezone } from "@/lib/site/timezone";
 
 import { getDateInTimezone } from "./schema.js";
-import {
-  HEATMAP_GRID_SIZE,
-  cellKey,
-  coordsToCell,
-  scrollDepthToBucket,
-} from "./heatmap-grid.js";
+import { HEATMAP_GRID_SIZE } from "./heatmap-grid.js";
+import { buildHeatmapIncrementPaths } from "./heatmap-increments.js";
 
-/** @typedef {import('./schema.js').HeatmapPoint} HeatmapPoint */
 /** @typedef {ReturnType<import('./schema.js').validateHeatmapBatchPayload>} HeatmapBatchPayload */
 
 /**
@@ -57,24 +52,7 @@ export async function collectHeatmapBatch(payload, date) {
   const rollupId = heatmapRollupId(date, payload.pagePath, payload.deviceType);
   const rollupRef = db.collection(COLLECTIONS.analyticsHeatmapRollups).doc(rollupId);
 
-  /** @type {Record<string, unknown>} */
-  const increments = {
-    updatedAt: new Date().toISOString(),
-  };
-
-  let clickCount = 0;
-  let scrollCount = 0;
-  for (const point of payload.points) {
-    if (point.kind === "click") {
-      const { row, col } = coordsToCell(point.x, point.y, HEATMAP_GRID_SIZE);
-      increments[`clicks.${cellKey(row, col)}`] = FieldValue.increment(1);
-      clickCount += 1;
-      continue;
-    }
-    const bucket = String(scrollDepthToBucket(point.depth));
-    increments[`scrollBuckets.${bucket}`] = FieldValue.increment(1);
-    scrollCount += 1;
-  }
+  const { paths, clickCount, scrollCount } = buildHeatmapIncrementPaths(payload.points);
 
   const sessionDocId = heatmapSessionId(
     date,
@@ -84,6 +62,7 @@ export async function collectHeatmapBatch(payload, date) {
   );
   const sessionRef = db.collection(COLLECTIONS.analyticsHeatmapSessions).doc(sessionDocId);
   const sessionSnap = await sessionRef.get();
+  let isNewSession = false;
   if (!sessionSnap.exists) {
     await sessionRef.set({
       date,
@@ -92,7 +71,7 @@ export async function collectHeatmapBatch(payload, date) {
       sessionId: payload.sessionId,
       createdAt: new Date().toISOString(),
     });
-    increments.sessions = FieldValue.increment(1);
+    isNewSession = true;
   }
 
   const baseFields = {
@@ -100,17 +79,26 @@ export async function collectHeatmapBatch(payload, date) {
     pagePath: payload.pagePath,
     deviceType: payload.deviceType,
     gridSize: HEATMAP_GRID_SIZE,
+    updatedAt: new Date().toISOString(),
   };
   if (payload.pageId) baseFields.pageId = payload.pageId;
 
   if (clickCount > 0 || scrollCount > 0) {
-    await rollupRef.set(
-      {
-        ...baseFields,
-        ...increments,
-      },
-      { merge: true },
-    );
+    // Ensure the document exists, then apply dotted-path increments via update().
+    // set({ merge: true }) with keys like "scrollBuckets.50" stores literal
+    // top-level fields and breaks admin reads of nested scrollBuckets/clicks maps.
+    await rollupRef.set(baseFields, { merge: true });
+
+    /** @type {Record<string, unknown>} */
+    const updatePayload = {
+      updatedAt: baseFields.updatedAt,
+    };
+    for (const path of paths) {
+      updatePayload[path] = FieldValue.increment(1);
+    }
+    if (isNewSession) updatePayload.sessions = FieldValue.increment(1);
+
+    await rollupRef.update(updatePayload);
   }
 
   return { ok: true, rollupId, points: payload.points.length };

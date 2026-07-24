@@ -83,11 +83,20 @@ export function PageHeatmapTracker({ pagePath: pagePathProp, pageId, enabled = t
      */
     function flush(options = {}) {
       const { final = false } = options;
-      const points = pointsRef.current.splice(0, MAX_BATCH_POINTS);
+      // Leave room for an optional scroll point so batches stay within MAX_BATCH_POINTS.
+      const pending = pointsRef.current;
       const depth = maxScrollRef.current;
-      const clickCount = points.filter((point) => point.kind === "click").length;
+      const pendingClicks = pending.filter((point) => point.kind === "click").length;
+      const willAttachScroll = shouldAttachScroll(
+        depth,
+        lastFlushedScrollRef.current,
+        pendingClicks,
+        final,
+      );
+      const take = willAttachScroll ? Math.max(0, MAX_BATCH_POINTS - 1) : MAX_BATCH_POINTS;
+      const points = pending.splice(0, take);
 
-      if (shouldAttachScroll(depth, lastFlushedScrollRef.current, clickCount, final)) {
+      if (willAttachScroll) {
         points.push({ kind: "scroll", depth });
       }
 
