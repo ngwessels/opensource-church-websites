@@ -25,7 +25,14 @@ export async function listBulletinsAdmin() {
 }
 
 /**
- * @param {{ date: string, title?: string, mediaId: string, downloadUrl: string }} input
+ * @param {{
+ *   date: string,
+ *   title?: string,
+ *   mediaId: string,
+ *   downloadUrl: string,
+ *   actor?: import('@/lib/audit/schema.js').AuditActor,
+ *   source?: import('@/lib/audit/schema.js').AuditSource,
+ * }} input
  */
 export async function createBulletinAdmin(input) {
   const date = input.date?.trim();
@@ -66,6 +73,8 @@ export async function createBulletinAdmin(input) {
 
   await recordAuditEvent({
     action: "create",
+    actor: input.actor,
+    source: input.source,
     resource: { type: "bulletin", id: bulletinId },
     summary: `Created bulletin for ${date}`,
     after: created,
@@ -74,7 +83,14 @@ export async function createBulletinAdmin(input) {
   return created;
 }
 
-export async function deleteBulletinAdmin(bulletinId) {
+/**
+ * @param {string} bulletinId
+ * @param {{
+ *   actor?: import('@/lib/audit/schema.js').AuditActor,
+ *   source?: import('@/lib/audit/schema.js').AuditSource,
+ * }} [options]
+ */
+export async function deleteBulletinAdmin(bulletinId, options = {}) {
   const id = bulletinId?.trim();
   if (!id) throw new Error("bulletinId is required.");
 
@@ -89,8 +105,10 @@ export async function deleteBulletinAdmin(bulletinId) {
 
   await recordAuditEvent({
     action: "delete",
+    actor: options.actor,
+    source: options.source,
     resource: { type: "bulletin", id },
-    summary: `Deleted bulletin ${id}`,
+    summary: `Deleted bulletin for ${before.date || id}`,
     before,
   });
 

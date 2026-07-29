@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAdminUserFromRequest } from "@/lib/cms/auth";
+import { getAdminActorFromRequest } from "@/lib/cms/auth";
 import { createBulletinAdmin, deleteBulletinAdmin } from "@/lib/cms/bulletins";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { listBulletinsServer } from "@/lib/firestore/server";
@@ -23,7 +23,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
     }
 
-    await getAdminUserFromRequest(request);
+    const actor = await getAdminActorFromRequest(request);
 
     const body = await request.json();
     const bulletin = await createBulletinAdmin({
@@ -31,6 +31,8 @@ export async function POST(request) {
       title: body?.title,
       mediaId: body?.mediaId,
       downloadUrl: body?.downloadUrl,
+      actor,
+      source: "ui",
     });
 
     return NextResponse.json({ bulletin });
@@ -48,10 +50,10 @@ export async function DELETE(request) {
       return NextResponse.json({ error: "Firebase Admin is not configured" }, { status: 503 });
     }
 
-    await getAdminUserFromRequest(request);
+    const actor = await getAdminActorFromRequest(request);
 
     const bulletinId = new URL(request.url).searchParams.get("id")?.trim();
-    const result = await deleteBulletinAdmin(bulletinId);
+    const result = await deleteBulletinAdmin(bulletinId, { actor, source: "ui" });
 
     return NextResponse.json(result);
   } catch (err) {
