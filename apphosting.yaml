@@ -12,13 +12,13 @@
 #        firebase apphosting:secrets:set firebaseAppId --project <PROJECT_ID>
 #        firebase apphosting:secrets:set siteUrl --project <PROJECT_ID>
 #        firebase apphosting:secrets:set appUrl --project <PROJECT_ID>
-#        firebase apphosting:secrets:set stripeSecretKey --project <PROJECT_ID>
-#        firebase apphosting:secrets:set stripeWebhookSecret --project <PROJECT_ID>
-#        firebase apphosting:secrets:set stripePublishableKey --project <PROJECT_ID>
-#   3. Optional secrets (MCP OAuth, Mailgun) — see commented blocks below in env:.
+#   3. Optional secrets (Stripe, Mailgun, reCAPTCHA, MCP OAuth) — see commented blocks below in env:.
+#      Uncomment only after creating each secret; leave commented if the parish does not use that feature.
 #   4. If build says PermissionDenied, grant access:
 #        firebase apphosting:secrets:grantaccess <secretName> --backend <BACKEND_ID> --project <PROJECT_ID>
 #   5. Remove duplicate env vars from the Firebase Console that reference secrets you have not created.
+#      Console overrides win — a Console secret ref for a missing secret will fail the preparer even
+#      when the matching block is commented out here.
 #   6. Do not add env vars in the Console with blank values — every entry needs a value or secret
 #      (e.g. delete empty NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID if you are not using Analytics).
 #   7. Never store sensitive values as plaintext in the Firebase Console. Console env vars override
@@ -78,26 +78,42 @@ env:
       - BUILD
       - RUNTIME
 
-  # Stripe — server secrets are runtime-only (not needed during next build).
-  - variable: STRIPE_SECRET_KEY
-    secret: stripeSecretKey
-    availability:
-      - RUNTIME
-  - variable: STRIPE_WEBHOOK_SECRET
-    secret: stripeWebhookSecret
-    availability:
-      - RUNTIME
-  - variable: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-    secret: stripePublishableKey
-    availability:
-      - BUILD
-      - RUNTIME
+  # Stripe (optional — online giving). Uncomment after creating secrets:
+  #   firebase apphosting:secrets:set stripeSecretKey --project <PROJECT_ID>
+  #   firebase apphosting:secrets:set stripeWebhookSecret --project <PROJECT_ID>
+  #   firebase apphosting:secrets:set stripePublishableKey --project <PROJECT_ID>
+  #   firebase apphosting:secrets:grantaccess stripeSecretKey --backend <BACKEND_ID> --project <PROJECT_ID>
+  #   (repeat grantaccess for stripeWebhookSecret and stripePublishableKey)
+  # Also remove any duplicate STRIPE_* / SRIPE_* vars from the Firebase Console backend env.
+  # - variable: STRIPE_SECRET_KEY
+  #   secret: stripeSecretKey
+  #   availability:
+  #     - RUNTIME
+  # - variable: STRIPE_WEBHOOK_SECRET
+  #   secret: stripeWebhookSecret
+  #   availability:
+  #     - RUNTIME
+  # - variable: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  #   secret: stripePublishableKey
+  #   availability:
+  #     - BUILD
+  #     - RUNTIME
 
-  # reCAPTCHA v3 — server secret is runtime-only.
-  - variable: RECAPTCHA_SECRET_KEY
-    secret: recaptchaSecretKey
-    availability:
-      - RUNTIME
+  # reCAPTCHA v3 (optional — bot protection). Uncomment after creating secrets:
+  #   firebase apphosting:secrets:set recaptchaSecretKey --project <PROJECT_ID>
+  #   firebase apphosting:secrets:set recaptchaSiteKey --project <PROJECT_ID>
+  #   firebase apphosting:secrets:grantaccess recaptchaSecretKey --backend <BACKEND_ID> --project <PROJECT_ID>
+  #   firebase apphosting:secrets:grantaccess recaptchaSiteKey --backend <BACKEND_ID> --project <PROJECT_ID>
+  # Also remove any duplicate RECAPTCHA_* / NEXT_PUBLIC_RECAPTCHA_* vars from the Console backend env.
+  # - variable: RECAPTCHA_SECRET_KEY
+  #   secret: recaptchaSecretKey
+  #   availability:
+  #     - RUNTIME
+  # - variable: NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+  #   secret: recaptchaSiteKey
+  #   availability:
+  #     - BUILD
+  #     - RUNTIME
 
   # MCP OAuth (optional — Cursor MCP login). Uncomment after creating the secret:
   #   openssl rand -base64 32
