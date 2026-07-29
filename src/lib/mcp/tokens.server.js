@@ -15,3 +15,13 @@ export function generateOAuthAccessToken() {
     tokenPrefix: token.slice(0, 14),
   };
 }
+
+export function generateOAuthRefreshToken() {
+  const raw = randomBytes(32).toString("base64url");
+  const token = `mcp_ort_${raw}`;
+  return {
+    token,
+    tokenHash: hashMcpToken(token),
+    tokenPrefix: token.slice(0, 14),
+  };
+}

@@ -15,6 +15,11 @@ export function getAccessTokenTtlSeconds() {
   return Number.isFinite(raw) && raw > 0 ? raw : 3600;
 }
 
+export function getRefreshTokenTtlSeconds() {
+  const raw = Number(process.env.MCP_OAUTH_REFRESH_TOKEN_TTL_SECONDS || 2_592_000);
+  return Number.isFinite(raw) && raw > 0 ? raw : 2_592_000;
+}
+
 export function getAuthCodeTtlSeconds() {
   const raw = Number(process.env.MCP_OAUTH_CODE_TTL_SECONDS || 600);
   return Number.isFinite(raw) && raw > 0 ? raw : 600;

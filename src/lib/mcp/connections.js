@@ -38,7 +38,17 @@ async function countActiveConnections(uid) {
 
 export async function createOAuthConnection(
   uid,
-  { clientId, clientName, scopes, tokenHash, tokenPrefix, expiresAt },
+  {
+    clientId,
+    clientName,
+    scopes,
+    tokenHash,
+    tokenPrefix,
+    expiresAt,
+    refreshTokenHash,
+    refreshTokenPrefix,
+    refreshExpiresAt,
+  },
 ) {
   const active = await countActiveConnections(uid);
   if (active >= MAX_MCP_CONNECTIONS) {
@@ -59,6 +69,9 @@ export async function createOAuthConnection(
     tokenHash,
     tokenPrefix,
     expiresAt,
+    refreshTokenHash: refreshTokenHash || null,
+    refreshTokenPrefix: refreshTokenPrefix || null,
+    refreshExpiresAt: refreshExpiresAt || null,
     createdAt: ts,
     lastUsedAt: null,
     revokedAt: null,
@@ -66,6 +79,28 @@ export async function createOAuthConnection(
 
   await connectionsRef(uid).doc(connectionId).set(connection);
   return { id: connectionId, ...connection };
+}
+
+export async function updateOAuthConnectionTokens(
+  uid,
+  connectionId,
+  {
+    tokenHash,
+    tokenPrefix,
+    expiresAt,
+    refreshTokenHash,
+    refreshTokenPrefix,
+    refreshExpiresAt,
+  },
+) {
+  await connectionsRef(uid).doc(connectionId).update({
+    tokenHash,
+    tokenPrefix,
+    expiresAt,
+    refreshTokenHash,
+    refreshTokenPrefix,
+    refreshExpiresAt,
+  });
 }
 
 export async function revokeMcpConnection(uid, connectionId) {
@@ -80,6 +115,11 @@ export async function revokeMcpConnection(uid, connectionId) {
   batch.update(connRef, { revokedAt });
   if (data.tokenHash) {
     batch.update(db.collection(COLLECTIONS.mcpTokenLookup).doc(data.tokenHash), { revokedAt });
+  }
+  if (data.refreshTokenHash) {
+    batch.update(db.collection(COLLECTIONS.mcpTokenLookup).doc(data.refreshTokenHash), {
+      revokedAt,
+    });
   }
   await batch.commit();
   return { id: connectionId, revokedAt };

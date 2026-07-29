@@ -128,6 +128,10 @@ env:
   #   value: "3600"
   #   availability:
   #     - RUNTIME
+  # - variable: MCP_OAUTH_REFRESH_TOKEN_TTL_SECONDS
+  #   value: "2592000"
+  #   availability:
+  #     - RUNTIME
   # - variable: MCP_OAUTH_CODE_TTL_SECONDS
   #   value: "600"
   #   availability:

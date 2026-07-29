@@ -51,7 +51,7 @@ export async function registerOAuthClient(body) {
     clientId,
     clientName,
     redirectUris,
-    grantTypes: ["authorization_code"],
+    grantTypes: ["authorization_code", "refresh_token"],
     tokenEndpointAuthMethod: "none",
     createdAt: now(),
   };

@@ -146,6 +146,7 @@ Set in `.env.local`:
 |----------|---------|
 | `MCP_OAUTH_COOKIE_SECRET` | Signs OAuth session cookies |
 | `MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS` | Default `3600` |
+| `MCP_OAUTH_REFRESH_TOKEN_TTL_SECONDS` | Default `2592000` (30 days) |
 | `MCP_OAUTH_CODE_TTL_SECONDS` | Default `600` |
 
 Requires `FIREBASE_ADMIN_*` on the server. On Firebase App Hosting, uncomment the MCP block in [`apphosting.yaml`](apphosting.yaml) and create the `mcpOauthCookieSecret` secret.
