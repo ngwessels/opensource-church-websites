@@ -60,6 +60,9 @@ export async function updatePageAdmin(pageId, updates, { audit = true } = {}) {
 
   const data = snap.data();
   const before = { id: snap.id, ...data };
+  if ("passwordHash" in updates || "passwordProtected" in updates) {
+    throw new Error("Use the page password API to change password protection");
+  }
   if (wouldHideHomePage(data, updates.hidden)) {
     throw new Error("The home page cannot be hidden");
   }

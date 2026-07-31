@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
+
 import { DesignPreviewGate } from "../DesignPreviewGate";
+import { PasswordGate } from "@/components/site/PasswordGate";
 import { PublicSite } from "@/components/site/PublicSite";
 import {
   getCachedBulletins,
@@ -12,6 +15,10 @@ import { getPageType } from "@/lib/bulletins/schema";
 import { prefetchPageCalendarEvents } from "@/lib/calendar/prefetch";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
+  isPagePasswordProtected,
+  stripPasswordHash,
+} from "@/lib/pages/password-status";
+import {
   asHiddenPageSets,
   filterNavTreeForPublic,
   filterQuickLinksForPublic,
@@ -19,6 +26,10 @@ import {
   isPageHidden,
 } from "@/lib/pages/visibility";
 import { resolvePublishedPageView } from "@/lib/pages/publish";
+import {
+  PAGE_UNLOCK_COOKIE_NAME,
+  isPageUnlockedInCookie,
+} from "@/lib/pages/unlock-cookie";
 import { buildNavTree, sortQuickLinks } from "@/lib/sitemap/tree";
 
 /** Cache until publish triggers on-demand revalidation. */
@@ -51,6 +62,21 @@ export async function generateMetadata({ params }) {
   if (isPageHidden(publicPage)) {
     return { title: "Page not found" };
   }
+
+  if (isPagePasswordProtected(page)) {
+    const cookieStore = await cookies();
+    const unlocked = isPageUnlockedInCookie(
+      cookieStore.get(PAGE_UNLOCK_COOKIE_NAME)?.value,
+      page.id,
+    );
+    if (!unlocked) {
+      return {
+        title: publicPage?.title || "Protected page",
+        robots: { index: false, follow: false },
+      };
+    }
+  }
+
   const site = await getCachedSiteConfig();
   return {
     title: publicPage?.seo?.title || publicPage?.title || site?.name || "Parish",
@@ -94,11 +120,23 @@ export default async function PublicPage({ params }) {
     );
   }
 
+  if (isPagePasswordProtected(page)) {
+    const cookieStore = await cookies();
+    const unlocked = isPageUnlockedInCookie(
+      cookieStore.get(PAGE_UNLOCK_COOKIE_NAME)?.value,
+      page.id,
+    );
+    if (!unlocked) {
+      return <PasswordGate pageId={page.id} pageTitle={publicPage.title} />;
+    }
+  }
+
   const navTree = filterNavTreeForPublic(buildNavTree(nodes), hiddenPageIds);
   const quickLinks = filterQuickLinksForPublic(sortQuickLinks(nodes), hiddenPageIds);
+  const safePage = stripPasswordHash(publicPage);
   const [bulletins, calendarEventsByModuleId] = await Promise.all([
-    getPageType(publicPage) === "bulletins" ? getCachedBulletins() : Promise.resolve([]),
-    prefetchPageCalendarEvents(publicPage, siteConfig.timezone),
+    getPageType(safePage) === "bulletins" ? getCachedBulletins() : Promise.resolve([]),
+    prefetchPageCalendarEvents(safePage, siteConfig.timezone),
   ]);
 
   return (
@@ -109,7 +147,7 @@ export default async function PublicPage({ params }) {
         navNodes={nodes}
         quickLinks={quickLinks}
         hiddenPageIds={hiddenPageIds}
-        page={publicPage}
+        page={safePage}
         pageId={page.id}
         bulletins={bulletins}
         calendarEventsByModuleId={calendarEventsByModuleId}

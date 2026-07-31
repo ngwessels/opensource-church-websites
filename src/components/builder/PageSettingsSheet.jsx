@@ -20,6 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useAuth } from "@/hooks/useAuth";
 import {
   CONTENT_MARGIN_X_OPTIONS,
 } from "@/lib/pages/layout";
@@ -39,13 +40,19 @@ import { getPageType } from "@/lib/bulletins/schema";
 import {
   getDonationConfig,
 } from "@/lib/donations/schema";
+import { isPagePasswordProtected, MIN_PASSWORD_LENGTH } from "@/lib/pages/password-status";
 import { isHomePage } from "@/lib/pages/visibility";
 
 import { ViewportTabs } from "./ViewportTabs";
 
 function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave, externalError }) {
+  const { user } = useAuth();
   const homePage = isHomePage(page);
+  const initiallyProtected = isPagePasswordProtected(page);
   const [visibleOnSite, setVisibleOnSite] = useState(page?.hidden !== true);
+  const [passwordProtected, setPasswordProtected] = useState(initiallyProtected);
+  const [passwordSet, setPasswordSet] = useState(initiallyProtected);
+  const [newPassword, setNewPassword] = useState("");
   const [metaTitle, setMetaTitle] = useState(page?.seo?.title ?? "");
   const [metaDescription, setMetaDescription] = useState(page?.seo?.description ?? "");
   const [pageType, setPageType] = useState(getPageType(page));
@@ -63,6 +70,45 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
   const isDonation = pageType === "donation";
   const hideLayoutSettings = isBulletins || isDonation;
 
+  const savePasswordSettings = async () => {
+    if (homePage) return;
+
+    const token = await user?.getIdToken();
+    if (!token) throw new Error("Sign in required to change password protection.");
+
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    if (!passwordProtected) {
+      if (!initiallyProtected && !passwordSet) return;
+      const res = await fetch(`/api/admin/pages/${page.id}/password`, {
+        method: "DELETE",
+        headers,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to clear page password.");
+      setPasswordSet(false);
+      return;
+    }
+
+    if (!newPassword.trim()) {
+      if (passwordSet) return;
+      throw new Error(`Enter a password (at least ${MIN_PASSWORD_LENGTH} characters).`);
+    }
+
+    const res = await fetch(`/api/admin/pages/${page.id}/password`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ password: newPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to set page password.");
+    setPasswordSet(true);
+    setNewPassword("");
+  };
+
   const handleSave = async () => {
     setError(null);
 
@@ -73,6 +119,11 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
         setError(check.error);
         return;
       }
+    }
+
+    if (!homePage && passwordProtected && !passwordSet && !newPassword.trim()) {
+      setError(`Enter a password (at least ${MIN_PASSWORD_LENGTH} characters).`);
+      return;
     }
 
     setSaving(true);
@@ -109,6 +160,7 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
       }
 
       await onSave(updates);
+      await savePasswordSettings();
       onClose();
     } catch (e) {
       setError(e.message || "Failed to save page settings.");
@@ -152,6 +204,73 @@ function PageSettingsForm({ page, pageTitle, siteName, siteSeo, onClose, onSave,
                 Off
               </button>
             </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Password protected</Label>
+          <p className="text-xs text-muted-foreground">
+            Visitors must enter a shared password to view this page. It still appears in navigation
+            unless Visible on site is off.
+          </p>
+          {homePage ? (
+            <p className="text-xs text-muted-foreground">
+              The home page cannot be password protected.
+            </p>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPasswordProtected(true)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    passwordProtected
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  On
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPasswordProtected(false);
+                    setNewPassword("");
+                  }}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    !passwordProtected
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Off
+                </button>
+              </div>
+              {passwordProtected && (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+                  {passwordSet && (
+                    <p className="text-xs text-muted-foreground">
+                      A password is set. Enter a new one below to change it.
+                    </p>
+                  )}
+                  <Label htmlFor="page-shared-password">
+                    {passwordSet ? "New password" : "Password"}
+                  </Label>
+                  <Input
+                    id="page-shared-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={
+                      passwordSet
+                        ? "Leave blank to keep current password"
+                        : `At least ${MIN_PASSWORD_LENGTH} characters`
+                    }
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -381,7 +500,7 @@ export function PageSettingsSheet({
         <SheetHeader>
           <SheetTitle>Page Settings</SheetTitle>
           <SheetDescription>
-            Configure visibility, SEO, page type, layout, and content columns.
+            Configure visibility, password protection, SEO, page type, layout, and content columns.
           </SheetDescription>
         </SheetHeader>
 

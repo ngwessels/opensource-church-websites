@@ -221,7 +221,8 @@ export function registerMcpTools(server) {
   server.registerTool(
     "update_page",
     {
-      description: "Update page metadata, layout, or regions",
+      description:
+        "Update page metadata, layout, or regions. Password protection is configured in Builder Page Settings (not via this tool).",
       inputSchema: {
         pageId: z.string(),
         title: z.string().optional(),

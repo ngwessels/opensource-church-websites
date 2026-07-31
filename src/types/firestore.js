@@ -24,6 +24,8 @@
  * @property {PageStatus} status
  * @property {string} [publishedAt]
  * @property {boolean} [hidden] - When true, page is omitted from public site and navigation
+ * @property {boolean} [passwordProtected] - When true (with passwordHash), public visitors must unlock with a shared password
+ * @property {string} [passwordHash] - scrypt hash of the shared page password (never expose to public clients)
  */
 
 /** @typedef {'content' | 'bulletins' | 'donation'} PageType */

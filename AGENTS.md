@@ -153,6 +153,15 @@ Config shape: `{ moduleInstanceId, title, description, submitLabel, notification
 2. `update_page` with `pageType: "donation"` and optional `donationConfig` (`title`, `description`, `funds`, `presetAmountsCents`, `comments`)
 3. `publish_page`
 
+**Password-protected pages**
+
+Shared password gate (no login). Live page fields: `passwordProtected`, `passwordHash` (never set plaintext via `update_page`).
+
+1. Create a page (optional sitemap **Secure Page** tile for SEO labeling)
+2. In Builder → **Page Settings**, turn **Password protected** on and set a password
+3. Publish the page — visitors see a password form until unlocked (`POST /api/pages/unlock`; httpOnly cookie for 30 days)
+4. Home page cannot be password protected; robots disallow password-protected paths
+
 **Site analytics**
 
 First-party analytics for public parish pages (alongside optional Firebase Analytics). Data is stored in Firestore `analyticsEvents` (page views, engagement) and `analyticsHeatmapRollups` (click/scroll heatmaps).

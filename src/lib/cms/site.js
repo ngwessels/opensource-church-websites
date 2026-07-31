@@ -200,6 +200,9 @@ export function getBuilderCapabilities() {
       "Only slideshow or feature_tiles modules can be placed in the features region",
       "Each region has a max module count",
       "Single-column mobile/tablet module order uses contentStackOrderByViewport on update_page",
+      "Password protection is set in Page Settings (Builder UI) via PUT/DELETE /api/admin/pages/{pageId}/password — not via update_page",
+      "passwordProtected pages require a shared password on the public site; home page cannot be password protected",
+      "secure_page nav type is an SEO/sitemap label; actual gating uses page.passwordProtected",
     ],
     pageTypes: {
       content: "Standard content page (default)",
@@ -223,6 +226,13 @@ export function getBuilderCapabilities() {
       "contentMarginXByViewport",
       "maxModulesPerRegion",
     ],
+    passwordProtection: {
+      fields: ["passwordProtected", "passwordHash"],
+      setVia: "PUT /api/admin/pages/{pageId}/password { password }",
+      clearVia: "DELETE /api/admin/pages/{pageId}/password",
+      unlockVia: "POST /api/pages/unlock { pageId, password }",
+      note: "Do not set passwordHash through update_page. Configure in Builder → Page Settings.",
+    },
     navNodeSchema: {
       id: "string",
       type: "page | secure_page | link | group",
