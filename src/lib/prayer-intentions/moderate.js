@@ -2,7 +2,7 @@ import "server-only";
 
 import { parseModerationResponse, statusFromModerationDecision } from "./schema.js";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-flash-lite-latest";
 
 const SYSTEM_INSTRUCTION = `You moderate prayer intention submissions for a Catholic parish website.
 

@@ -77,7 +77,7 @@ CRON_SECRET=
 
 # Gemini / Google AI (prayer intention moderation)
 GOOGLE_AI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-flash-lite-latest
 
 # Mailgun — form submission notification emails
 MAILGUN_API_KEY=
