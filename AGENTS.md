@@ -139,7 +139,7 @@ Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notif
 
 **Prayer intentions module**
 
-Config shape: `{ moduleInstanceId, title, description, submitLabel, notificationEmails }`. Fixed fields: name, email and/or phone, intention. Public success message is always `Thank you.` (not configurable) so moderation outcome is never revealed.
+Config shape: `{ moduleInstanceId, title, description, submitLabel, notificationEmails }`. Fixed fields: name, email (required), phone (optional), intention. Public success message is always `Thank you.` (not configurable) so moderation outcome is never revealed.
 
 1. `add_module` with `type: "prayer_intentions"` (Catholic category)
 2. `update_module` with intro copy / notification emails

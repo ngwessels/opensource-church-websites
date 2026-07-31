@@ -88,20 +88,35 @@ export async function sendPrayerIntentionsDigest() {
     };
   }
 
-  const intentions = pending.map((row) => ({
-    name: String(row.name || "Anonymous"),
-    intention: String(row.intention || ""),
-  }));
-
   let sent = 0;
+  /** @type {Set<string>} */
+  const digestedIds = new Set();
+
   for (const group of groupsWithEmail) {
+    const forGroup = pending.filter((row) => {
+      const ids = Array.isArray(row.groupIds) ? row.groupIds.map(String) : [];
+      // Legacy approved rows without groupIds go to every configured group.
+      if (ids.length === 0) return true;
+      return ids.includes(group.id);
+    });
+
+    if (forGroup.length === 0) continue;
+
+    const intentions = forGroup.map((row) => ({
+      name: String(row.name || "Anonymous"),
+      intention: String(row.intention || ""),
+    }));
+
     const result = await sendPrayerIntentionsDigestEmail({
       to: group.emails,
       groupName: group.name,
       intentions,
       siteName,
     });
-    if (result.sent) sent += 1;
+    if (result.sent) {
+      sent += 1;
+      for (const row of forGroup) digestedIds.add(row.id);
+    }
   }
 
   if (sent === 0) {
@@ -110,14 +125,14 @@ export async function sendPrayerIntentionsDigest() {
       skipped: true,
       intentionCount: pending.length,
       groupCount: groupsWithEmail.length,
-      reason: "Mailgun failed to send digests.",
+      reason: "Mailgun failed to send digests, or no groups matched pending intentions.",
     };
   }
 
   const digestedAt = new Date().toISOString();
   const batch = db.batch();
-  for (const row of pending) {
-    batch.update(db.collection(COLLECTIONS.prayerIntentions).doc(row.id), {
+  for (const id of digestedIds) {
+    batch.update(db.collection(COLLECTIONS.prayerIntentions).doc(id), {
       includedInDigestAt: digestedAt,
     });
   }
@@ -128,7 +143,7 @@ export async function sendPrayerIntentionsDigest() {
   return {
     sent,
     skipped: false,
-    intentionCount: pending.length,
+    intentionCount: digestedIds.size,
     groupCount: groupsWithEmail.length,
   };
 }

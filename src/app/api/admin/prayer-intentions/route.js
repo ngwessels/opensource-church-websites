@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * GET — list intentions (optional ?status=approved|rejected&export=csv)
+ * GET — list intentions (optional ?status=approved|rejected&groupId=&dateFrom=&dateTo=&export=csv)
  * PATCH — { intentionIds, status } override moderation
  * PUT — { settings } save prayer groups / digest config
  * POST — { action: "send_digest" } send digest now
@@ -34,6 +34,15 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
+    const groupIdFilter = searchParams.get("groupId")?.trim() || "";
+    const dateFromRaw = searchParams.get("dateFrom")?.trim() || "";
+    const dateToRaw = searchParams.get("dateTo")?.trim() || "";
+    const dateFromMs = dateFromRaw
+      ? new Date(dateFromRaw.includes("T") ? dateFromRaw : `${dateFromRaw}T00:00:00`).getTime()
+      : NaN;
+    const dateToMs = dateToRaw
+      ? new Date(dateToRaw.includes("T") ? dateToRaw : `${dateToRaw}T23:59:59.999`).getTime()
+      : NaN;
 
     let query = db.collection(COLLECTIONS.prayerIntentions);
     if (statusFilter === "approved" || statusFilter === "rejected") {
@@ -43,9 +52,28 @@ export async function GET(request) {
     const snap = await query.get();
     const intentions = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((row) => {
+        if (Number.isFinite(dateFromMs) || Number.isFinite(dateToMs)) {
+          const submittedMs = row.submittedAt ? new Date(String(row.submittedAt)).getTime() : NaN;
+          if (!Number.isFinite(submittedMs)) return false;
+          if (Number.isFinite(dateFromMs) && submittedMs < dateFromMs) return false;
+          if (Number.isFinite(dateToMs) && submittedMs > dateToMs) return false;
+        }
+        if (groupIdFilter) {
+          const ids = Array.isArray(row.groupIds)
+            ? row.groupIds.filter((id) => typeof id === "string")
+            : [];
+          // Legacy approved rows without groupIds were treated as all groups.
+          if (ids.length === 0) return row.status === "approved";
+          if (!ids.includes(groupIdFilter)) return false;
+        }
+        return true;
+      })
       .sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")));
 
     if (searchParams.get("export") === "csv") {
+      const settings = await getPrayerIntentionsSettings();
+      const groupNameById = new Map(settings.groups.map((g) => [g.id, g.name]));
       const header = [
         "Submitted At",
         "Status",
@@ -53,6 +81,7 @@ export async function GET(request) {
         "Email",
         "Phone",
         "Intention",
+        "Assigned Groups",
         "Moderation Reason",
         "Included In Digest At",
       ];
@@ -63,6 +92,12 @@ export async function GET(request) {
         row.email || "",
         row.phone || "",
         row.intention || "",
+        Array.isArray(row.groupIds)
+          ? row.groupIds
+              .filter((id) => typeof id === "string")
+              .map((id) => groupNameById.get(id) || id)
+              .join("; ")
+          : "",
         row.moderation?.reason || "",
         row.includedInDigestAt || "",
       ]);
@@ -113,19 +148,36 @@ export async function PATCH(request) {
     const reviewedBy = { uid: actor.uid, email: actor.email || "" };
     const beforeSnapshots = [];
     const afterSnapshots = [];
+    const settings = await getPrayerIntentionsSettings();
+    const allGroupIds = settings.groups.map((g) => g.id);
 
     for (const id of intentionIds) {
       if (typeof id !== "string") continue;
       const ref = db.collection(COLLECTIONS.prayerIntentions).doc(id);
       const snap = await ref.get();
       if (!snap.exists) continue;
-      beforeSnapshots.push({ id: snap.id, ...snap.data() });
-      await ref.update({
+      const existing = snap.data() || {};
+      beforeSnapshots.push({ id: snap.id, ...existing });
+
+      /** @type {Record<string, unknown>} */
+      const patch = {
         status,
         reviewedBy,
         reviewedAt,
-        ...(status === "rejected" ? { includedInDigestAt: null } : {}),
-      });
+      };
+
+      if (status === "rejected") {
+        patch.includedInDigestAt = null;
+        patch.groupIds = [];
+      } else {
+        const existingGroups = Array.isArray(existing.groupIds)
+          ? existing.groupIds.filter((g) => typeof g === "string")
+          : [];
+        // Human approve: keep AI groups if present, otherwise assign all groups.
+        patch.groupIds = existingGroups.length > 0 ? existingGroups : allGroupIds;
+      }
+
+      await ref.update(patch);
       const after = await ref.get();
       afterSnapshots.push({ id: after.id, ...after.data() });
     }

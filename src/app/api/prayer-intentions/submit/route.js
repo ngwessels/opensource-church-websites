@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firestore/paths";
 import { sendFormNotification } from "@/lib/mailgun/client";
+import { getPrayerIntentionsSettings } from "@/lib/prayer-intentions/digest";
 import { findPublishedPrayerIntentionsByInstanceId } from "@/lib/prayer-intentions/lookup";
 import { moderatePrayerIntention } from "@/lib/prayer-intentions/moderate";
 import {
@@ -50,17 +51,29 @@ export async function POST(request) {
       return NextResponse.json({ error: "Server is not configured." }, { status: 503 });
     }
 
-    const { status, moderation } = await moderatePrayerIntention(validation.values);
+    const settings = await getPrayerIntentionsSettings();
     const intentionId = generateId();
     const submittedAt = new Date().toISOString();
+    const model = process.env.GEMINI_MODEL?.trim() || "gemini-flash-lite-latest";
+    const ref = db.collection(COLLECTIONS.prayerIntentions).doc(intentionId);
 
-    await db.collection(COLLECTIONS.prayerIntentions).doc(intentionId).set({
+    // Persist first so AI failures never drop the submission from Admin.
+    await ref.set({
       name: validation.values.name,
       email: validation.values.email,
       phone: validation.values.phone,
       intention: validation.values.intention,
-      status,
-      moderation,
+      status: "rejected",
+      groupIds: [],
+      moderation: {
+        model,
+        moderatedAt: submittedAt,
+        isPrayerIntention: false,
+        isSpam: false,
+        hasNegativeImpact: false,
+        reason: "Awaiting moderation.",
+        error: "moderation_pending",
+      },
       pageId,
       moduleId,
       moduleInstanceId: config.moduleInstanceId,
@@ -71,7 +84,38 @@ export async function POST(request) {
       includedInDigestAt: null,
     });
 
+    let status = "rejected";
+    let groupIds = /** @type {string[]} */ ([]);
+    let moderation = {
+      model,
+      moderatedAt: submittedAt,
+      isPrayerIntention: false,
+      isSpam: false,
+      hasNegativeImpact: false,
+      reason: "Moderation unavailable; held for review.",
+      error: "moderation_unavailable",
+    };
+
+    try {
+      const result = await moderatePrayerIntention(validation.values, settings.groups);
+      status = result.status;
+      groupIds = result.groupIds;
+      moderation = result.moderation;
+      await ref.update({ status, groupIds, moderation });
+    } catch (moderationErr) {
+      console.error("[prayer-intentions/submit] moderation update failed:", moderationErr);
+      try {
+        await ref.update({ status: "rejected", groupIds: [], moderation });
+      } catch (updateErr) {
+        console.error("[prayer-intentions/submit] failed to mark moderation unavailable:", updateErr);
+      }
+    }
+
     if (status === "approved" && config.notificationEmails.length > 0) {
+      const groupNames = settings.groups
+        .filter((g) => groupIds.includes(g.id))
+        .map((g) => g.name)
+        .join(", ");
       await sendFormNotification({
         to: config.notificationEmails,
         formTitle: config.title || "Prayer Intentions",
@@ -86,6 +130,7 @@ export async function POST(request) {
             : []),
           { label: "Intention", value: validation.values.intention },
           { label: "Status", value: "Approved" },
+          ...(groupNames ? [{ label: "Assigned groups", value: groupNames }] : []),
         ],
       });
     }

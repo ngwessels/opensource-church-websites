@@ -30,6 +30,7 @@ import { generateId } from "../sitemap/tree.js";
  * @typedef {object} PrayerGroup
  * @property {string} id
  * @property {string} name
+ * @property {string} description
  * @property {string[]} emails
  */
 
@@ -48,13 +49,48 @@ export const DEFAULT_PRAYER_INTENTION_DESCRIPTION =
 export const DEFAULT_SUCCESS_MESSAGE = "Thank you.";
 
 export const DEFAULT_PRAYER_GROUPS = [
-  { id: "clergy", name: "Clergy" },
-  { id: "staff", name: "Staff" },
-  { id: "ppc-council", name: "PPC Council" },
-  { id: "altar-society", name: "Altar Society" },
-  { id: "womens-bible-study", name: "Women's Bible Study" },
-  { id: "men-of-conviction", name: "Men of Conviction" },
-  { id: "youth-group", name: "Youth Group" },
+  {
+    id: "clergy",
+    name: "Clergy",
+    description:
+      "Pastors and priests of the parish. Include intentions for the sick, dying, bereaved, sacramental needs, and general pastoral prayer.",
+  },
+  {
+    id: "staff",
+    name: "Staff",
+    description:
+      "Parish office and ministry staff. Include intentions related to parish life, administration support needs, and community concerns shared with staff prayer.",
+  },
+  {
+    id: "ppc-council",
+    name: "PPC Council",
+    description:
+      "Parish Pastoral Council. Include intentions about parish vision, leadership discernment, community wellbeing, and parish-wide concerns.",
+  },
+  {
+    id: "altar-society",
+    name: "Altar Society",
+    description:
+      "Altar Society members. Include intentions for liturgy, the altar, church care, and parishioners the society traditionally holds in prayer.",
+  },
+  {
+    id: "womens-bible-study",
+    name: "Women's Bible Study",
+    description:
+      "Women's Bible Study group. Include intentions relevant to women, families, spiritual growth, and concerns this group typically prays for together.",
+  },
+  {
+    id: "men-of-conviction",
+    name: "Men of Conviction",
+    description:
+      "Men's faith group. Include intentions relevant to men, fathers, husbands, spiritual leadership, and concerns this group typically prays for together.",
+  },
+  {
+    id: "youth-group",
+    name: "Youth Group",
+    description:
+      "Parish youth and young adults. Include intentions for young people, students, confirmation candidates, and youth/family concerns appropriate for youth prayer.",
+  },
 ];
 
 /** @param {unknown} value */
@@ -111,9 +147,12 @@ export function normalizePrayerIntentionsConfig(raw) {
  */
 export function normalizePrayerGroup(raw) {
   const g = raw && typeof raw === "object" ? /** @type {Record<string, unknown>} */ (raw) : {};
+  const id = typeof g.id === "string" && g.id.trim() ? g.id.trim() : generateId();
+  const defaultMatch = DEFAULT_PRAYER_GROUPS.find((d) => d.id === id);
   return {
-    id: typeof g.id === "string" && g.id.trim() ? g.id.trim() : generateId(),
-    name: asString(g.name, "Prayer Group").trim() || "Prayer Group",
+    id,
+    name: asString(g.name, defaultMatch?.name || "Prayer Group").trim() || "Prayer Group",
+    description: asString(g.description, defaultMatch?.description || "").trim(),
     emails: parseEmails(g.emails),
   };
 }
@@ -131,6 +170,7 @@ export function normalizePrayerIntentionsSettings(raw) {
       : DEFAULT_PRAYER_GROUPS.map((g) => ({
           id: g.id,
           name: g.name,
+          description: g.description,
           emails: [],
         }));
 
@@ -168,10 +208,9 @@ export function validatePrayerIntentionSubmission(body) {
   if (!name) errors.name = "Name is required.";
   if (!intention) errors.intention = "Prayer intention is required.";
   if (intention.length > 4000) errors.intention = "Prayer intention is too long.";
-  if (!email && !phone) {
-    errors.contact = "Please provide an email or phone number.";
-  }
-  if (email && !email.includes("@")) {
+  if (!email) {
+    errors.email = "Email is required.";
+  } else if (!email.includes("@")) {
     errors.email = "Enter a valid email address.";
   }
 
@@ -203,9 +242,16 @@ export function statusFromModerationDecision(decision) {
 
 /**
  * @param {unknown} raw
- * @returns {{ isPrayerIntention: boolean, isSpam: boolean, hasNegativeImpact: boolean, reason: string }}
+ * @param {string[]} [allowedGroupIds]
+ * @returns {{
+ *   isPrayerIntention: boolean,
+ *   isSpam: boolean,
+ *   hasNegativeImpact: boolean,
+ *   reason: string,
+ *   groupIds: string[],
+ * }}
  */
-export function parseModerationResponse(raw) {
+export function parseModerationResponse(raw, allowedGroupIds = []) {
   let data = raw;
   if (typeof raw === "string") {
     const trimmed = raw.trim();
@@ -219,15 +265,36 @@ export function parseModerationResponse(raw) {
         isSpam: true,
         hasNegativeImpact: false,
         reason: "Could not parse moderation response.",
+        groupIds: [],
       };
     }
   }
 
   const d = data && typeof data === "object" ? /** @type {Record<string, unknown>} */ (data) : {};
+  const allowed = new Set(allowedGroupIds);
+  const rawGroupIds = Array.isArray(d.groupIds) ? d.groupIds : [];
+  const groupIds = rawGroupIds
+    .filter((id) => typeof id === "string")
+    .map((id) => id.trim())
+    .filter((id) => id && (allowed.size === 0 || allowed.has(id)));
+
   return {
     isPrayerIntention: d.isPrayerIntention === true,
     isSpam: d.isSpam === true,
     hasNegativeImpact: d.hasNegativeImpact === true,
     reason: asString(d.reason, "No reason provided.").trim() || "No reason provided.",
+    groupIds,
   };
+}
+
+/**
+ * If AI approved but picked no groups, fall back to all known groups.
+ * @param {string[]} groupIds
+ * @param {string[]} allGroupIds
+ * @param {'approved' | 'rejected'} status
+ */
+export function resolveAssignedGroupIds(groupIds, allGroupIds, status) {
+  if (status !== "approved") return [];
+  if (groupIds.length > 0) return groupIds;
+  return allGroupIds;
 }

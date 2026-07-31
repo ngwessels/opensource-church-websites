@@ -126,15 +126,16 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
 
         <div className="space-y-1.5">
           <Label htmlFor="prayer-email" className="text-zinc-800">
-            Email
+            Email<span className="ml-0.5 text-red-600">*</span>
           </Label>
           <Input
             id="prayer-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
             disabled={editing || status === "loading"}
-            className={cn((fieldErrors.email || fieldErrors.contact) && "border-red-500")}
+            className={cn(fieldErrors.email && "border-red-500")}
           />
           {fieldErrors.email && <p className="text-xs text-red-600">{fieldErrors.email}</p>}
         </div>
@@ -149,10 +150,8 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             disabled={editing || status === "loading"}
-            className={cn(fieldErrors.contact && "border-red-500")}
           />
-          {fieldErrors.contact && <p className="text-xs text-red-600">{fieldErrors.contact}</p>}
-          <p className="text-xs text-zinc-500">Provide an email or phone number so we can follow up if needed.</p>
+          <p className="text-xs text-zinc-500">Optional.</p>
         </div>
 
         <div className="space-y-1.5">

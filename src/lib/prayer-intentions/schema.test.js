@@ -5,6 +5,7 @@ import {
   normalizePrayerIntentionsConfig,
   normalizePrayerIntentionsSettings,
   parseModerationResponse,
+  resolveAssignedGroupIds,
   statusFromModerationDecision,
   validatePrayerIntentionSubmission,
   DEFAULT_PRAYER_GROUPS,
@@ -45,7 +46,7 @@ describe("normalizePrayerIntentionsSettings", () => {
 });
 
 describe("validatePrayerIntentionSubmission", () => {
-  it("requires name, intention, and contact", () => {
+  it("requires name, email, and intention", () => {
     const result = validatePrayerIntentionSubmission({
       name: "",
       email: "",
@@ -55,22 +56,35 @@ describe("validatePrayerIntentionSubmission", () => {
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.ok(result.errors.name);
+      assert.ok(result.errors.email);
       assert.ok(result.errors.intention);
-      assert.ok(result.errors.contact);
     }
   });
 
-  it("accepts phone-only contact", () => {
+  it("accepts email with optional phone", () => {
+    const result = validatePrayerIntentionSubmission({
+      name: "Jane",
+      email: "jane@example.com",
+      phone: "",
+      intention: "For healing",
+    });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.values.name, "Jane");
+      assert.equal(result.values.email, "jane@example.com");
+    }
+  });
+
+  it("rejects phone-only without email", () => {
     const result = validatePrayerIntentionSubmission({
       name: "Jane",
       email: "",
       phone: "555-0100",
       intention: "For healing",
     });
-    assert.equal(result.ok, true);
-    if (result.ok) {
-      assert.equal(result.values.name, "Jane");
-      assert.equal(result.values.phone, "555-0100");
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.ok(result.errors.email);
     }
   });
 });
@@ -113,11 +127,31 @@ describe("moderation parsing", () => {
     );
   });
 
-  it("parses fenced JSON strings", () => {
-    const decision = parseModerationResponse(`\`\`\`json
-{"isPrayerIntention":true,"isSpam":false,"hasNegativeImpact":false,"reason":"OK"}
-\`\`\``);
+  it("parses fenced JSON strings and groupIds", () => {
+    const decision = parseModerationResponse(
+      `\`\`\`json
+{"isPrayerIntention":true,"isSpam":false,"hasNegativeImpact":false,"reason":"OK","groupIds":["clergy","youth-group","unknown"]}
+\`\`\``,
+      ["clergy", "youth-group", "staff"],
+    );
     assert.equal(decision.isPrayerIntention, true);
     assert.equal(decision.reason, "OK");
+    assert.deepEqual(decision.groupIds, ["clergy", "youth-group"]);
+  });
+
+  it("falls back to all groups when approved with none selected", () => {
+    assert.deepEqual(
+      resolveAssignedGroupIds([], ["clergy", "staff"], "approved"),
+      ["clergy", "staff"],
+    );
+    assert.deepEqual(resolveAssignedGroupIds(["youth-group"], ["clergy", "youth-group"], "approved"), [
+      "youth-group",
+    ]);
+    assert.deepEqual(resolveAssignedGroupIds(["clergy"], ["clergy"], "rejected"), []);
+  });
+
+  it("includes descriptions on default groups", () => {
+    const settings = normalizePrayerIntentionsSettings(null);
+    assert.ok(settings.groups[0].description.length > 0);
   });
 });

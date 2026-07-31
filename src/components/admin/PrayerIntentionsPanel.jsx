@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
@@ -21,11 +28,48 @@ import {
 import { generateId } from "@/lib/sitemap/tree";
 import { cn } from "@/lib/utils";
 
+/**
+ * @param {Record<string, unknown>} row
+ * @param {string} groupId
+ */
+function intentionMatchesGroup(row, groupId) {
+  if (!groupId) return true;
+  const ids = Array.isArray(row.groupIds)
+    ? row.groupIds.filter((id) => typeof id === "string")
+    : [];
+  // Legacy approved rows without groupIds were treated as all groups.
+  if (ids.length === 0) return row.status === "approved";
+  return ids.includes(groupId);
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ * @param {string} dateFrom
+ * @param {string} dateTo
+ */
+function intentionMatchesDateRange(row, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return true;
+  const submittedMs = row.submittedAt ? new Date(String(row.submittedAt)).getTime() : NaN;
+  if (!Number.isFinite(submittedMs)) return false;
+  if (dateFrom) {
+    const fromMs = new Date(`${dateFrom}T00:00:00`).getTime();
+    if (Number.isFinite(fromMs) && submittedMs < fromMs) return false;
+  }
+  if (dateTo) {
+    const toMs = new Date(`${dateTo}T23:59:59.999`).getTime();
+    if (Number.isFinite(toMs) && submittedMs > toMs) return false;
+  }
+  return true;
+}
+
 export function PrayerIntentionsPanel() {
   const { user } = useAuth();
   const { config: siteConfig } = useSiteConfig();
   const [intentions, setIntentions] = useState(/** @type {Array<Record<string, unknown>>} */ ([]));
   const [filter, setFilter] = useState(/** @type {'all' | 'approved' | 'rejected'} */ ("all"));
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
   const liveSettings = useMemo(
     () => normalizePrayerIntentionsSettings(siteConfig?.prayerIntentions),
     [siteConfig?.prayerIntentions],
@@ -43,30 +87,52 @@ export function PrayerIntentionsPanel() {
   useEffect(() => {
     if (!user?.uid) return;
     const db = getFirebaseFirestore();
-    const unsub = onSnapshot(collection(db, COLLECTIONS.prayerIntentions), (snap) => {
-      setIntentions(
-        snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || ""))),
-      );
-    });
+    const unsub = onSnapshot(
+      collection(db, COLLECTIONS.prayerIntentions),
+      (snap) => {
+        setError("");
+        setIntentions(
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || ""))),
+        );
+      },
+      (err) => {
+        console.error("[prayer-intentions] inbox listen failed:", err);
+        setError(
+          err?.code === "permission-denied"
+            ? "Cannot read prayer intentions. Deploy updated Firestore rules that allow admin read on prayerIntentions."
+            : err?.message || "Failed to load prayer intentions.",
+        );
+      },
+    );
     return () => unsub();
   }, [user?.uid]);
 
+  const scoped = useMemo(() => {
+    return intentions.filter(
+      (row) =>
+        intentionMatchesDateRange(row, dateFrom, dateTo) &&
+        intentionMatchesGroup(row, groupFilter),
+    );
+  }, [intentions, dateFrom, dateTo, groupFilter]);
+
   const filtered = useMemo(() => {
-    if (filter === "all") return intentions;
-    return intentions.filter((row) => row.status === filter);
-  }, [filter, intentions]);
+    if (filter === "all") return scoped;
+    return scoped.filter((row) => row.status === filter);
+  }, [filter, scoped]);
+
+  const hasExtraFilters = Boolean(dateFrom || dateTo || groupFilter);
 
   const counts = useMemo(() => {
     return {
-      all: intentions.length,
-      approved: intentions.filter((r) => r.status === "approved").length,
-      rejected: intentions.filter((r) => r.status === "rejected").length,
+      all: scoped.length,
+      approved: scoped.filter((r) => r.status === "approved").length,
+      rejected: scoped.filter((r) => r.status === "rejected").length,
       pendingDigest: intentions.filter((r) => r.status === "approved" && !r.includedInDigestAt)
         .length,
     };
-  }, [intentions]);
+  }, [scoped, intentions]);
 
   async function getAuthHeaders() {
     const token = await user?.getIdToken();
@@ -98,8 +164,12 @@ export function PrayerIntentionsPanel() {
     setError("");
     try {
       const headers = await getAuthHeaders();
-      const qs = filter === "all" ? "export=csv" : `status=${filter}&export=csv`;
-      const res = await fetch(`/api/admin/prayer-intentions?${qs}`, { headers });
+      const params = new URLSearchParams({ export: "csv" });
+      if (filter !== "all") params.set("status", filter);
+      if (groupFilter) params.set("groupId", groupFilter);
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      const res = await fetch(`/api/admin/prayer-intentions?${params}`, { headers });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Export failed");
@@ -114,6 +184,12 @@ export function PrayerIntentionsPanel() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     }
+  }
+
+  function clearExtraFilters() {
+    setDateFrom("");
+    setDateTo("");
+    setGroupFilter("");
   }
 
   async function saveSettings() {
@@ -180,7 +256,10 @@ export function PrayerIntentionsPanel() {
       const base = prev ?? liveSettings;
       return {
         ...base,
-        groups: [...base.groups, { id: generateId(), name: "New group", emails: [] }],
+        groups: [
+          ...base.groups,
+          { id: generateId(), name: "New group", description: "", emails: [] },
+        ],
       };
     });
   }
@@ -205,6 +284,7 @@ export function PrayerIntentionsPanel() {
           return {
             id: g.id,
             name: g.name,
+            description: existing?.description || g.description,
             emails: existing?.emails || [],
           };
         }),
@@ -264,13 +344,77 @@ export function PrayerIntentionsPanel() {
             ))}
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="prayer-date-from">From</Label>
+              <Input
+                id="prayer-date-from"
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="prayer-date-to">To</Label>
+              <Input
+                id="prayer-date-to"
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+              <Label>Prayer group</Label>
+              <Select
+                value={groupFilter || "all"}
+                onValueChange={(v) => setGroupFilter(v === "all" ? "" : v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All groups" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All groups</SelectItem>
+                  {liveSettings.groups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+                disabled={!hasExtraFilters}
+                onClick={clearExtraFilters}
+              >
+                Clear filters
+              </Button>
+            </div>
+          </div>
+
           {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No prayer intentions yet.</p>
+            <p className="text-sm text-muted-foreground">
+              {intentions.length === 0
+                ? "No prayer intentions yet."
+                : "No prayer intentions match these filters."}
+            </p>
           ) : (
             <div className="space-y-3">
               {filtered.map((row) => {
                 const moderation = /** @type {Record<string, unknown>} */ (row.moderation || {});
                 const isApproved = row.status === "approved";
+                const assignedGroupIds = Array.isArray(row.groupIds)
+                  ? row.groupIds.map(String)
+                  : [];
+                const assignedNames = settings.groups
+                  .filter((g) => assignedGroupIds.includes(g.id))
+                  .map((g) => g.name);
                 return (
                   <article key={String(row.id)} className="rounded-lg border bg-card">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
@@ -285,6 +429,11 @@ export function PrayerIntentionsPanel() {
                           ) : isApproved ? (
                             <Badge variant="outline">Pending digest</Badge>
                           ) : null}
+                          {assignedNames.map((name) => (
+                            <Badge key={name} variant="outline">
+                              {name}
+                            </Badge>
+                          ))}
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {[row.email, row.phone].filter(Boolean).join(" · ") || "No contact"}
@@ -339,7 +488,8 @@ export function PrayerIntentionsPanel() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Prayer groups & weekly digest</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Approved intentions are emailed weekly (Monday 15:00 UTC) to each group with recipients.
+            Approved intentions are emailed weekly (Monday 15:00 UTC) to matching groups with recipients.
+            AI uses each group&apos;s description to decide which groups should pray for an intention.
             Pending digest: {counts.pendingDigest}.
             {settings.lastDigestAt
               ? ` Last sent ${new Date(settings.lastDigestAt).toLocaleString()}.`
@@ -349,35 +499,44 @@ export function PrayerIntentionsPanel() {
         <CardContent className="space-y-4">
           <div className="space-y-3">
             {settings.groups.map((group, index) => (
-              <div
-                key={group.id}
-                className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_2fr_auto]"
-              >
-                <div className="space-y-1">
-                  <Label>Group name</Label>
-                  <Input
-                    value={group.name}
-                    onChange={(e) => updateGroup(index, { name: e.target.value })}
-                  />
+              <div key={group.id} className="space-y-2 rounded-lg border p-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                  <div className="space-y-1">
+                    <Label>Group name</Label>
+                    <Input
+                      value={group.name}
+                      onChange={(e) => updateGroup(index, { name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Emails</Label>
+                    <Input
+                      value={group.emails.join(", ")}
+                      onChange={(e) => updateGroup(index, { emails: e.target.value })}
+                      placeholder="person@parish.org, other@parish.org"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeGroup(index)}
+                      aria-label="Remove group"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-1">
-                  <Label>Emails</Label>
-                  <Input
-                    value={group.emails.join(", ")}
-                    onChange={(e) => updateGroup(index, { emails: e.target.value })}
-                    placeholder="person@parish.org, other@parish.org"
+                  <Label>Description (for AI routing)</Label>
+                  <textarea
+                    value={group.description || ""}
+                    onChange={(e) => updateGroup(index, { description: e.target.value })}
+                    rows={2}
+                    placeholder="What this group prays for, so AI can assign relevant intentions…"
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   />
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeGroup(index)}
-                    aria-label="Remove group"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
             ))}
