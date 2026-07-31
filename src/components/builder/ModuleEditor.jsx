@@ -32,6 +32,7 @@ import { VideoModuleEditor } from "./VideoModuleEditor";
 import { ZoomModuleEditor } from "./ZoomModuleEditor";
 import { FeatureTilesModuleEditor } from "./FeatureTilesModuleEditor";
 import { FormModuleEditor } from "./FormModuleEditor";
+import { PrayerIntentionsModuleEditor } from "./PrayerIntentionsModuleEditor";
 
 const overlayZ = { zIndex: ADMIN_Z.overlay };
 
@@ -100,6 +101,12 @@ export function ModuleEditor({ module, siteConfig, onSave, onClose, pageId }) {
   if (module.type === "daily_readings") {
     return (
       <DailyReadingsModuleEditor module={module} onSave={onSave} onClose={onClose} />
+    );
+  }
+
+  if (module.type === "prayer_intentions") {
+    return (
+      <PrayerIntentionsModuleEditor module={module} onSave={onSave} onClose={onClose} />
     );
   }
 

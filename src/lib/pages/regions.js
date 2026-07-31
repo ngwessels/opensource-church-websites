@@ -22,6 +22,7 @@ const CONTENT_COLUMN_TYPES = new Set([
   "zoom",
   "mass_times",
   "daily_readings",
+  "prayer_intentions",
   "embed",
   "facebook",
   "google_maps",

@@ -258,7 +258,7 @@
  * @property {string} updatedAt
  */
 
-/** @typedef {'text' | 'links' | 'image' | 'gallery' | 'photo_albums' | 'slideshow' | 'feature_tiles' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'calendar' | 'documents' | 'people' | 'buttons' | 'form' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */
+/** @typedef {'text' | 'links' | 'image' | 'gallery' | 'photo_albums' | 'slideshow' | 'feature_tiles' | 'carousel' | 'video' | 'zoom' | 'mass_times' | 'daily_readings' | 'prayer_intentions' | 'calendar' | 'documents' | 'people' | 'buttons' | 'form' | 'embed' | 'facebook' | 'google_maps' | 'instagram' | 'rss'} ModuleType */
 
 export const SITE_CONFIG_DOC = "site/config";
 export const DEFAULT_MEDIA_FOLDERS = {
@@ -271,5 +271,5 @@ export const MODULE_CATEGORIES = {
   Core: ["text", "links", "buttons", "documents", "people", "calendar", "form"],
   "Images & Video": ["image", "gallery", "photo_albums", "slideshow", "feature_tiles", "carousel", "video", "zoom"],
   Embed: ["embed", "facebook", "google_maps", "instagram", "rss"],
-  Catholic: ["mass_times", "daily_readings"],
+  Catholic: ["mass_times", "daily_readings", "prayer_intentions"],
 };

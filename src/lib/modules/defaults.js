@@ -83,6 +83,17 @@ export function getDefaultConfig(type) {
       return { title: "Mass Times", useSiteDefaults: true };
     case "daily_readings":
       return { title: "Daily Readings", showUsccbLink: true };
+    case "prayer_intentions":
+      return {
+        moduleInstanceId: generateId(),
+        title: "Prayer Intentions",
+        description:
+          "It is a privilege to pray with you. Share your joys, sorrows, worries, and thanksgiving. Your intention will be prayed for by our clergy and parish ministries.",
+        submitLabel: "Submit intention",
+        successMessage: "Thank you.",
+        notificationEmails: [],
+        honeypotFieldName: `_hp_${Math.random().toString(36).slice(2, 10)}`,
+      };
     case "people":
       return { title: "Staff", people: [] };
     case "documents":

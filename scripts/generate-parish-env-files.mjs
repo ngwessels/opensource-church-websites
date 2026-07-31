@@ -75,6 +75,10 @@ MCP_OAUTH_CODE_TTL_SECONDS=600
 # Vercel Cron
 CRON_SECRET=
 
+# Gemini / Google AI (prayer intention moderation)
+GOOGLE_AI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+
 # Mailgun — form submission notification emails
 MAILGUN_API_KEY=
 MAILGUN_DOMAIN=

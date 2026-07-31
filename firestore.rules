@@ -73,6 +73,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /prayerIntentions/{intentionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /donations/{donationId} {
       allow read: if canManageDonations() || isDonationOwner();
       allow write: if false;

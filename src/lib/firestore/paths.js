@@ -8,6 +8,7 @@ export const COLLECTIONS = {
   donations: "donations",
   subscriptions: "subscriptions",
   formSubmissions: "formSubmissions",
+  prayerIntentions: "prayerIntentions",
   bulletins: "bulletins",
   mcpTokenLookup: "mcpTokenLookup",
   mcpOAuthClients: "mcpOAuthClients",

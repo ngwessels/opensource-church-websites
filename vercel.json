@@ -8,6 +8,18 @@
     },
     "src/app/api/admin/export/**": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/prayer-intentions-digest/route.js": {
+      "maxDuration": 60
+    },
+    "src/app/api/admin/prayer-intentions/route.js": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/prayer-intentions-digest",
+      "schedule": "0 15 * * 1"
+    }
+  ]
 }

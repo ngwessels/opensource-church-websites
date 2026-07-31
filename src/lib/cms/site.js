@@ -374,6 +374,23 @@ export function getBuilderCapabilities() {
         title: "string",
         showUsccbLink: "boolean",
       },
+      prayer_intentions: {
+        moduleInstanceId: "string (stable ID, auto-generated on add_module)",
+        title: "string?",
+        description: "string?",
+        submitLabel: "string",
+        notificationEmails: ["string (Mailgun alerts for approved intentions only)"],
+        notes: [
+          "successMessage is fixed to 'Thank you.' and is not configurable — never reveal moderation outcome",
+        ],
+        workflow: [
+          "add_module type=prayer_intentions",
+          "update_module with title/description/notificationEmails",
+          "publish_page",
+          "Public submissions POST to /api/prayer-intentions/submit",
+          "Review in Admin → Prayer Intentions; weekly digests go to configured prayer groups",
+        ],
+      },
       documents: {
         title: "string",
         items: [

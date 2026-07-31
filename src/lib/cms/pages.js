@@ -7,6 +7,7 @@ import { COLLECTIONS } from "@/lib/firestore/paths";
 import { normalizeButtonsConfig } from "@/lib/buttons/schema";
 import { normalizeDocumentsConfig } from "@/lib/documents/schema";
 import { normalizeFormConfig } from "@/lib/forms/schema";
+import { normalizePrayerIntentionsConfig } from "@/lib/prayer-intentions/schema";
 import { getDefaultConfig } from "@/lib/modules/defaults";
 import {
   buildRegionsForColumnCount,
@@ -186,6 +187,8 @@ export async function updateModuleAdmin(pageId, moduleId, config) {
         normalized = normalizeButtonsConfig(merged, { filterEmpty: true });
       } else if (m.type === "form") {
         normalized = normalizeFormConfig(merged);
+      } else if (m.type === "prayer_intentions") {
+        normalized = normalizePrayerIntentionsConfig(merged);
       }
       return { ...m, config: normalized };
     }),

@@ -47,6 +47,10 @@ const DailyReadingsModule = dynamic(
   () => import("./DailyReadingsModule").then((m) => m.DailyReadingsModule),
   { loading: moduleLoading },
 );
+const PrayerIntentionsModule = dynamic(
+  () => import("./PrayerIntentionsModule").then((m) => m.PrayerIntentionsModule),
+  { loading: moduleLoading },
+);
 const DocumentsModule = dynamic(
   () => import("./DocumentsModule").then((m) => m.DocumentsModule),
   { loading: moduleLoading },
@@ -96,6 +100,7 @@ const MODULE_MAP = {
   zoom: ZoomModule,
   mass_times: MassTimesModule,
   daily_readings: DailyReadingsModule,
+  prayer_intentions: PrayerIntentionsModule,
   documents: DocumentsModule,
   people: PeopleModule,
   buttons: ButtonsModule,

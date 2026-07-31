@@ -79,6 +79,92 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * @param {{
+ *   to: string[],
+ *   groupName: string,
+ *   intentions: Array<{ name: string, intention: string }>,
+ *   siteName?: string,
+ * }} opts
+ * @returns {Promise<{ sent: boolean, error?: string }>}
+ */
+export async function sendPrayerIntentionsDigestEmail({ to, groupName, intentions, siteName }) {
+  const apiKey = process.env.MAILGUN_API_KEY;
+  const domain = process.env.MAILGUN_DOMAIN;
+  const from = process.env.MAILGUN_FROM;
+
+  if (!apiKey || !domain || !from) {
+    console.warn("[mailgun] Not configured — skipping prayer intentions digest.");
+    return { sent: false, error: "Mailgun is not configured" };
+  }
+
+  if (!to.length) {
+    return { sent: false, error: "No recipients configured" };
+  }
+
+  if (!intentions.length) {
+    return { sent: false, error: "No intentions to send" };
+  }
+
+  const parish = siteName || "Parish";
+  const subject = `Weekly Prayer Intentions for ${groupName} — ${parish}`;
+
+  const textBody = [
+    `Dear ${groupName},`,
+    "",
+    `Please include the following prayer intentions in your prayers this week (${intentions.length}):`,
+    "",
+    ...intentions.map((item, i) => `${i + 1}. ${item.name}: ${item.intention}`),
+    "",
+    "Thank you for praying with our parish community.",
+  ].join("\n");
+
+  const listHtml = intentions
+    .map(
+      (item) =>
+        `<li style="margin-bottom:12px;"><strong>${escapeHtml(item.name)}</strong><br/>${escapeHtml(item.intention)}</li>`,
+    )
+    .join("");
+
+  const htmlBody = `
+    <p>Dear ${escapeHtml(groupName)},</p>
+    <p>Please include the following prayer intentions in your prayers this week (<strong>${intentions.length}</strong>):</p>
+    <ol>${listHtml}</ol>
+    <p>Thank you for praying with our parish community.</p>
+  `;
+
+  const body = new URLSearchParams({
+    from,
+    to: to.join(","),
+    subject,
+    text: textBody,
+    html: htmlBody,
+  });
+
+  try {
+    const res = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("[mailgun] prayer digest failed:", res.status, errText);
+      return { sent: false, error: `Mailgun error: ${res.status}` };
+    }
+
+    return { sent: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Mailgun request failed";
+    console.error("[mailgun]", message);
+    return { sent: false, error: message };
+  }
+}
+
 export function isMailgunConfigured() {
   return Boolean(process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN && process.env.MAILGUN_FROM);
 }

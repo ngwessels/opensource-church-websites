@@ -98,7 +98,7 @@ Use `search_site_content` with `{ query: "Jane Doe" }` to find names, events, or
 
 **Module types**
 
-`text`, `links`, `buttons`, `image`, `gallery`, `photo_albums`, `slideshow`, `feature_tiles`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `calendar`, `documents`, `people`, `form`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`
+`text`, `links`, `buttons`, `image`, `gallery`, `photo_albums`, `slideshow`, `feature_tiles`, `carousel`, `video`, `zoom`, `mass_times`, `daily_readings`, `prayer_intentions`, `calendar`, `documents`, `people`, `form`, `embed`, `facebook`, `google_maps`, `instagram`, `rss`
 
 **Buttons module**
 
@@ -136,6 +136,16 @@ Field types: `heading`, `paragraph`, `text`, `email`, `phone`, `textarea`, `sele
 3. `publish_page` — public submissions go to `POST /api/forms/submit` with `formId`
 
 Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notifications.
+
+**Prayer intentions module**
+
+Config shape: `{ moduleInstanceId, title, description, submitLabel, notificationEmails }`. Fixed fields: name, email and/or phone, intention. Public success message is always `Thank you.` (not configurable) so moderation outcome is never revealed.
+
+1. `add_module` with `type: "prayer_intentions"` (Catholic category)
+2. `update_module` with intro copy / notification emails
+3. `publish_page` — public submissions go to `POST /api/prayer-intentions/submit`
+4. Gemini moderates each submission (`GOOGLE_AI_API_KEY`); spam / non-prayer / negative-impact entries are stored as `rejected` for Admin audit; others are `approved`
+5. Review under **Admin → Prayer Intentions** (`/builder/admin?tab=prayer`); configure prayer group emails and send weekly digests (Vercel cron Monday 15:00 UTC, or Send digest now)
 
 **Donation pages**
 
