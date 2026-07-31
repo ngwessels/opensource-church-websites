@@ -392,6 +392,7 @@ export function getBuilderCapabilities() {
         notificationEmails: ["string (Mailgun alerts for approved intentions only)"],
         notes: [
           "successMessage is fixed to 'Thank you.' and is not configurable — never reveal moderation outcome",
+          "Public fields: intention required; name, email, and phone optional (anonymous allowed)",
         ],
         workflow: [
           "add_module type=prayer_intentions",

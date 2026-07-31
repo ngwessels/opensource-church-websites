@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [intention, setIntention] = useState("");
+  const [contactOpen, setContactOpen] = useState(false);
 
   const submitDisabled = editing || status === "loading";
 
@@ -55,6 +57,9 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
       if (!response.ok) {
         if (data.errors) {
           setFieldErrors(data.errors);
+          if (data.errors.name || data.errors.email || data.errors.phone) {
+            setContactOpen(true);
+          }
         }
         throw new Error(data.error ?? "Submission failed.");
       }
@@ -64,6 +69,7 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
       setEmail("");
       setPhone("");
       setIntention("");
+      setContactOpen(false);
     } catch (err) {
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Submission failed.");
@@ -110,51 +116,6 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
         />
 
         <div className="space-y-1.5">
-          <Label htmlFor="prayer-name" className="text-zinc-800">
-            Name<span className="ml-0.5 text-red-600">*</span>
-          </Label>
-          <Input
-            id="prayer-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            disabled={editing || status === "loading"}
-            className={cn(fieldErrors.name && "border-red-500")}
-          />
-          {fieldErrors.name && <p className="text-xs text-red-600">{fieldErrors.name}</p>}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="prayer-email" className="text-zinc-800">
-            Email<span className="ml-0.5 text-red-600">*</span>
-          </Label>
-          <Input
-            id="prayer-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={editing || status === "loading"}
-            className={cn(fieldErrors.email && "border-red-500")}
-          />
-          {fieldErrors.email && <p className="text-xs text-red-600">{fieldErrors.email}</p>}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="prayer-phone" className="text-zinc-800">
-            Phone
-          </Label>
-          <Input
-            id="prayer-phone"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            disabled={editing || status === "loading"}
-          />
-          <p className="text-xs text-zinc-500">Optional.</p>
-        </div>
-
-        <div className="space-y-1.5">
           <Label htmlFor="prayer-intention" className="text-zinc-800">
             Prayer intention<span className="ml-0.5 text-red-600">*</span>
           </Label>
@@ -171,6 +132,72 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
             )}
           />
           {fieldErrors.intention && <p className="text-xs text-red-600">{fieldErrors.intention}</p>}
+        </div>
+
+        <div className="rounded-md border border-border/80">
+          <button
+            type="button"
+            onClick={() => setContactOpen((open) => !open)}
+            className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
+            aria-expanded={contactOpen}
+          >
+            <span className="text-sm leading-relaxed text-zinc-600">
+              Prayer intentions are anonymous unless you provide us with your name and contact info
+            </span>
+            <ChevronDown
+              className={cn(
+                "mt-0.5 h-4 w-4 shrink-0 text-zinc-500 transition-transform",
+                contactOpen && "rotate-180",
+              )}
+              aria-hidden
+            />
+          </button>
+
+          {contactOpen && (
+            <div className="space-y-4 border-t border-border/80 px-3 py-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="prayer-name" className="text-zinc-800">
+                  Name
+                </Label>
+                <Input
+                  id="prayer-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={editing || status === "loading"}
+                  className={cn(fieldErrors.name && "border-red-500")}
+                />
+                {fieldErrors.name && <p className="text-xs text-red-600">{fieldErrors.name}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="prayer-email" className="text-zinc-800">
+                  Email
+                </Label>
+                <Input
+                  id="prayer-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={editing || status === "loading"}
+                  className={cn(fieldErrors.email && "border-red-500")}
+                />
+                {fieldErrors.email && <p className="text-xs text-red-600">{fieldErrors.email}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="prayer-phone" className="text-zinc-800">
+                  Phone
+                </Label>
+                <Input
+                  id="prayer-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  disabled={editing || status === "loading"}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {errorMessage && (

@@ -46,7 +46,7 @@ describe("normalizePrayerIntentionsSettings", () => {
 });
 
 describe("validatePrayerIntentionSubmission", () => {
-  it("requires name, email, and intention", () => {
+  it("requires only intention", () => {
     const result = validatePrayerIntentionSubmission({
       name: "",
       email: "",
@@ -55,31 +55,32 @@ describe("validatePrayerIntentionSubmission", () => {
     });
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.ok(result.errors.name);
-      assert.ok(result.errors.email);
       assert.ok(result.errors.intention);
+      assert.equal(result.errors.name, undefined);
+      assert.equal(result.errors.email, undefined);
     }
   });
 
-  it("accepts email with optional phone", () => {
+  it("accepts anonymous intention with no contact", () => {
     const result = validatePrayerIntentionSubmission({
-      name: "Jane",
-      email: "jane@example.com",
+      name: "",
+      email: "",
       phone: "",
       intention: "For healing",
     });
     assert.equal(result.ok, true);
     if (result.ok) {
-      assert.equal(result.values.name, "Jane");
-      assert.equal(result.values.email, "jane@example.com");
+      assert.equal(result.values.intention, "For healing");
+      assert.equal(result.values.name, "");
+      assert.equal(result.values.email, "");
     }
   });
 
-  it("rejects phone-only without email", () => {
+  it("rejects invalid email when provided", () => {
     const result = validatePrayerIntentionSubmission({
       name: "Jane",
-      email: "",
-      phone: "555-0100",
+      email: "not-an-email",
+      phone: "",
       intention: "For healing",
     });
     assert.equal(result.ok, false);

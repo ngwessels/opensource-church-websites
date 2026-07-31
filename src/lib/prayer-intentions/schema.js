@@ -192,6 +192,8 @@ export function normalizePrayerIntentionsSettings(raw) {
 }
 
 /**
+ * Name, email, and phone are optional (anonymous submissions allowed).
+ * Only intention is required. If email is provided, it must look valid.
  * @param {unknown} body
  * @returns {{ ok: true, values: { name: string, email: string, phone: string, intention: string } } | { ok: false, errors: Record<string, string> }}
  */
@@ -205,12 +207,9 @@ export function validatePrayerIntentionSubmission(body) {
   const phone = asString(b.phone).trim();
   const intention = asString(b.intention).trim();
 
-  if (!name) errors.name = "Name is required.";
   if (!intention) errors.intention = "Prayer intention is required.";
   if (intention.length > 4000) errors.intention = "Prayer intention is too long.";
-  if (!email) {
-    errors.email = "Email is required.";
-  } else if (!email.includes("@")) {
+  if (email && !email.includes("@")) {
     errors.email = "Enter a valid email address.";
   }
 

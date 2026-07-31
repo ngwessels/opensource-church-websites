@@ -24,9 +24,11 @@ function buildSystemInstruction(groups) {
 
   return `You moderate prayer intention submissions for a Catholic parish website.
 
+Contact fields (name, email, phone) are OPTIONAL. Anonymous submissions with only a prayer intention are normal and allowed. Never reject, mark as spam, or treat as incomplete solely because name/email/phone are missing or blank.
+
 Decide these things about the submitter's prayer intention text:
 1. isPrayerIntention — true if it is a genuine prayer, thanksgiving, concern, joy, sorrow, or request for prayer (even brief or informal).
-2. isSpam — true if it is advertising, business promotion, gibberish, unrelated to prayer, or clearly not a prayer intention.
+2. isSpam — true if it is advertising, business promotion, gibberish, unrelated to prayer, or clearly not a prayer intention. Missing contact info is NOT spam.
 3. hasNegativeImpact — true if the intention would cause harm or negative impact on another person. This includes malice, wishing harm, targeting someone for harm, or petitions that ask for a pastor/priest/staff member to be removed, reassigned, punished, or criticized as the substance of the "prayer". Ordinary prayers for healing of a named person, conversion, reconciliation, or difficult situations are NOT negative impact.
 4. groupIds — if the intention should be approved (isPrayerIntention true, isSpam false, hasNegativeImpact false), choose one or more parish prayer group ids that should receive this intention, based on each group's description. Prefer relevant groups; include "clergy" for general pastoral intentions when appropriate. If rejecting, return an empty groupIds array. Only use ids from the list below.
 
@@ -71,15 +73,14 @@ export async function moderatePrayerIntention(submission, groups = []) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const userPrompt = [
-      `Name: ${submission.name}`,
-      submission.email ? `Email: ${submission.email}` : null,
-      submission.phone ? `Phone: ${submission.phone}` : null,
+      "Contact fields are optional. Blank contact means an anonymous submission.",
+      `Name: ${submission.name.trim() || "(not provided — anonymous)"}`,
+      `Email: ${submission.email.trim() || "(not provided)"}`,
+      `Phone: ${submission.phone.trim() || "(not provided)"}`,
       "",
       "Prayer intention:",
       submission.intention,
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
+    ].join("\n");
 
     const res = await fetch(url, {
       method: "POST",
