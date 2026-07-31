@@ -1,36 +1,16 @@
-import { cookies } from "next/headers";
-
 import { DesignPreviewGate } from "../DesignPreviewGate";
-import { PasswordGate } from "@/components/site/PasswordGate";
+import { PasswordProtectedPage } from "@/components/site/PasswordProtectedPage";
 import { PublicSite } from "@/components/site/PublicSite";
 import {
-  getCachedBulletins,
-  getCachedHiddenPages,
-  getCachedNavNodes,
   getCachedPageBySlug,
   getCachedPublishedPageSlugs,
   getCachedSiteConfig,
 } from "@/lib/cache/public-site-data";
-import { getPageType } from "@/lib/bulletins/schema";
-import { prefetchPageCalendarEvents } from "@/lib/calendar/prefetch";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
-import {
-  isPagePasswordProtected,
-  stripPasswordHash,
-} from "@/lib/pages/password-status";
-import {
-  asHiddenPageSets,
-  filterNavTreeForPublic,
-  filterQuickLinksForPublic,
-  filterSiteConfigForPublic,
-  isPageHidden,
-} from "@/lib/pages/visibility";
+import { isPagePasswordProtected } from "@/lib/pages/password-status";
+import { loadPublicSiteView } from "@/lib/pages/public-view";
+import { isPageHidden } from "@/lib/pages/visibility";
 import { resolvePublishedPageView } from "@/lib/pages/publish";
-import {
-  PAGE_UNLOCK_COOKIE_NAME,
-  isPageUnlockedInCookie,
-} from "@/lib/pages/unlock-cookie";
-import { buildNavTree, sortQuickLinks } from "@/lib/sitemap/tree";
 
 /** Cache until publish triggers on-demand revalidation. */
 export const revalidate = false;
@@ -63,18 +43,12 @@ export async function generateMetadata({ params }) {
     return { title: "Page not found" };
   }
 
+  // Do not call cookies() here — this route is statically cached.
   if (isPagePasswordProtected(page)) {
-    const cookieStore = await cookies();
-    const unlocked = isPageUnlockedInCookie(
-      cookieStore.get(PAGE_UNLOCK_COOKIE_NAME)?.value,
-      page.id,
-    );
-    if (!unlocked) {
-      return {
-        title: publicPage?.title || "Protected page",
-        robots: { index: false, follow: false },
-      };
-    }
+    return {
+      title: publicPage?.title || "Protected page",
+      robots: { index: false, follow: false },
+    };
   }
 
   const site = await getCachedSiteConfig();
@@ -99,14 +73,7 @@ export default async function PublicPage({ params }) {
     );
   }
 
-  const [siteConfig, nodes, page, hiddenPagesCached] = await Promise.all([
-    getCachedSiteConfig(),
-    getCachedNavNodes(),
-    getCachedPageBySlug(slug),
-    getCachedHiddenPages(),
-  ]);
-  const { pageIds: hiddenPageIds, slugs: hiddenSlugs } = asHiddenPageSets(hiddenPagesCached);
-
+  const page = await getCachedPageBySlug(slug);
   const publicPage = resolvePublishedPageView(page);
 
   if (!publicPage || isPageHidden(publicPage)) {
@@ -120,38 +87,25 @@ export default async function PublicPage({ params }) {
     );
   }
 
+  // Password pages stay static: cookie check happens in the client + API route.
   if (isPagePasswordProtected(page)) {
-    const cookieStore = await cookies();
-    const unlocked = isPageUnlockedInCookie(
-      cookieStore.get(PAGE_UNLOCK_COOKIE_NAME)?.value,
-      page.id,
+    return (
+      <PasswordProtectedPage pageId={page.id} pageTitle={publicPage.title} slug={slug} />
     );
-    if (!unlocked) {
-      return <PasswordGate pageId={page.id} pageTitle={publicPage.title} />;
-    }
   }
 
-  const navTree = filterNavTreeForPublic(buildNavTree(nodes), hiddenPageIds);
-  const quickLinks = filterQuickLinksForPublic(sortQuickLinks(nodes), hiddenPageIds);
-  const safePage = stripPasswordHash(publicPage);
-  const [bulletins, calendarEventsByModuleId] = await Promise.all([
-    getPageType(safePage) === "bulletins" ? getCachedBulletins() : Promise.resolve([]),
-    prefetchPageCalendarEvents(safePage, siteConfig.timezone),
-  ]);
+  const view = await loadPublicSiteView(slug);
+  if (!view.ok) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
+        <h1 className="text-xl font-semibold">Page not found</h1>
+      </div>
+    );
+  }
 
   return (
     <DesignPreviewGate slug={slug}>
-      <PublicSite
-        siteConfig={filterSiteConfigForPublic(siteConfig, hiddenSlugs)}
-        navTree={navTree}
-        navNodes={nodes}
-        quickLinks={quickLinks}
-        hiddenPageIds={hiddenPageIds}
-        page={safePage}
-        pageId={page.id}
-        bulletins={bulletins}
-        calendarEventsByModuleId={calendarEventsByModuleId}
-      />
+      <PublicSite {...view.props} />
     </DesignPreviewGate>
   );
 }

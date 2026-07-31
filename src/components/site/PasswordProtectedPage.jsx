@@ -1,21 +1,57 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 
+import { DesignPreviewGate } from "@/app/(public)/DesignPreviewGate";
+import { PublicSite } from "@/components/site/PublicSite";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * @param {{ pageId: string, pageTitle?: string }} props
+ * Client gate for password-protected pages.
+ * Keeps the public RSC static (no cookies() there); unlock cookie is checked via API.
+ *
+ * @param {{ pageId: string, pageTitle?: string, slug: string }} props
  */
-export function PasswordGate({ pageId, pageTitle }) {
-  const router = useRouter();
+export function PasswordProtectedPage({ pageId, pageTitle, slug }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [siteProps, setSiteProps] = useState(null);
+
+  const loadUnlockedView = async () => {
+    const res = await fetch(`/api/pages/unlocked-view?slug=${encodeURIComponent(slug || "")}`, {
+      credentials: "same-origin",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.props) {
+      setSiteProps(data.props);
+      setError(null);
+      return true;
+    }
+    setSiteProps(null);
+    return false;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadUnlockedView();
+      } catch {
+        // Stay on password form.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per slug
+  }, [slug]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -25,6 +61,7 @@ export function PasswordGate({ pageId, pageTitle }) {
       const res = await fetch("/api/pages/unlock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ pageId, password }),
       });
       const data = await res.json().catch(() => ({}));
@@ -32,13 +69,32 @@ export function PasswordGate({ pageId, pageTitle }) {
         setError(data.error || "Incorrect password.");
         return;
       }
-      router.refresh();
+      const ok = await loadUnlockedView();
+      if (!ok) {
+        setError("Password accepted, but the page could not be loaded. Try refreshing.");
+      }
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
+  if (siteProps) {
+    return (
+      <DesignPreviewGate slug={slug}>
+        <PublicSite {...siteProps} />
+      </DesignPreviewGate>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted px-4 py-12">

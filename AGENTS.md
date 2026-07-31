@@ -159,7 +159,7 @@ Shared password gate (no login). Live page fields: `passwordProtected`, `passwor
 
 1. Create a page (optional sitemap **Secure Page** tile for SEO labeling)
 2. In Builder → **Page Settings**, turn **Password protected** on and set a password
-3. Publish the page — visitors see a password form until unlocked (`POST /api/pages/unlock`; httpOnly cookie for 30 days)
+3. Publish the page — visitors see a password form; unlock uses `POST /api/pages/unlock` then loads content via `GET /api/pages/unlocked-view` (httpOnly cookie, 30 days). The public page RSC stays static (no `cookies()`), avoiding `DYNAMIC_SERVER_USAGE`.
 4. Home page cannot be password protected; robots disallow password-protected paths
 
 **Site analytics**
