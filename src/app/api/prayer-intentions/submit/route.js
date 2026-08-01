@@ -10,6 +10,7 @@ import {
   DEFAULT_SUCCESS_MESSAGE,
   validatePrayerIntentionSubmission,
 } from "@/lib/prayer-intentions/schema";
+import { getSubmissionIpGeoFromRequest } from "@/lib/request/ip-geo";
 import { generateId } from "@/lib/sitemap/tree";
 
 export const runtime = "nodejs";
@@ -55,6 +56,7 @@ export async function POST(request) {
     const intentionId = generateId();
     const submittedAt = new Date().toISOString();
     const model = process.env.GEMINI_MODEL?.trim() || "gemini-flash-lite-latest";
+    const { ipAddress, ipCountry, ipCity } = getSubmissionIpGeoFromRequest(request);
     const ref = db.collection(COLLECTIONS.prayerIntentions).doc(intentionId);
 
     // Persist first so AI failures never drop the submission from Admin.
@@ -63,6 +65,9 @@ export async function POST(request) {
       email: validation.values.email,
       phone: validation.values.phone,
       intention: validation.values.intention,
+      ipAddress,
+      ipCountry,
+      ipCity,
       status: "rejected",
       groupIds: [],
       moderation: {

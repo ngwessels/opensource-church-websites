@@ -44,6 +44,17 @@ function intentionMatchesGroup(row, groupId) {
 
 /**
  * @param {Record<string, unknown>} row
+ */
+function formatSubmissionIpGeo(row) {
+  const parts = [];
+  if (row.ipAddress) parts.push(String(row.ipAddress));
+  const location = [row.ipCity, row.ipCountry].filter(Boolean).map(String).join(", ");
+  if (location) parts.push(location);
+  return parts.join(" · ");
+}
+
+/**
+ * @param {Record<string, unknown>} row
  * @param {string} dateFrom
  * @param {string} dateTo
  */
@@ -415,6 +426,7 @@ export function PrayerIntentionsPanel() {
                 const assignedNames = settings.groups
                   .filter((g) => assignedGroupIds.includes(g.id))
                   .map((g) => g.name);
+                const ipGeo = formatSubmissionIpGeo(row);
                 return (
                   <article key={String(row.id)} className="rounded-lg border bg-card">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
@@ -442,6 +454,9 @@ export function PrayerIntentionsPanel() {
                             ? new Date(String(row.submittedAt)).toLocaleString()
                             : "Unknown time"}
                         </p>
+                        {ipGeo ? (
+                          <p className="text-xs text-muted-foreground">IP: {ipGeo}</p>
+                        ) : null}
                       </div>
                       <div className="flex gap-2">
                         {!isApproved && (

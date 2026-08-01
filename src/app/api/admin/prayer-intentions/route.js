@@ -80,6 +80,9 @@ export async function GET(request) {
         "Name",
         "Email",
         "Phone",
+        "IP Address",
+        "IP Country",
+        "IP City",
         "Intention",
         "Assigned Groups",
         "Moderation Reason",
@@ -91,6 +94,9 @@ export async function GET(request) {
         row.name || "",
         row.email || "",
         row.phone || "",
+        row.ipAddress || "",
+        row.ipCountry || "",
+        row.ipCity || "",
         row.intention || "",
         Array.isArray(row.groupIds)
           ? row.groupIds
