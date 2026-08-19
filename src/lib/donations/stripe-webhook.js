@@ -1,9 +1,45 @@
 import { normalizeDonorEmail } from "../donors/email.js";
+import { stripUndefined } from "../firestore/serialize.js";
+import { getStripe } from "../stripe/server.js";
 import {
   resolveDonorUidByEmail,
   upsertSubscriptionFromStripe,
 } from "./subscription-sync.js";
 import { donorFromStripeCustomer, donorFromStripeSession } from "./schema.js";
+
+/**
+ * Firestore rejects `undefined` field values (guest checkouts have no customer).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} docId
+ * @param {Record<string, unknown>} data
+ */
+async function setDonationDoc(db, docId, data) {
+  await db.collection("donations").doc(docId).set(stripUndefined(data));
+}
+
+/**
+ * Checkout Session docs use `cs_…` ids; Charge fallbacks use the PaymentIntent id.
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string | undefined} paymentIntentId
+ * @param {Set<string>} [knownPaymentIntentIds]
+ */
+async function findDonationForPaymentIntent(db, paymentIntentId, knownPaymentIntentIds) {
+  if (!paymentIntentId) return null;
+  if (knownPaymentIntentIds?.has(paymentIntentId)) {
+    return { id: paymentIntentId };
+  }
+  const byId = await db.collection("donations").doc(paymentIntentId).get();
+  if (byId.exists) return { id: paymentIntentId };
+  const querySnap = await db
+    .collection("donations")
+    .where("stripePaymentIntentId", "==", paymentIntentId)
+    .limit(1)
+    .get();
+  if (!querySnap.empty) {
+    return { id: querySnap.docs[0].id };
+  }
+  return null;
+}
 
 /**
  * Stripe API 2025-03-31+ removed top-level `invoice.subscription` in favor of
@@ -63,6 +99,8 @@ export async function persistDonationFromCheckoutSession(db, session) {
       ? session.payment_intent
       : session.payment_intent?.id;
 
+  const stripeCustomerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id;
   const donor = donorFromStripeSession(
     session.customer_details,
     session.customer_email ?? undefined,
@@ -78,31 +116,36 @@ export async function persistDonationFromCheckoutSession(db, session) {
       ? new Date(session.created * 1000).toISOString()
       : new Date().toISOString();
 
-  await db
-    .collection("donations")
-    .doc(session.id)
-    .set({
-      amountCents,
-      currency: session.currency ?? "usd",
-      frequency,
-      status: "completed",
-      stripeSessionId: session.id,
-      stripeCustomerId: typeof session.customer === "string" ? session.customer : undefined,
-      ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
-      ...(stripeSubscriptionId ? { stripeSubscriptionId } : {}),
-      ...(donor ? { donor } : {}),
-      donorEmail,
-      ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
-      ...(donorUid ? { donorUid } : {}),
-      ...(fundId ? { fundId } : {}),
-      ...(fundLabel ? { fundLabel } : {}),
-      ...(returnPath ? { returnPath } : {}),
-      ...(donorComment ? { donorComment } : {}),
-      createdAt,
-    });
+  await setDonationDoc(db, session.id, {
+    amountCents,
+    currency: session.currency ?? "usd",
+    frequency,
+    status: "completed",
+    stripeSessionId: session.id,
+    ...(stripeCustomerId ? { stripeCustomerId } : {}),
+    ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+    ...(stripeSubscriptionId ? { stripeSubscriptionId } : {}),
+    ...(donor ? { donor } : {}),
+    ...(donorEmail ? { donorEmail } : {}),
+    ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
+    ...(donorUid ? { donorUid } : {}),
+    ...(fundId ? { fundId } : {}),
+    ...(fundLabel ? { fundLabel } : {}),
+    ...(returnPath ? { returnPath } : {}),
+    ...(donorComment ? { donorComment } : {}),
+    createdAt,
+  });
+
+  if (stripePaymentIntentId && stripePaymentIntentId !== session.id) {
+    const piRef = db.collection("donations").doc(stripePaymentIntentId);
+    const piSnap = await piRef.get();
+    if (piSnap.exists) {
+      await piRef.delete();
+    }
+  }
 
   if (stripeSubscriptionId && session.subscription) {
-    const stripe = (await import("../stripe/server.js")).getStripe();
+    const stripe = getStripe();
     const subscription =
       typeof session.subscription === "string"
         ? await stripe.subscriptions.retrieve(session.subscription)
@@ -175,8 +218,13 @@ export async function persistDonationFromCharge(db, stripe, charge, options = {}
   if (await donationDocExists(db, docId, options.knownPaymentIntentIds)) {
     return { persisted: false, reason: "duplicate", id: docId };
   }
-  if (paymentIntentId && options.knownPaymentIntentIds?.has(paymentIntentId)) {
-    return { persisted: false, reason: "duplicate", id: paymentIntentId };
+  const existingByPaymentIntent = await findDonationForPaymentIntent(
+    db,
+    paymentIntentId,
+    options.knownPaymentIntentIds,
+  );
+  if (existingByPaymentIntent) {
+    return { persisted: false, reason: "duplicate", id: existingByPaymentIntent.id };
   }
 
   /** @type {Record<string, string>} */
@@ -228,32 +276,79 @@ export async function persistDonationFromCharge(db, stripe, charge, options = {}
       ? new Date(charge.created * 1000).toISOString()
       : new Date().toISOString();
 
-  await db
-    .collection("donations")
-    .doc(docId)
-    .set({
-      amountCents: typeof charge.amount === "number" ? charge.amount : 0,
-      currency: charge.currency ?? "usd",
-      frequency,
-      status: "completed",
-      stripeChargeId: charge.id,
-      ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
-      ...(customerId ? { stripeCustomerId: customerId } : {}),
-      ...(donor ? { donor } : {}),
-      donorEmail,
-      ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
-      ...(donorUid ? { donorUid } : {}),
-      ...(fundId ? { fundId } : {}),
-      ...(fundLabel ? { fundLabel } : {}),
-      ...(returnPath ? { returnPath } : {}),
-      ...(donorComment ? { donorComment } : {}),
-      createdAt,
-    });
+  await setDonationDoc(db, docId, {
+    amountCents: typeof charge.amount === "number" ? charge.amount : 0,
+    currency: charge.currency ?? "usd",
+    frequency,
+    status: "completed",
+    stripeChargeId: charge.id,
+    ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
+    ...(customerId ? { stripeCustomerId: customerId } : {}),
+    ...(donor ? { donor } : {}),
+    ...(donorEmail ? { donorEmail } : {}),
+    ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
+    ...(donorUid ? { donorUid } : {}),
+    ...(fundId ? { fundId } : {}),
+    ...(fundLabel ? { fundLabel } : {}),
+    ...(returnPath ? { returnPath } : {}),
+    ...(donorComment ? { donorComment } : {}),
+    createdAt,
+  });
 
   options.knownPaymentIntentIds?.add(docId);
   if (paymentIntentId) options.knownPaymentIntentIds?.add(paymentIntentId);
 
   return { persisted: true, id: docId };
+}
+
+/**
+ * Live Charge events should prefer the Checkout Session row (same as manual sync).
+ * If Checkout persist fails, fall through to the Charge document so the gift still lands.
+ *
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {import("stripe").Stripe} stripe
+ * @param {import("stripe").Stripe.Charge} charge
+ * @param {{ knownPaymentIntentIds?: Set<string> }} [options]
+ * @returns {Promise<{ persisted: boolean; reason?: string; id?: string }>}
+ */
+export async function persistChargeOrCheckoutDonation(db, stripe, charge, options = {}) {
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+  if (paymentIntentId) {
+    try {
+      const sessions = await stripe.checkout.sessions.list({
+        payment_intent: paymentIntentId,
+        limit: 1,
+      });
+      const session = sessions.data[0];
+      if (
+        session &&
+        session.status === "complete" &&
+        (session.payment_status === "paid" || session.payment_status === "no_payment_required")
+      ) {
+        try {
+          const existing = await db.collection("donations").doc(session.id).get();
+          await persistDonationFromCheckoutSession(db, session);
+          options.knownPaymentIntentIds?.add(session.id);
+          options.knownPaymentIntentIds?.add(paymentIntentId);
+          return {
+            persisted: !existing.exists,
+            reason: existing.exists ? "duplicate" : undefined,
+            id: session.id,
+          };
+        } catch {
+          // Guest Checkout writes used to throw; Charge persist is the fallback.
+        }
+      }
+    } catch {
+      // Charge billing details are enough when Checkout lookup fails.
+    }
+  }
+
+  return persistDonationFromCharge(db, stripe, charge, options);
 }
 
 /**
@@ -295,7 +390,7 @@ export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent
   }
 
   if (charge) {
-    return persistDonationFromCharge(db, stripe, charge, {
+    return persistChargeOrCheckoutDonation(db, stripe, charge, {
       knownPaymentIntentIds: options.knownPaymentIntentIds,
     });
   }
@@ -335,26 +430,23 @@ export async function persistDonationFromPaymentIntent(db, stripe, paymentIntent
       ? new Date(paymentIntent.created * 1000).toISOString()
       : new Date().toISOString();
 
-  await db
-    .collection("donations")
-    .doc(paymentIntentId)
-    .set({
-      amountCents: paymentIntent.amount_received || paymentIntent.amount || 0,
-      currency: paymentIntent.currency ?? "usd",
-      frequency,
-      status: "completed",
-      stripePaymentIntentId: paymentIntentId,
-      ...(customerId ? { stripeCustomerId: customerId } : {}),
-      ...(donor ? { donor } : {}),
-      donorEmail,
-      ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
-      ...(donorUid ? { donorUid } : {}),
-      ...(fundId ? { fundId } : {}),
-      ...(fundLabel ? { fundLabel } : {}),
-      ...(returnPath ? { returnPath } : {}),
-      ...(donorComment ? { donorComment } : {}),
-      createdAt,
-    });
+  await setDonationDoc(db, paymentIntentId, {
+    amountCents: paymentIntent.amount_received || paymentIntent.amount || 0,
+    currency: paymentIntent.currency ?? "usd",
+    frequency,
+    status: "completed",
+    stripePaymentIntentId: paymentIntentId,
+    ...(customerId ? { stripeCustomerId: customerId } : {}),
+    ...(donor ? { donor } : {}),
+    ...(donorEmail ? { donorEmail } : {}),
+    ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
+    ...(donorUid ? { donorUid } : {}),
+    ...(fundId ? { fundId } : {}),
+    ...(fundLabel ? { fundLabel } : {}),
+    ...(returnPath ? { returnPath } : {}),
+    ...(donorComment ? { donorComment } : {}),
+    createdAt,
+  });
 
   options.knownPaymentIntentIds?.add(paymentIntentId);
   return { persisted: true, id: paymentIntentId };
@@ -460,27 +552,24 @@ export async function persistDonationFromInvoice(db, stripe, invoice) {
       ? new Date(paidAt * 1000).toISOString()
       : new Date().toISOString();
 
-  await db
-    .collection("donations")
-    .doc(invoiceId)
-    .set({
-      amountCents: invoice.amount_paid ?? 0,
-      currency: invoice.currency ?? "usd",
-      frequency,
-      status: "completed",
-      stripeInvoiceId: invoiceId,
-      stripeSubscriptionId: subscriptionId,
-      ...(customerId ? { stripeCustomerId: customerId } : {}),
-      ...(donor ? { donor } : {}),
-      donorEmail,
-      ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
-      ...(donorUid ? { donorUid } : {}),
-      ...(fundId ? { fundId } : {}),
-      ...(fundLabel ? { fundLabel } : {}),
-      ...(returnPath ? { returnPath } : {}),
-      ...(donorComment ? { donorComment } : {}),
-      createdAt,
-    });
+  await setDonationDoc(db, invoiceId, {
+    amountCents: invoice.amount_paid ?? 0,
+    currency: invoice.currency ?? "usd",
+    frequency,
+    status: "completed",
+    stripeInvoiceId: invoiceId,
+    stripeSubscriptionId: subscriptionId,
+    ...(customerId ? { stripeCustomerId: customerId } : {}),
+    ...(donor ? { donor } : {}),
+    ...(donorEmail ? { donorEmail } : {}),
+    ...(donorEmailNormalized ? { donorEmailNormalized } : {}),
+    ...(donorUid ? { donorUid } : {}),
+    ...(fundId ? { fundId } : {}),
+    ...(fundLabel ? { fundLabel } : {}),
+    ...(returnPath ? { returnPath } : {}),
+    ...(donorComment ? { donorComment } : {}),
+    createdAt,
+  });
 
   await upsertSubscriptionFromStripe(db, subscription, {
     donorUid,
@@ -521,4 +610,50 @@ export async function persistInvoicePaymentFailed(db, invoice) {
     },
     { merge: true },
   );
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {import("stripe").Stripe} stripe
+ * @param {import("stripe").Stripe.Event} event
+ * @returns {Promise<{ handled: boolean, persisted?: boolean, reason?: string, id?: string }>}
+ */
+export async function handleStripeWebhookEvent(db, stripe, event) {
+  switch (event.type) {
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
+      const session = /** @type {import("stripe").Stripe.Checkout.Session} */ (event.data.object);
+      await persistDonationFromCheckoutSession(db, session);
+      return { handled: true, persisted: true, id: session.id };
+    }
+    case "charge.succeeded": {
+      const charge = /** @type {import("stripe").Stripe.Charge} */ (event.data.object);
+      const result = await persistChargeOrCheckoutDonation(db, stripe, charge);
+      return { handled: true, ...result };
+    }
+    case "payment_intent.succeeded": {
+      const paymentIntent = /** @type {import("stripe").Stripe.PaymentIntent} */ (event.data.object);
+      const result = await persistDonationFromPaymentIntent(db, stripe, paymentIntent);
+      return { handled: true, ...result };
+    }
+    case "invoice.paid": {
+      const invoice = /** @type {import("stripe").Stripe.Invoice} */ (event.data.object);
+      const result = await persistDonationFromInvoice(db, stripe, invoice);
+      return { handled: true, ...result };
+    }
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      const subscription = /** @type {import("stripe").Stripe.Subscription} */ (event.data.object);
+      await persistSubscriptionLifecycleEvent(db, subscription);
+      return { handled: true, persisted: true, id: subscription.id };
+    }
+    case "invoice.payment_failed": {
+      const invoice = /** @type {import("stripe").Stripe.Invoice} */ (event.data.object);
+      await persistInvoicePaymentFailed(db, invoice);
+      return { handled: true, persisted: true };
+    }
+    default:
+      return { handled: false };
+  }
 }

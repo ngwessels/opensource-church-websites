@@ -1,4 +1,5 @@
 import { COLLECTIONS } from "../firestore/paths.js";
+import { stripUndefined } from "../firestore/serialize.js";
 import { normalizeDonorEmail } from "../donors/email.js";
 
 /**
@@ -27,9 +28,9 @@ export function buildSubscriptionRecord(subscription, options = {}) {
 
   const now = new Date().toISOString();
 
-  return {
+  return stripUndefined({
     stripeSubscriptionId: subscription.id,
-    stripeCustomerId: customerId,
+    ...(customerId ? { stripeCustomerId: customerId } : {}),
     status: subscription.status,
     amountCents: price?.unit_amount ?? 0,
     currency: subscription.currency ?? "usd",
@@ -51,7 +52,7 @@ export function buildSubscriptionRecord(subscription, options = {}) {
     createdAt: subscription.created
       ? new Date(subscription.created * 1000).toISOString()
       : now,
-  };
+  });
 }
 
 /**

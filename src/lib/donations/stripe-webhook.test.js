@@ -4,10 +4,63 @@ import { describe, it } from "node:test";
 import { donorFromStripeCustomer } from "./schema.js";
 import {
   getInvoiceSubscriptionId,
+  handleStripeWebhookEvent,
   isSubscriptionPaymentIntent,
+  persistDonationFromCheckoutSession,
   persistDonationFromInvoice,
   persistDonationFromPaymentIntent,
 } from "./stripe-webhook.js";
+
+function assertFirestoreSafe(data, path = "data") {
+  if (data === undefined) {
+    throw new Error(
+      `Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value (found in field "${path}").`,
+    );
+  }
+  if (data === null || typeof data !== "object") return;
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      throw new Error(
+        `Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value (found in field "${path}.${key}").`,
+      );
+    }
+    if (value && typeof value === "object") {
+      assertFirestoreSafe(value, `${path}.${key}`);
+    }
+  }
+}
+
+function createMemoryDb() {
+  /** @type {Record<string, object>} */
+  const docs = {};
+  const db = {
+    collection: () => ({
+      where: (field, _op, value) => ({
+        limit: () => ({
+          get: async () => {
+            const matches = Object.entries(docs)
+              .filter(([, data]) => data[field] === value)
+              .map(([id, data]) => ({ id, data: () => data }));
+            return { empty: matches.length === 0, docs: matches };
+          },
+        }),
+        get: async () => ({ empty: true, docs: [] }),
+      }),
+      doc: (id) => ({
+        get: async () => ({ exists: Boolean(docs[id]), id, data: () => docs[id] }),
+        set: async (data, options = {}) => {
+          const next = options.merge ? { ...docs[id], ...data } : data;
+          assertFirestoreSafe(next);
+          docs[id] = next;
+        },
+        delete: async () => {
+          delete docs[id];
+        },
+      }),
+    }),
+  };
+  return { db, docs };
+}
 
 describe("getInvoiceSubscriptionId", () => {
   it("reads legacy top-level subscription id", () => {
@@ -51,25 +104,186 @@ describe("isSubscriptionPaymentIntent", () => {
   });
 });
 
+describe("persistDonationFromCheckoutSession", () => {
+  it("persists guest checkouts without a Stripe customer id", async () => {
+    const { db, docs } = createMemoryDb();
+
+    await persistDonationFromCheckoutSession(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe.Checkout.Session} */ ({
+        id: "cs_live_guest",
+        status: "complete",
+        payment_status: "paid",
+        mode: "payment",
+        amount_total: 2500,
+        currency: "usd",
+        created: 1_700_000_000,
+        customer: null,
+        customer_email: null,
+        metadata: { frequency: "once", fundId: "general", fundLabel: "General" },
+        customer_details: { email: "guest@example.com", name: "Guest Donor" },
+      }),
+    );
+
+    assert.equal(docs.cs_live_guest.amountCents, 2500);
+    assert.equal(docs.cs_live_guest.donorEmail, "guest@example.com");
+    assert.equal("stripeCustomerId" in docs.cs_live_guest, false);
+    assert.equal("donorEmail" in docs.cs_live_guest, true);
+  });
+
+  it("omits donorEmail when Checkout collected no contact info", async () => {
+    const { db, docs } = createMemoryDb();
+
+    await persistDonationFromCheckoutSession(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe.Checkout.Session} */ ({
+        id: "cs_live_anonymous",
+        status: "complete",
+        payment_status: "paid",
+        mode: "payment",
+        amount_total: 1000,
+        currency: "usd",
+        created: 1_700_000_000,
+        customer: null,
+        metadata: {},
+        customer_details: null,
+      }),
+    );
+
+    assert.equal(docs.cs_live_anonymous.amountCents, 1000);
+    assert.equal("stripeCustomerId" in docs.cs_live_anonymous, false);
+    assert.equal("donorEmail" in docs.cs_live_anonymous, false);
+  });
+});
+
+describe("handleStripeWebhookEvent", () => {
+  it("persists guest Checkout completions from live webhooks", async () => {
+    const { db, docs } = createMemoryDb();
+
+    const result = await handleStripeWebhookEvent(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe} */ ({}),
+      /** @type {import("stripe").Stripe.Event} */ ({
+        id: "evt_1",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_live_guest",
+            status: "complete",
+            payment_status: "paid",
+            mode: "payment",
+            amount_total: 2500,
+            currency: "usd",
+            created: 1_700_000_000,
+            customer: null,
+            metadata: { frequency: "once", fundId: "general", fundLabel: "General" },
+            customer_details: { email: "guest@example.com", name: "Guest Donor" },
+          },
+        },
+      }),
+    );
+
+    assert.equal(result.handled, true);
+    assert.equal(result.persisted, true);
+    assert.equal(docs.cs_live_guest.amountCents, 2500);
+    assert.equal("stripeCustomerId" in docs.cs_live_guest, false);
+  });
+
+  it("falls back to Charge persist when Checkout lookup has no complete session", async () => {
+    const { db, docs } = createMemoryDb();
+    const stripe = {
+      checkout: {
+        sessions: {
+          list: async () => ({ data: [] }),
+        },
+      },
+      paymentIntents: {
+        retrieve: async (id) => ({
+          id,
+          status: "succeeded",
+          metadata: { frequency: "once", fundId: "general", fundLabel: "General" },
+        }),
+      },
+    };
+
+    const result = await handleStripeWebhookEvent(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe} */ (stripe),
+      /** @type {import("stripe").Stripe.Event} */ ({
+        id: "evt_2",
+        type: "charge.succeeded",
+        data: {
+          object: {
+            id: "ch_live_1",
+            status: "succeeded",
+            paid: true,
+            amount: 4000,
+            currency: "usd",
+            created: 1_700_000_000,
+            payment_intent: "pi_live_1",
+            billing_details: { name: "Ann", email: "ann@example.com" },
+            receipt_email: "ann@example.com",
+          },
+        },
+      }),
+    );
+
+    assert.equal(result.handled, true);
+    assert.equal(result.persisted, true);
+    assert.equal(docs.pi_live_1.amountCents, 4000);
+    assert.equal(docs.pi_live_1.donorEmail, "ann@example.com");
+  });
+
+  it("does not duplicate a Checkout gift when Charge webhook arrives later", async () => {
+    const { db, docs } = createMemoryDb();
+    docs.cs_paid = {
+      amountCents: 2500,
+      stripeSessionId: "cs_paid",
+      stripePaymentIntentId: "pi_paid",
+    };
+
+    const stripe = {
+      checkout: {
+        sessions: {
+          list: async () => ({ data: [] }),
+        },
+      },
+      paymentIntents: {
+        retrieve: async (id) => ({ id, status: "succeeded", metadata: {} }),
+      },
+    };
+
+    const result = await handleStripeWebhookEvent(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe} */ (stripe),
+      /** @type {import("stripe").Stripe.Event} */ ({
+        id: "evt_3",
+        type: "charge.succeeded",
+        data: {
+          object: {
+            id: "ch_paid",
+            status: "succeeded",
+            paid: true,
+            amount: 2500,
+            currency: "usd",
+            created: 1_700_000_000,
+            payment_intent: "pi_paid",
+            billing_details: { email: "ann@example.com" },
+          },
+        },
+      }),
+    );
+
+    assert.equal(result.persisted, false);
+    assert.equal(result.reason, "duplicate");
+    assert.equal(docs.pi_paid, undefined);
+    assert.equal(docs.cs_paid.amountCents, 2500);
+  });
+});
+
 describe("persistDonationFromPaymentIntent", () => {
   it("persists succeeded one-time payment intents", async () => {
-    /** @type {Record<string, object>} */
-    const docs = {};
-    const db = {
-      collection: () => ({
-        where: () => ({
-          limit: () => ({
-            get: async () => ({ empty: true, docs: [] }),
-          }),
-        }),
-        doc: (id) => ({
-          get: async () => ({ exists: Boolean(docs[id]) }),
-          set: async (data) => {
-            docs[id] = data;
-          },
-        }),
-      }),
-    };
+    const { db, docs } = createMemoryDb();
     const stripe = {
       charges: {
         retrieve: async () => ({
@@ -177,25 +391,7 @@ describe("persistDonationFromInvoice", () => {
   });
 
   it("persists subscription renewal invoices", async () => {
-    /** @type {Record<string, object>} */
-    const docs = {};
-
-    const db = {
-      collection: () => ({
-        where: () => ({
-          limit: () => ({
-            get: async () => ({ empty: true, docs: [] }),
-          }),
-          get: async () => ({ empty: true, docs: [] }),
-        }),
-        doc: (id) => ({
-          get: async () => ({ exists: Boolean(docs[id]) }),
-          set: async (data) => {
-            docs[id] = data;
-          },
-        }),
-      }),
-    };
+    const { db, docs } = createMemoryDb();
 
     const stripe = {
       subscriptions: {
@@ -263,25 +459,7 @@ describe("persistDonationFromInvoice", () => {
   });
 
   it("persists renewals when subscription id is only on invoice.parent", async () => {
-    /** @type {Record<string, object>} */
-    const docs = {};
-
-    const db = {
-      collection: () => ({
-        where: () => ({
-          limit: () => ({
-            get: async () => ({ empty: true, docs: [] }),
-          }),
-          get: async () => ({ empty: true, docs: [] }),
-        }),
-        doc: (id) => ({
-          get: async () => ({ exists: Boolean(docs[id]) }),
-          set: async (data) => {
-            docs[id] = data;
-          },
-        }),
-      }),
-    };
+    const { db, docs } = createMemoryDb();
 
     const stripe = {
       subscriptions: {

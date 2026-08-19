@@ -3,6 +3,25 @@ import { describe, it } from "node:test";
 
 import { syncDonationsFromStripe } from "./stripe-sync.js";
 
+function assertFirestoreSafe(data, path = "data") {
+  if (data === undefined) {
+    throw new Error(
+      `Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value (found in field "${path}").`,
+    );
+  }
+  if (data === null || typeof data !== "object") return;
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      throw new Error(
+        `Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value (found in field "${path}.${key}").`,
+      );
+    }
+    if (value && typeof value === "object") {
+      assertFirestoreSafe(value, `${path}.${key}`);
+    }
+  }
+}
+
 function createMemoryDb() {
   /** @type {Record<string, object>} */
   const docs = {};
@@ -21,9 +40,14 @@ function createMemoryDb() {
         get: async () => ({ empty: true, docs: [] }),
       }),
       doc: (id) => ({
-        get: async () => ({ exists: Boolean(docs[id]) }),
-        set: async (data) => {
-          docs[id] = data;
+        get: async () => ({ exists: Boolean(docs[id]), id, data: () => docs[id] }),
+        set: async (data, options = {}) => {
+          const next = options.merge ? { ...docs[id], ...data } : data;
+          assertFirestoreSafe(next);
+          docs[id] = next;
+        },
+        delete: async () => {
+          delete docs[id];
         },
       }),
     }),

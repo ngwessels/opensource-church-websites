@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 
-import {
-  persistDonationFromCheckoutSession,
-  persistDonationFromInvoice,
-  persistInvoicePaymentFailed,
-  persistSubscriptionLifecycleEvent,
-} from "@/lib/donations/stripe-webhook";
+import { handleStripeWebhookEvent } from "@/lib/donations/stripe-webhook";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getStripe } from "@/lib/stripe/server";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -39,37 +37,20 @@ export async function POST(request) {
   const db = getFirebaseAdminFirestore();
 
   if (!db) {
-    console.warn("[stripe/webhook] Firebase Admin not configured — donation not persisted.", event.type);
-    return NextResponse.json({ received: true, persisted: false });
+    console.error("[stripe/webhook] Firebase Admin not configured — refusing so Stripe retries.", event.type);
+    return NextResponse.json(
+      { error: "Firebase Admin is not configured." },
+      { status: 503 },
+    );
   }
 
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    await persistDonationFromCheckoutSession(db, session);
-    return NextResponse.json({ received: true, persisted: true });
-  }
-
-  if (event.type === "invoice.paid") {
-    const invoice = event.data.object;
-    const result = await persistDonationFromInvoice(db, stripe, invoice);
+  try {
+    const result = await handleStripeWebhookEvent(db, stripe, event);
+    console.info("[stripe/webhook]", event.type, event.id, result);
     return NextResponse.json({ received: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Webhook handler failed.";
+    console.error("[stripe/webhook]", event.type, event.id, message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  if (
-    event.type === "customer.subscription.created" ||
-    event.type === "customer.subscription.updated" ||
-    event.type === "customer.subscription.deleted"
-  ) {
-    const subscription = event.data.object;
-    await persistSubscriptionLifecycleEvent(db, subscription);
-    return NextResponse.json({ received: true, persisted: true });
-  }
-
-  if (event.type === "invoice.payment_failed") {
-    const invoice = event.data.object;
-    await persistInvoicePaymentFailed(db, invoice);
-    return NextResponse.json({ received: true, persisted: true });
-  }
-
-  return NextResponse.json({ received: true });
 }
