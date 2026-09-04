@@ -372,20 +372,24 @@ function assertLinkAcceptsUpload(session) {
 async function ensureBucketUploadCors(bucket) {
   const extraRule = {
     origin: ["*"],
-    method: ["GET", "PUT", "HEAD", "OPTIONS"],
-    responseHeader: ["Content-Type", "Content-Length"],
+    method: ["GET", "PUT", "POST", "HEAD", "OPTIONS"],
+    responseHeader: ["Content-Type", "Content-Length", "x-goog-resumable"],
     maxAgeSeconds: 3600,
   };
 
   try {
     const [metadata] = await bucket.getMetadata();
     const rules = Array.isArray(metadata?.cors) ? metadata.cors : [];
-    const hasPut = rules.some((rule) => {
-      const methods = rule.method || [];
+    const ready = rules.some((rule) => {
+      const methods = (rule.method || []).map((m) => String(m).toUpperCase());
       const origins = rule.origin || [];
-      return methods.includes("PUT") && (origins.includes("*") || origins.length > 0);
+      return (
+        methods.includes("PUT") &&
+        methods.includes("POST") &&
+        (origins.includes("*") || origins.length > 0)
+      );
     });
-    if (hasPut) return;
+    if (ready) return;
     await bucket.setCorsConfiguration([...rules, extraRule]);
   } catch (err) {
     console.warn("[media] failed to ensure storage CORS for signed uploads", err);
@@ -393,10 +397,41 @@ async function ensureBucketUploadCors(bucket) {
 }
 
 /**
- * @param {string} token
- * @param {{ filename: string, mimeType?: string, sizeBytes: number }} fileInfo
+ * App Hosting uses ADC, which cannot v4-sign without iam.serviceAccounts.signBlob.
+ * Fall back to a resumable upload session URI — still a direct GCS PUT from the browser.
+ *
+ * @param {import("@google-cloud/storage").File} file
+ * @param {string} contentType
+ * @param {string} [origin]
  */
-export async function prepareMediaUploadLinkSigned(token, { filename, mimeType, sizeBytes }) {
+async function createBrowserWriteUrl(file, contentType, origin) {
+  try {
+    const [signedUploadUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: Date.now() + SIGNED_PUT_TTL_MS,
+      contentType,
+    });
+    return signedUploadUrl;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const needsIamSign =
+      /signBlob|iam\.serviceAccounts\.signBlob|Cannot sign data without client email/i.test(message);
+    if (!needsIamSign) throw err;
+
+    /** @type {Record<string, unknown>} */
+    const options = { metadata: { contentType } };
+    if (origin) options.origin = origin;
+    const [sessionUri] = await file.createResumableUpload(options);
+    return sessionUri;
+  }
+}
+
+/**
+ * @param {string} token
+ * @param {{ filename: string, mimeType?: string, sizeBytes: number, origin?: string }} fileInfo
+ */
+export async function prepareMediaUploadLinkSigned(token, { filename, mimeType, sizeBytes, origin }) {
   const { tokenHash, session } = await loadLinkSession(token);
   if (!session) throw new Error("Upload link not found");
   assertLinkAcceptsUpload(session);
@@ -418,13 +453,7 @@ export async function prepareMediaUploadLinkSigned(token, { filename, mimeType, 
     session.reservedMediaId || `media_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const storagePath = session.storagePath || `media/${session.folderId}/${mediaId}_${safeName}`;
   const file = bucket.file(storagePath);
-
-  const [signedUploadUrl] = await file.getSignedUrl({
-    version: "v4",
-    action: "write",
-    expires: Date.now() + SIGNED_PUT_TTL_MS,
-    contentType: type,
-  });
+  const signedUploadUrl = await createBrowserWriteUrl(file, type, origin);
 
   await linkRef(tokenHash).update({
     status: "uploading",

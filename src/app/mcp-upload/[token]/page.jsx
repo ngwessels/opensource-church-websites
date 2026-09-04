@@ -9,20 +9,13 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-const pageStyle = {
-  maxWidth: 640,
-  margin: "2rem auto",
-  padding: "0 1rem",
-  fontFamily: "system-ui, sans-serif",
-};
-
 export default async function McpUploadPage({ params }) {
   const { token } = await params;
   if (typeof token !== "string" || !token.trim()) {
     return (
-      <main style={pageStyle}>
-        <h1>Upload a file</h1>
-        <p>This upload link is invalid.</p>
+      <main className="mx-auto w-full max-w-lg px-4 py-12">
+        <h1 className="mb-2 text-2xl font-semibold tracking-tight">Upload a file</h1>
+        <p className="text-muted-foreground">This upload link is invalid.</p>
       </main>
     );
   }
@@ -40,9 +33,11 @@ export default async function McpUploadPage({ params }) {
   }
 
   return (
-    <main style={pageStyle}>
-      <h1>Upload a file</h1>
-      <p>This page accepts one PDF or image for the parish media library. No login is required.</p>
+    <main className="mx-auto w-full max-w-lg px-4 py-12">
+      <h1 className="mb-2 text-2xl font-semibold tracking-tight">Upload a file</h1>
+      <p className="mb-6 text-muted-foreground">
+        One PDF or image for the parish media library. No login is required.
+      </p>
       <McpUploadDropzone token={trimmed} initialInfo={initialInfo} />
     </main>
   );

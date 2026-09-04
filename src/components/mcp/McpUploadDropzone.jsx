@@ -1,7 +1,10 @@
 "use client";
 
+import { CheckCircle2, FileUp, Loader2, Upload } from "lucide-react";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MAX_MEDIA_UPLOAD_BYTES } from "@/lib/media/upload-link-constants";
 
 function formatBytes(n) {
@@ -26,27 +29,42 @@ function resultJson(data) {
 
 function CompleteResult({ data }) {
   return (
-    <section id="status" data-status="complete">
-      <h2>Upload complete</h2>
-      <p>You can close this tab and return to the chat. The assistant can finish attaching the file to the site.</p>
-      <pre id="result">{resultJson(data)}</pre>
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-emerald-800">
+          <CheckCircle2 className="size-5" aria-hidden />
+          Upload complete
+        </CardTitle>
+        <CardDescription>
+          You can close this tab. The assistant can finish attaching the file to the site.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <section id="status" data-status="complete">
+          <pre
+            id="result"
+            className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-xs leading-relaxed text-foreground"
+          >
+            {resultJson(data)}
+          </pre>
+        </section>
+      </CardContent>
+    </Card>
   );
 }
 
 /**
- * Simple upload form for MCP browser upload links. Visible file input and
- * Upload button so AI browser tools can drive it.
+ * Styled dropzone for MCP browser upload links. File input stays visible so
+ * AI browser tools can target #file and #upload.
  *
  * @param {{ token: string, initialInfo: Record<string, unknown> }} props
  */
 export function McpUploadDropzone({ token, initialInfo }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(
-    initialInfo?.status === "complete" ? initialInfo : null,
-  );
+  const [done, setDone] = useState(initialInfo?.status === "complete" ? initialInfo : null);
   const [progress, setProgress] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const info = initialInfo;
 
   async function uploadFile(file) {
@@ -109,10 +127,22 @@ export function McpUploadDropzone({ token, initialInfo }) {
     const input = event.currentTarget.elements.namedItem("file");
     const file = input instanceof HTMLInputElement ? input.files?.[0] : null;
     if (!file) {
-      setError("Choose a file and click Upload.");
+      setError("Choose a file, then click Upload.");
       return;
     }
     void uploadFile(file);
+  }
+
+  function onFileChange(event) {
+    const file = event.currentTarget.files?.[0];
+    if (file) void uploadFile(file);
+  }
+
+  function onDrop(event) {
+    event.preventDefault();
+    setDragOver(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
   }
 
   const status = done
@@ -129,64 +159,121 @@ export function McpUploadDropzone({ token, initialInfo }) {
 
   if (info?.status === "expired") {
     return (
-      <section id="status" data-status="expired">
-        <h2>Upload link expired</h2>
-        <p>{info.message || "This upload link has expired. Ask for a new link."}</p>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Upload link expired</CardTitle>
+          <CardDescription>{info.message || "Ask for a new upload link."}</CardDescription>
+        </CardHeader>
+        <section id="status" data-status="expired" className="sr-only">
+          expired
+        </section>
+      </Card>
     );
   }
 
   if (info?.status === "not_found" || info?.status === "error") {
     return (
-      <section id="status" data-status="error">
-        <h2>Upload link not found</h2>
-        <p>{info.message || "This upload link is invalid."}</p>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Upload link not found</CardTitle>
+          <CardDescription>{info.message || "This upload link is invalid."}</CardDescription>
+        </CardHeader>
+        <section id="status" data-status="error" className="sr-only">
+          error
+        </section>
+      </Card>
     );
   }
 
   const maxLabel = formatBytes(Number(info?.maxFileBytes) || MAX_MEDIA_UPLOAD_BYTES);
 
   return (
-    <form id="upload-form" onSubmit={onSubmit}>
-      <ol>
-        <li>Choose a file with the file input below.</li>
-        <li>Click the Upload button.</li>
-        <li>Wait until status is complete. The page will show JSON with mediaId and downloadUrl.</li>
-      </ol>
+    <Card>
+      <CardHeader>
+        <CardTitle>Choose a file</CardTitle>
+        <CardDescription>
+          PDF or image, up to {maxLabel}. Drop it on the box or use Choose file — upload starts right away.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form id="upload-form" className="space-y-4" onSubmit={onSubmit}>
+          {info?.purpose ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Requested for:</span> {String(info.purpose)}
+            </p>
+          ) : null}
+          {info?.filenameHint ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Expected file:</span> {String(info.filenameHint)}
+            </p>
+          ) : null}
 
-      {info?.purpose ? <p>Requested for: {String(info.purpose)}</p> : null}
-      {info?.filenameHint ? <p>Expected file: {String(info.filenameHint)}</p> : null}
+          <p id="status" data-status={status} className="text-sm font-medium">
+            Status: {status}
+            {progress ? ` — ${progress}` : ""}
+          </p>
 
-      <p id="status" data-status={status}>
-        Status: {status}
-        {progress ? ` — ${progress}` : ""}
-      </p>
+          <label
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            className={[
+              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-12 text-center transition",
+              dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/40 hover:bg-muted/70",
+              busy ? "pointer-events-none opacity-70" : "",
+            ].join(" ")}
+          >
+            {busy ? (
+              <Loader2 className="size-10 animate-spin text-primary" aria-hidden />
+            ) : (
+              <Upload className="size-10 text-primary" aria-hidden />
+            )}
+            <span className="text-base font-semibold">Drop a file here</span>
+            <span className="text-sm text-muted-foreground">or click Choose file</span>
+            <input
+              id="file"
+              name="file"
+              type="file"
+              required
+              disabled={busy}
+              accept={
+                typeof info?.mimeTypeHint === "string" && info.mimeTypeHint
+                  ? info.mimeTypeHint
+                  : "application/pdf,image/*"
+              }
+              className="max-w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+              onChange={onFileChange}
+            />
+          </label>
 
-      <p>
-        <label htmlFor="file">File (PDF or image, up to {maxLabel})</label>
-        <br />
-        <input
-          id="file"
-          name="file"
-          type="file"
-          required
-          disabled={busy}
-          accept={typeof info?.mimeTypeHint === "string" && info.mimeTypeHint ? info.mimeTypeHint : "application/pdf,image/*"}
-        />
-      </p>
+          <Button id="upload" type="submit" size="lg" className="w-full" disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden />
+                Uploading…
+              </>
+            ) : (
+              <>
+                <FileUp aria-hidden />
+                Upload
+              </>
+            )}
+          </Button>
 
-      <p>
-        <button id="upload" type="submit" disabled={busy}>
-          {busy ? "Uploading…" : "Upload"}
-        </button>
-      </p>
-
-      {error ? (
-        <p id="error" data-status="error">
-          {error}
-        </p>
-      ) : null}
-    </form>
+          {error ? (
+            <p
+              id="error"
+              data-status="error"
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+        </form>
+      </CardContent>
+    </Card>
   );
 }

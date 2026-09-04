@@ -63,6 +63,7 @@ export async function POST(request, { params }) {
         filename: typeof body.filename === "string" ? body.filename : "upload",
         mimeType: typeof body.mimeType === "string" ? body.mimeType : "application/octet-stream",
         sizeBytes: Number(body.sizeBytes),
+        origin: request.headers.get("origin") || undefined,
       });
       return NextResponse.json(result);
     }
