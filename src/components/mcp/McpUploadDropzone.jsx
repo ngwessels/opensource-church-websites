@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-const MULTIPART_MAX = Math.floor(3.5 * 1024 * 1024);
+import { MAX_MEDIA_UPLOAD_BYTES } from "@/lib/media/upload-link-constants";
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -10,50 +10,56 @@ function formatBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function resultJson(data) {
+  return JSON.stringify(
+    {
+      status: data.status || "complete",
+      mediaId: data.mediaId || data.media?.id || null,
+      downloadUrl: data.downloadUrl || data.media?.downloadUrl || null,
+      sizeBytes: data.sizeBytes ?? data.media?.sizeBytes ?? null,
+      filename: data.filename || data.media?.name || null,
+    },
+    null,
+    2,
+  );
+}
+
+function CompleteResult({ data }) {
+  return (
+    <section id="status" data-status="complete">
+      <h2>Upload complete</h2>
+      <p>You can close this tab and return to the chat. The assistant can finish attaching the file to the site.</p>
+      <pre id="result">{resultJson(data)}</pre>
+    </section>
+  );
+}
+
 /**
- * @param {{ token: string }} props
+ * Simple upload form for MCP browser upload links. Visible file input and
+ * Upload button so AI browser tools can drive it.
+ *
+ * @param {{ token: string, initialInfo: Record<string, unknown> }} props
  */
-export function McpUploadDropzone({ token }) {
-  const [info, setInfo] = useState(null);
+export function McpUploadDropzone({ token, initialInfo }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(null);
+  const [done, setDone] = useState(
+    initialInfo?.status === "complete" ? initialInfo : null,
+  );
   const [progress, setProgress] = useState("");
-
-  const load = useCallback(async () => {
-    setError("");
-    const res = await fetch(`/api/mcp-upload/${token}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Could not load upload link");
-    setInfo(data);
-    if (data.status === "complete" && data.mediaId) {
-      setDone({ id: data.mediaId, status: "complete" });
-    }
-  }, [token]);
-
-  useEffect(() => {
-    load().catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
-  }, [load]);
+  const info = initialInfo;
 
   async function uploadFile(file) {
     setBusy(true);
     setError("");
     setProgress("");
     try {
-      if (file.size <= MULTIPART_MAX) {
-        setProgress("Uploading…");
-        const form = new FormData();
-        form.append("file", file);
-        const res = await fetch(`/api/mcp-upload/${token}`, { method: "POST", body: form });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Upload failed");
-        if (!data.uploadVerified) throw new Error(data.agentInstructions || "Upload not verified");
-        setDone(data);
-        setProgress("");
-        return;
+      const maxBytes = Number(info?.maxFileBytes) || MAX_MEDIA_UPLOAD_BYTES;
+      if (file.size > maxBytes) {
+        throw new Error(`File is larger than ${formatBytes(maxBytes)}`);
       }
 
-      setProgress("Preparing direct upload…");
+      setProgress("Preparing upload…");
       const prepareRes = await fetch(`/api/mcp-upload/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,17 +70,17 @@ export function McpUploadDropzone({ token }) {
           sizeBytes: file.size,
         }),
       });
-      const prepare = await prepareRes.json();
-      if (!prepareRes.ok) throw new Error(prepare.error || "Could not prepare upload");
+      const prepare = await prepareRes.json().catch(() => ({}));
+      if (!prepareRes.ok) throw new Error(prepare.error || prepare.message || "Could not prepare upload");
 
-      setProgress(`Uploading ${formatBytes(file.size)} directly to storage…`);
+      setProgress(`Uploading ${formatBytes(file.size)}…`);
       const putRes = await fetch(prepare.signedUploadUrl, {
         method: "PUT",
         headers: { "Content-Type": prepare.contentType },
         body: file,
       });
       if (!putRes.ok) {
-        throw new Error(`Storage upload failed (${putRes.status}). Try a smaller file or Builder → Files.`);
+        throw new Error(`Storage upload failed (${putRes.status}). Try again or use a smaller file.`);
       }
 
       setProgress("Finalizing…");
@@ -83,10 +89,10 @@ export function McpUploadDropzone({ token }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "finalize_signed" }),
       });
-      const finalData = await finalRes.json();
-      if (!finalRes.ok) throw new Error(finalData.error || "Finalize failed");
-      if (!finalData.uploadVerified) {
-        throw new Error(finalData.agentInstructions || "Upload not verified");
+      const finalData = await finalRes.json().catch(() => ({}));
+      if (!finalRes.ok) throw new Error(finalData.error || finalData.message || "Finalize failed");
+      if (!finalData.uploadVerified && finalData.status !== "complete") {
+        throw new Error(finalData.agentInstructions || finalData.message || "Upload not verified");
       }
       setDone(finalData);
       setProgress("");
@@ -98,57 +104,89 @@ export function McpUploadDropzone({ token }) {
     }
   }
 
-  if (done?.uploadVerified || done?.status === "complete") {
+  function onSubmit(event) {
+    event.preventDefault();
+    const input = event.currentTarget.elements.namedItem("file");
+    const file = input instanceof HTMLInputElement ? input.files?.[0] : null;
+    if (!file) {
+      setError("Choose a file and click Upload.");
+      return;
+    }
+    void uploadFile(file);
+  }
+
+  const status = done
+    ? "complete"
+    : busy
+      ? "uploading"
+      : error
+        ? "error"
+        : info?.status || "waiting";
+
+  if (done) {
+    return <CompleteResult data={done} />;
+  }
+
+  if (info?.status === "expired") {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-emerald-950">
-        <p className="text-lg font-semibold">Upload complete</p>
-        <p className="mt-2 text-sm">
-          You can close this tab and return to the chat. The assistant can finish attaching the file to
-          the site.
-        </p>
-        {done.sizeBytes != null && (
-          <p className="mt-3 text-sm text-emerald-800">Saved size: {formatBytes(done.sizeBytes)}</p>
-        )}
-      </div>
+      <section id="status" data-status="expired">
+        <h2>Upload link expired</h2>
+        <p>{info.message || "This upload link has expired. Ask for a new link."}</p>
+      </section>
     );
   }
 
+  if (info?.status === "not_found" || info?.status === "error") {
+    return (
+      <section id="status" data-status="error">
+        <h2>Upload link not found</h2>
+        <p>{info.message || "This upload link is invalid."}</p>
+      </section>
+    );
+  }
+
+  const maxLabel = formatBytes(Number(info?.maxFileBytes) || MAX_MEDIA_UPLOAD_BYTES);
+
   return (
-    <div className="space-y-4">
-      {info?.purpose && (
-        <p className="text-sm text-muted-foreground">
-          Requested for: <span className="text-foreground">{info.purpose}</span>
-        </p>
-      )}
-      {info?.filenameHint && (
-        <p className="text-sm text-muted-foreground">
-          Expected file: <span className="text-foreground">{info.filenameHint}</span>
-        </p>
-      )}
+    <form id="upload-form" onSubmit={onSubmit}>
+      <ol>
+        <li>Choose a file with the file input below.</li>
+        <li>Click the Upload button.</li>
+        <li>Wait until status is complete. The page will show JSON with mediaId and downloadUrl.</li>
+      </ol>
 
-      <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-6 py-12 text-center transition hover:bg-muted/70">
-        <span className="text-base font-medium">Choose a document or photo</span>
-        <span className="text-sm text-muted-foreground">
-          PDF or image · up to {formatBytes(info?.maxFileBytes || 10 * 1024 * 1024)}
-        </span>
+      {info?.purpose ? <p>Requested for: {String(info.purpose)}</p> : null}
+      {info?.filenameHint ? <p>Expected file: {String(info.filenameHint)}</p> : null}
+
+      <p id="status" data-status={status}>
+        Status: {status}
+        {progress ? ` — ${progress}` : ""}
+      </p>
+
+      <p>
+        <label htmlFor="file">File (PDF or image, up to {maxLabel})</label>
+        <br />
         <input
+          id="file"
+          name="file"
           type="file"
-          className="sr-only"
-          disabled={busy || !info}
-          accept={info?.mimeTypeHint || "application/pdf,image/*"}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void uploadFile(file);
-          }}
+          required
+          disabled={busy}
+          accept={typeof info?.mimeTypeHint === "string" && info.mimeTypeHint ? info.mimeTypeHint : "application/pdf,image/*"}
         />
-      </label>
+      </p>
 
-      {busy && <p className="text-sm text-muted-foreground">{progress || "Working…"}</p>}
-      {error && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      <p>
+        <button id="upload" type="submit" disabled={busy}>
+          {busy ? "Uploading…" : "Upload"}
+        </button>
+      </p>
+
+      {error ? (
+        <p id="error" data-status="error">
           {error}
         </p>
-      )}
-    </div>
+      ) : null}
+    </form>
   );
 }

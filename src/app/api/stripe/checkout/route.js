@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { normalizeDonorEmail } from "@/lib/donors/email";
 import {
   sanitizeDonorComment,
   sanitizeReturnPath,
@@ -82,6 +83,7 @@ export async function POST(request) {
   const recurringInterval = RECURRING_INTERVALS[frequency];
 
   let donorUid;
+  let donorEmail;
   let stripeCustomerId;
 
   const authHeader = request.headers.get("authorization");
@@ -89,6 +91,7 @@ export async function POST(request) {
     try {
       const { decoded, profile } = await getDonorPortalUserFromRequest(request);
       donorUid = decoded.uid;
+      donorEmail = normalizeDonorEmail(decoded.email || profile?.email);
       if (Array.isArray(profile?.stripeCustomerIds) && profile.stripeCustomerIds.length > 0) {
         stripeCustomerId = profile.stripeCustomerIds[0];
       }
@@ -121,6 +124,7 @@ export async function POST(request) {
     returnPath: safeReturnPath,
     ...(safeDonorComment ? { donorComment: safeDonorComment } : {}),
     ...(donorUid ? { donorUid } : {}),
+    ...(donorEmail ? { donorEmail } : {}),
   };
 
   const session = await stripe.checkout.sessions.create({

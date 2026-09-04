@@ -3,6 +3,9 @@
     "src/app/api/[transport]/route.js": {
       "maxDuration": 60
     },
+    "src/app/api/mcp-upload/**": {
+      "maxDuration": 60
+    },
     "src/app/api/mcp-tokens/**": {
       "maxDuration": 10
     },

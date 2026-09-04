@@ -9,6 +9,7 @@ import {
   persistDonationFromCheckoutSession,
   persistDonationFromInvoice,
   persistDonationFromPaymentIntent,
+  persistSubscriptionLifecycleEvent,
 } from "./stripe-webhook.js";
 
 function assertFirestoreSafe(data, path = "data") {
@@ -535,5 +536,101 @@ describe("persistDonationFromInvoice", () => {
 
     assert.equal(result.persisted, false);
     assert.equal(result.reason, "no_subscription");
+  });
+});
+
+describe("persistDonationFromCheckoutSession subscriptions", () => {
+  it("writes the Stripe subscription with checkout donor email", async () => {
+    const { db, docs } = createMemoryDb();
+    const stripe = {
+      subscriptions: {
+        retrieve: async () => ({
+          id: "sub_weekly",
+          status: "active",
+          currency: "usd",
+          customer: "cus_123",
+          metadata: { frequency: "weekly", fundId: "general", fundLabel: "General Fund" },
+          items: {
+            data: [
+              {
+                id: "si_123",
+                current_period_end: 1_700_086_400,
+                price: {
+                  unit_amount: 2500,
+                  recurring: { interval: "week" },
+                  product: "prod_123",
+                },
+              },
+            ],
+          },
+          cancel_at_period_end: false,
+          created: 1_699_000_000,
+        }),
+      },
+    };
+
+    await persistDonationFromCheckoutSession(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe.Checkout.Session} */ ({
+        id: "cs_sub",
+        status: "complete",
+        payment_status: "paid",
+        mode: "subscription",
+        amount_total: 2500,
+        currency: "usd",
+        created: 1_700_000_000,
+        customer: "cus_123",
+        subscription: "sub_weekly",
+        metadata: { frequency: "weekly", fundId: "general", fundLabel: "General Fund" },
+        customer_details: { email: "jane@example.com", name: "Jane Doe" },
+      }),
+      /** @type {import("stripe").Stripe} */ (stripe),
+    );
+
+    assert.equal(docs.cs_sub.stripeSubscriptionId, "sub_weekly");
+    assert.equal(docs.sub_weekly.donorEmail, "jane@example.com");
+    assert.equal(docs.sub_weekly.status, "active");
+    assert.equal(docs.sub_weekly.frequency, "weekly");
+  });
+});
+
+describe("persistSubscriptionLifecycleEvent", () => {
+  it("resolves donor email from the Stripe customer when metadata has none", async () => {
+    const { db, docs } = createMemoryDb();
+    const stripe = {
+      customers: {
+        retrieve: async () => ({
+          id: "cus_123",
+          object: "customer",
+          email: "jane@example.com",
+        }),
+      },
+    };
+
+    await persistSubscriptionLifecycleEvent(
+      /** @type {import("firebase-admin/firestore").Firestore} */ (db),
+      /** @type {import("stripe").Stripe} */ (stripe),
+      /** @type {import("stripe").Stripe.Subscription} */ ({
+        id: "sub_guest",
+        status: "active",
+        currency: "usd",
+        customer: "cus_123",
+        metadata: { frequency: "weekly" },
+        items: {
+          data: [
+            {
+              id: "si_123",
+              current_period_end: 1_700_086_400,
+              price: { unit_amount: 1000, recurring: { interval: "week" }, product: "prod_1" },
+            },
+          ],
+        },
+        cancel_at_period_end: false,
+        created: 1_699_000_000,
+      }),
+    );
+
+    assert.equal(docs.sub_guest.donorEmail, "jane@example.com");
+    assert.equal(docs.sub_guest.status, "active");
   });
 });

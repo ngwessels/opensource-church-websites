@@ -3,24 +3,27 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { recordAuditEvent } from "@/lib/audit/record.server";
+import { getMcpAuthContext, mcpAuthStorage } from "@/lib/cms/auth";
 import { getFirebaseAdminFirestore } from "@/lib/firebase/admin";
 import { getFirebaseAdminStorage } from "@/lib/firebase/admin-storage";
 import { COLLECTIONS } from "@/lib/firestore/paths";
-import {
-  MAX_CHUNK_BASE64_CHARS,
-  MAX_CHUNKED_UPLOAD_BYTES,
-  MAX_SINGLE_SHOT_BYTES,
-  MAX_SOURCE_URL_BYTES,
-  RECOMMENDED_CHUNK_BYTES,
-  decodeBase64Media,
-  normalizeBase64Payload,
-  validateMagicBytes,
-} from "@/lib/media/decode-base64";
 import { buildMediaMetadataFields, normalizeMediaMetadata } from "@/lib/media/metadata";
+import {
+  MAX_MEDIA_UPLOAD_BYTES,
+  UPLOAD_LINK_TTL_MS,
+  assertAllowedFolderId,
+  buildUploadUrl,
+  defaultMimeTypeHint,
+  generateUploadToken,
+  hashUploadToken,
+  publicUploadLinkView,
+  resolveUploadLinkStatus,
+  sanitizeUploadFilename,
+} from "@/lib/media/upload-link";
+import { validateMagicBytes } from "@/lib/media/validate-file";
+import { getSiteBaseUrlServer } from "@/lib/seo/site-url.server";
 
-const UPLOAD_SESSION_TTL_MS = 60 * 60 * 1000;
-const UPLOAD_SESSIONS = "mediaUploadSessions";
-const UPLOAD_CHUNKS = "chunks";
+const SIGNED_PUT_TTL_MS = 15 * 60 * 1000;
 
 function getDb() {
   const db = getFirebaseAdminFirestore();
@@ -30,6 +33,60 @@ function getDb() {
 
 function now() {
   return new Date().toISOString();
+}
+
+function getStorageBucket() {
+  const storage = getFirebaseAdminStorage();
+  if (!storage) throw new Error("Firebase Admin Storage is not configured");
+  return storage.bucket();
+}
+
+function linkRef(tokenHash) {
+  return getDb().collection(COLLECTIONS.mediaUploadLinks).doc(tokenHash);
+}
+
+async function siteBaseUrl() {
+  return getSiteBaseUrlServer();
+}
+
+function createdByFromMcp() {
+  try {
+    const ctx = getMcpAuthContext();
+    return {
+      uid: ctx.uid || null,
+      connectionId: ctx.connectionId || null,
+    };
+  } catch {
+    return { uid: null, connectionId: null };
+  }
+}
+
+/**
+ * @param {object} session
+ * @param {() => Promise<T>} fn
+ * @template T
+ */
+async function withLinkActor(session, fn) {
+  const createdBy = session?.createdBy || {};
+  if (createdBy.uid) {
+    return mcpAuthStorage.run(
+      {
+        uid: createdBy.uid,
+        connectionId: createdBy.connectionId,
+        authMethod: "oauth",
+        toolName: "create_media_upload_link",
+      },
+      fn,
+    );
+  }
+  return fn();
+}
+
+function downloadUrlFor(bucketName, storagePath, downloadToken) {
+  return (
+    `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(storagePath)}` +
+    `?alt=media&token=${downloadToken}`
+  );
 }
 
 export async function listMediaAdmin({ folderId } = {}) {
@@ -92,13 +149,15 @@ export async function updateMediaAdmin(mediaId, fields) {
   return after;
 }
 
-async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, metadata = {} }) {
-  const storage = getFirebaseAdminStorage();
-  if (!storage) throw new Error("Firebase Admin Storage is not configured");
-
+/**
+ * @param {Buffer} buffer
+ * @param {{ filename: string, mimeType: string, folderId: string, metadata?: object }} opts
+ */
+export async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, metadata = {} }) {
+  const bucket = getStorageBucket();
   const mediaId = `media_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  const storagePath = `media/${folderId}/${mediaId}_${filename}`;
-  const bucket = storage.bucket();
+  const safeName = sanitizeUploadFilename(filename);
+  const storagePath = `media/${folderId}/${mediaId}_${safeName}`;
   const file = bucket.file(storagePath);
   const downloadToken = randomUUID();
 
@@ -111,17 +170,13 @@ async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, met
     },
   });
 
-  const downloadUrl =
-    `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}` +
-    `?alt=media&token=${downloadToken}`;
-
   const record = {
-    name: filename,
+    name: safeName,
     folderId,
     mimeType,
     sizeBytes: buffer.length,
     storagePath,
-    downloadUrl,
+    downloadUrl: downloadUrlFor(bucket.name, storagePath, downloadToken),
     usedOnPageIds: [],
     ...buildMediaMetadataFields(metadata),
     createdAt: now(),
@@ -133,7 +188,7 @@ async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, met
   await recordAuditEvent({
     action: "create",
     resource: { type: "media", id: mediaId },
-    summary: `Uploaded media ${filename}`,
+    summary: `Uploaded media ${safeName}`,
     after: created,
   });
 
@@ -142,7 +197,6 @@ async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, met
 
 /**
  * @param {{
- *   base64?: string,
  *   sourceUrl?: string,
  *   filename: string,
  *   mimeType?: string,
@@ -150,11 +204,9 @@ async function uploadBufferToStorage(buffer, { filename, mimeType, folderId, met
  *   description?: string,
  *   alt?: string,
  *   tags?: string[],
- *   expectedSizeBytes?: number,
  * }} args
  */
 export async function uploadMediaAdmin({
-  base64,
   sourceUrl,
   filename,
   mimeType,
@@ -162,62 +214,30 @@ export async function uploadMediaAdmin({
   description,
   alt,
   tags,
-  expectedSizeBytes,
 }) {
   if (!folderId) throw new Error("folderId is required");
+  assertAllowedFolderId(folderId);
   if (!filename) throw new Error("filename is required");
+  if (!sourceUrl) {
+    throw new Error(
+      "sourceUrl is required. For local files use create_media_upload_link, open the returned uploadUrl in a browser, then call get_media_upload.",
+    );
+  }
 
   const metadata = { description, alt, tags };
-
-  if (base64) {
-    if (expectedSizeBytes == null) {
-      throw new Error(
-        "expectedSizeBytes is required for base64 uploads. " +
-          "Pass the original file size in bytes so truncated tool-call payloads are rejected. " +
-          "For files over ~100KB (or anything near Vercel's 4.5 MB request limit), use " +
-          "begin_media_upload / upload_media_chunk / complete_media_upload, or sourceUrl.",
-      );
-    }
-
-    const { buffer, mimeType: resolvedMime } = decodeBase64Media(base64, {
-      filename,
-      mimeType,
-      expectedSizeBytes,
-      maxBytes: MAX_SINGLE_SHOT_BYTES,
-    });
-
-    return uploadBufferToStorage(buffer, {
-      filename,
-      mimeType: resolvedMime,
-      folderId,
-      metadata,
-    });
+  const res = await fetch(sourceUrl);
+  if (!res.ok) throw new Error(`Failed to fetch sourceUrl: ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new Error(`File exceeds ${MAX_MEDIA_UPLOAD_BYTES / (1024 * 1024)} MB limit`);
   }
-
-  if (sourceUrl) {
-    const res = await fetch(sourceUrl);
-    if (!res.ok) throw new Error(`Failed to fetch sourceUrl: ${res.status}`);
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.length > MAX_SOURCE_URL_BYTES) {
-      throw new Error(
-        `File exceeds ${MAX_SOURCE_URL_BYTES / (1024 * 1024)} MB limit for sourceUrl upload`,
-      );
-    }
-    if (expectedSizeBytes != null && buffer.length !== Number(expectedSizeBytes)) {
-      throw new Error(
-        `Size mismatch: fetched ${buffer.length} bytes but expectedSizeBytes was ${expectedSizeBytes}`,
-      );
-    }
-    const type = mimeType || res.headers.get("content-type") || "application/octet-stream";
-    validateMagicBytes(buffer, type, filename);
-    return uploadBufferToStorage(buffer, { filename, mimeType: type, folderId, metadata });
-  }
-
-  throw new Error("base64 or sourceUrl is required");
+  const type = mimeType || res.headers.get("content-type") || "application/octet-stream";
+  validateMagicBytes(buffer, type, filename);
+  return uploadBufferToStorage(buffer, { filename, mimeType: type, folderId, metadata });
 }
 
 /**
- * @param {{ files: Array<{ folderId: string, filename: string, mimeType?: string, base64?: string, sourceUrl?: string, description?: string, alt?: string, tags?: string[], expectedSizeBytes?: number }> }} input
+ * @param {{ files: Array<{ folderId: string, filename: string, mimeType?: string, sourceUrl?: string, description?: string, alt?: string, tags?: string[] }> }} input
  */
 export async function uploadMediaBatchAdmin({ files }) {
   if (!Array.isArray(files) || files.length === 0) {
@@ -242,221 +262,285 @@ export async function uploadMediaBatchAdmin({ files }) {
   return { uploaded, errors };
 }
 
-async function deleteUploadSession(db, uploadId) {
-  const sessionRef = db.collection(UPLOAD_SESSIONS).doc(uploadId);
-  const chunksSnap = await sessionRef.collection(UPLOAD_CHUNKS).get();
-  const batchSize = 400;
-  let batch = db.batch();
-  let ops = 0;
+async function loadLinkSession(token) {
+  const tokenHash = hashUploadToken(token);
+  const snap = await linkRef(tokenHash).get();
+  if (!snap.exists) return { tokenHash, session: null };
+  return { tokenHash, session: snap.data() };
+}
 
-  for (const doc of chunksSnap.docs) {
-    batch.delete(doc.ref);
-    ops += 1;
-    if (ops >= batchSize) {
-      await batch.commit();
-      batch = db.batch();
-      ops = 0;
-    }
-  }
-  batch.delete(sessionRef);
-  ops += 1;
-  await batch.commit();
+async function linkView(token, session) {
+  const baseUrl = await siteBaseUrl();
+  return publicUploadLinkView({ token, baseUrl, session });
 }
 
 /**
- * Start a chunked upload session. Use when base64 cannot fit reliably in one MCP tool call.
  * @param {{
  *   folderId: string,
- *   filename: string,
- *   mimeType?: string,
- *   expectedSizeBytes: number,
+ *   filenameHint?: string,
+ *   mimeTypeHint?: string,
+ *   purpose?: string,
  *   description?: string,
  *   alt?: string,
  *   tags?: string[],
  * }} args
  */
-export async function beginMediaUploadAdmin({
+export async function createMediaUploadLinkAdmin({
   folderId,
-  filename,
-  mimeType,
-  expectedSizeBytes,
+  filenameHint,
+  mimeTypeHint,
+  purpose,
   description,
   alt,
   tags,
 }) {
   if (!folderId) throw new Error("folderId is required");
-  if (!filename) throw new Error("filename is required");
-  const expected = Number(expectedSizeBytes);
-  if (!Number.isInteger(expected) || expected < 1) {
-    throw new Error("expectedSizeBytes must be a positive integer");
-  }
-  if (expected > MAX_CHUNKED_UPLOAD_BYTES) {
-    throw new Error(
-      `File exceeds ${MAX_CHUNKED_UPLOAD_BYTES / (1024 * 1024)} MB limit for chunked upload. Use sourceUrl for larger files.`,
-    );
-  }
+  assertAllowedFolderId(folderId);
 
-  const db = getDb();
-  const uploadId = `upl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const token = generateUploadToken();
+  const tokenHash = hashUploadToken(token);
   const createdAt = now();
-  const expiresAt = new Date(Date.now() + UPLOAD_SESSION_TTL_MS).toISOString();
+  const expiresAt = new Date(Date.now() + UPLOAD_LINK_TTL_MS).toISOString();
+  const createdBy = createdByFromMcp();
+  const baseUrl = await siteBaseUrl();
 
-  await db.collection(UPLOAD_SESSIONS).doc(uploadId).set({
+  const session = {
+    status: "waiting",
     folderId,
-    filename,
-    mimeType: mimeType || "application/octet-stream",
-    expectedSizeBytes: expected,
-    receivedBytes: 0,
-    receivedChunkCount: 0,
-    status: "open",
+    filenameHint: typeof filenameHint === "string" ? filenameHint.trim() : "",
+    mimeTypeHint:
+      typeof mimeTypeHint === "string" && mimeTypeHint.trim()
+        ? mimeTypeHint.trim()
+        : defaultMimeTypeHint(folderId),
+    purpose: typeof purpose === "string" ? purpose.trim() : "",
+    maxFileBytes: MAX_MEDIA_UPLOAD_BYTES,
     metadata: { description, alt, tags },
+    createdBy,
+    tokenPrefix: token.slice(0, 8),
     createdAt,
     expiresAt,
-  });
-
-  return {
-    uploadId,
-    expectedSizeBytes: expected,
-    expiresAt,
-    recommendedChunkBytes: RECOMMENDED_CHUNK_BYTES,
-    maxChunkBase64Chars: MAX_CHUNK_BASE64_CHARS,
-    nextChunkIndex: 0,
-    instructions:
-      "Split the file into binary chunks of ~96KB (Vercel MCP bodies are limited to ~4.5 MB). Base64-encode each chunk separately (not the whole file). Call upload_media_chunk for index 0, 1, 2… then complete_media_upload. Prefer sourceUrl when the file is already hosted.",
   };
-}
 
-/**
- * @param {{ uploadId: string, chunkIndex: number, base64: string }} args
- */
-export async function uploadMediaChunkAdmin({ uploadId, chunkIndex, base64 }) {
-  if (!uploadId) throw new Error("uploadId is required");
-  if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
-    throw new Error("chunkIndex must be a non-negative integer");
-  }
-  if (typeof base64 !== "string" || !base64.trim()) {
-    throw new Error("base64 chunk is required");
-  }
+  await linkRef(tokenHash).set(session);
 
-  const { base64: cleaned } = normalizeBase64Payload(base64);
-  if (cleaned.length > MAX_CHUNK_BASE64_CHARS) {
-    throw new Error(
-      `Chunk base64 exceeds ${MAX_CHUNK_BASE64_CHARS} characters (~${Math.round(MAX_CHUNK_BASE64_CHARS * 0.75 / 1024)} KB decoded). ` +
-        `Vercel request bodies are capped at ~4.5 MB. Use smaller chunks (~${Math.round(RECOMMENDED_CHUNK_BYTES / 1024)} KB binary).`,
-    );
-  }
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleaned)) {
-    throw new Error("base64 chunk contains invalid characters");
-  }
-
-  const chunkBuffer = Buffer.from(cleaned, "base64");
-  if (chunkBuffer.length === 0) {
-    throw new Error("Decoded chunk is empty");
-  }
-
-  const db = getDb();
-  const sessionRef = db.collection(UPLOAD_SESSIONS).doc(uploadId);
-  const sessionSnap = await sessionRef.get();
-  if (!sessionSnap.exists) throw new Error("Upload session not found");
-  const session = sessionSnap.data();
-  if (session.status !== "open") throw new Error(`Upload session is ${session.status}`);
-  if (new Date(session.expiresAt).getTime() < Date.now()) {
-    await deleteUploadSession(db, uploadId);
-    throw new Error("Upload session expired");
-  }
-
-  const chunkRef = sessionRef.collection(UPLOAD_CHUNKS).doc(String(chunkIndex));
-  const existing = await chunkRef.get();
-  if (existing.exists) {
-    throw new Error(`Chunk ${chunkIndex} was already uploaded`);
-  }
-
-  const nextReceived = (session.receivedBytes || 0) + chunkBuffer.length;
-  if (nextReceived > session.expectedSizeBytes) {
-    throw new Error(
-      `Chunk would exceed expectedSizeBytes (${session.expectedSizeBytes}); got ${nextReceived} bytes so far`,
-    );
-  }
-
-  await chunkRef.set({
-    chunkIndex,
-    base64: cleaned,
-    sizeBytes: chunkBuffer.length,
-    createdAt: now(),
-  });
-
-  await sessionRef.update({
-    receivedBytes: nextReceived,
-    receivedChunkCount: (session.receivedChunkCount || 0) + 1,
-    updatedAt: now(),
-  });
-
+  const view = publicUploadLinkView({ token, baseUrl, session });
   return {
-    uploadId,
-    chunkIndex,
-    chunkBytes: chunkBuffer.length,
-    receivedBytes: nextReceived,
-    expectedSizeBytes: session.expectedSizeBytes,
-    remainingBytes: session.expectedSizeBytes - nextReceived,
-    nextChunkIndex: chunkIndex + 1,
+    uploadId: token,
+    uploadUrl: buildUploadUrl(baseUrl, token),
+    ...view,
+    instructions:
+      "Open uploadUrl in a browser (or Playwright). Choose a file and click Upload. Then call get_media_upload with this uploadId.",
   };
 }
 
 /**
  * @param {{ uploadId: string }} args
  */
-export async function completeMediaUploadAdmin({ uploadId }) {
-  if (!uploadId) throw new Error("uploadId is required");
-
-  const db = getDb();
-  const sessionRef = db.collection(UPLOAD_SESSIONS).doc(uploadId);
-  const sessionSnap = await sessionRef.get();
-  if (!sessionSnap.exists) throw new Error("Upload session not found");
-  const session = sessionSnap.data();
-  if (session.status !== "open") throw new Error(`Upload session is ${session.status}`);
-  if (new Date(session.expiresAt).getTime() < Date.now()) {
-    await deleteUploadSession(db, uploadId);
-    throw new Error("Upload session expired");
+export async function getMediaUploadAdmin({ uploadId }) {
+  if (!uploadId) {
+    return { status: "not_found", message: "uploadId is required.", uploadVerified: false };
   }
-
-  const chunksSnap = await sessionRef.collection(UPLOAD_CHUNKS).get();
-  if (chunksSnap.empty) throw new Error("No chunks uploaded");
-
-  const ordered = chunksSnap.docs
-    .map((d) => d.data())
-    .sort((a, b) => a.chunkIndex - b.chunkIndex);
-
-  const indexes = ordered.map((d) => d.chunkIndex);
-  for (let i = 0; i < indexes.length; i += 1) {
-    if (indexes[i] !== i) {
-      throw new Error(`Missing chunk ${i} (have ${indexes.join(", ")})`);
-    }
-  }
-
-  const parts = ordered.map((d) => Buffer.from(d.base64, "base64"));
-  const buffer = Buffer.concat(parts);
-
-  if (buffer.length !== session.expectedSizeBytes) {
-    throw new Error(
-      `Assembled size ${buffer.length} does not match expectedSizeBytes ${session.expectedSizeBytes}`,
-    );
-  }
-
-  validateMagicBytes(buffer, session.mimeType, session.filename);
-
-  await sessionRef.update({ status: "completing", updatedAt: now() });
-
   try {
-    const created = await uploadBufferToStorage(buffer, {
-      filename: session.filename,
-      mimeType: session.mimeType,
-      folderId: session.folderId,
-      metadata: session.metadata || {},
-    });
-    await deleteUploadSession(db, uploadId);
-    return created;
+    const { session } = await loadLinkSession(uploadId);
+    return linkView(uploadId, session);
   } catch (err) {
-    await sessionRef.update({ status: "open", updatedAt: now() });
-    throw err;
+    const message = err instanceof Error ? err.message : "Upload link not found.";
+    return { status: "not_found", message, uploadVerified: false };
   }
 }
+
+/**
+ * Token-authenticated lookup for the public upload page/API.
+ * @param {string} token
+ */
+export async function getMediaUploadLinkPublic(token) {
+  return getMediaUploadAdmin({ uploadId: token });
+}
+
+/**
+ * @param {object} session
+ * @param {string} tokenHash
+ */
+function assertLinkAcceptsUpload(session) {
+  const status = resolveUploadLinkStatus(session);
+  if (status === "not_found") throw new Error("Upload link not found");
+  if (status === "complete") throw new Error("This upload link was already used");
+  if (status === "expired") throw new Error("This upload link has expired");
+  if (status === "error") throw new Error(session.errorMessage || "Upload link is in an error state");
+}
+
+async function ensureBucketUploadCors(bucket) {
+  const extraRule = {
+    origin: ["*"],
+    method: ["GET", "PUT", "HEAD", "OPTIONS"],
+    responseHeader: ["Content-Type", "Content-Length"],
+    maxAgeSeconds: 3600,
+  };
+
+  try {
+    const [metadata] = await bucket.getMetadata();
+    const rules = Array.isArray(metadata?.cors) ? metadata.cors : [];
+    const hasPut = rules.some((rule) => {
+      const methods = rule.method || [];
+      const origins = rule.origin || [];
+      return methods.includes("PUT") && (origins.includes("*") || origins.length > 0);
+    });
+    if (hasPut) return;
+    await bucket.setCorsConfiguration([...rules, extraRule]);
+  } catch (err) {
+    console.warn("[media] failed to ensure storage CORS for signed uploads", err);
+  }
+}
+
+/**
+ * @param {string} token
+ * @param {{ filename: string, mimeType?: string, sizeBytes: number }} fileInfo
+ */
+export async function prepareMediaUploadLinkSigned(token, { filename, mimeType, sizeBytes }) {
+  const { tokenHash, session } = await loadLinkSession(token);
+  if (!session) throw new Error("Upload link not found");
+  assertLinkAcceptsUpload(session);
+
+  const expected = Number(sizeBytes);
+  if (!Number.isInteger(expected) || expected < 1) {
+    throw new Error("sizeBytes must be a positive integer");
+  }
+  if (expected > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new Error(`File exceeds ${MAX_MEDIA_UPLOAD_BYTES / (1024 * 1024)} MB limit`);
+  }
+
+  const safeName = sanitizeUploadFilename(filename || session.filenameHint);
+  const type = mimeType || "application/octet-stream";
+  const bucket = getStorageBucket();
+  await ensureBucketUploadCors(bucket);
+
+  const mediaId =
+    session.reservedMediaId || `media_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const storagePath = session.storagePath || `media/${session.folderId}/${mediaId}_${safeName}`;
+  const file = bucket.file(storagePath);
+
+  const [signedUploadUrl] = await file.getSignedUrl({
+    version: "v4",
+    action: "write",
+    expires: Date.now() + SIGNED_PUT_TTL_MS,
+    contentType: type,
+  });
+
+  await linkRef(tokenHash).update({
+    status: "uploading",
+    reservedMediaId: mediaId,
+    storagePath,
+    pendingFilename: safeName,
+    pendingMimeType: type,
+    expectedSizeBytes: expected,
+    updatedAt: now(),
+  });
+
+  return {
+    status: "uploading",
+    signedUploadUrl,
+    contentType: type,
+    storagePath,
+    mediaId,
+    expectedSizeBytes: expected,
+    uploadVerified: false,
+  };
+}
+
+/**
+ * @param {string} token
+ */
+export async function finalizeMediaUploadLinkSigned(token) {
+  const { tokenHash, session } = await loadLinkSession(token);
+  if (!session) throw new Error("Upload link not found");
+
+  const status = resolveUploadLinkStatus(session);
+  if (status === "complete") {
+    return linkView(token, session);
+  }
+  if (status === "expired") throw new Error("This upload link has expired");
+  if (status === "not_found") throw new Error("Upload link not found");
+  if (!session.storagePath || !session.reservedMediaId) {
+    throw new Error("No prepared upload found. Call prepare_signed first.");
+  }
+
+  const bucket = getStorageBucket();
+  const file = bucket.file(session.storagePath);
+  const [exists] = await file.exists();
+  if (!exists) {
+    throw new Error("Storage upload was not found. PUT the file to signedUploadUrl, then finalize.");
+  }
+
+  const [metadata] = await file.getMetadata();
+  const sizeBytes = Number(metadata.size || 0);
+  if (sizeBytes < 1) {
+    throw new Error("Uploaded file is empty");
+  }
+  if (session.expectedSizeBytes && sizeBytes !== Number(session.expectedSizeBytes)) {
+    throw new Error(
+      `Uploaded size ${sizeBytes} does not match expected ${session.expectedSizeBytes} bytes`,
+    );
+  }
+  if (sizeBytes > MAX_MEDIA_UPLOAD_BYTES) {
+    await file.delete({ ignoreNotFound: true });
+    throw new Error(`File exceeds ${MAX_MEDIA_UPLOAD_BYTES / (1024 * 1024)} MB limit`);
+  }
+
+  const previewEnd = Math.min(Math.max(sizeBytes - 1, 0), 31);
+  const [head] = await file.download({ start: 0, end: previewEnd });
+  const safeName = session.pendingFilename || sanitizeUploadFilename(session.filenameHint);
+  const type = session.pendingMimeType || metadata.contentType || "application/octet-stream";
+  validateMagicBytes(head, type, safeName);
+
+  const downloadToken = randomUUID();
+  await file.setMetadata({
+    contentType: type,
+    metadata: {
+      firebaseStorageDownloadTokens: downloadToken,
+    },
+  });
+
+  const mediaId = session.reservedMediaId;
+  const record = {
+    name: safeName,
+    folderId: session.folderId,
+    mimeType: type,
+    sizeBytes,
+    storagePath: session.storagePath,
+    downloadUrl: downloadUrlFor(bucket.name, session.storagePath, downloadToken),
+    usedOnPageIds: [],
+    ...buildMediaMetadataFields(session.metadata || {}),
+    createdAt: now(),
+  };
+
+  const created = { id: mediaId, ...record };
+  const media = {
+    id: created.id,
+    name: created.name,
+    mimeType: created.mimeType,
+    sizeBytes: created.sizeBytes,
+    folderId: created.folderId,
+    downloadUrl: created.downloadUrl,
+  };
+
+  await withLinkActor(session, async () => {
+    await getDb().collection(COLLECTIONS.media).doc(mediaId).set(record);
+    await recordAuditEvent({
+      action: "create",
+      resource: { type: "media", id: mediaId },
+      summary: `Uploaded media ${safeName}`,
+      after: created,
+    });
+  });
+
+  await linkRef(tokenHash).update({
+    status: "complete",
+    mediaId,
+    media,
+    updatedAt: now(),
+  });
+
+  return linkView(token, { ...session, status: "complete", mediaId, media });
+}
+
+export { MAX_MEDIA_UPLOAD_BYTES };

@@ -51,19 +51,20 @@ function rememberSessionPaymentIntent(session, knownPaymentIntentIds) {
 
 /**
  * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {import("stripe").Stripe} stripe
  * @param {import("stripe").Stripe.Checkout.Session} session
  * @param {{ created: number, skipped: number, errors: string[] }} bucket
  * @param {Set<string>} knownPaymentIntentIds
  * @returns {Promise<'created' | 'duplicate' | 'skipped' | 'error'>}
  */
-async function importCheckoutSession(db, session, bucket, knownPaymentIntentIds) {
+async function importCheckoutSession(db, stripe, session, bucket, knownPaymentIntentIds) {
   if (!isDonationCheckoutSession(session)) {
     bucket.skipped += 1;
     return "skipped";
   }
   try {
     const existing = await db.collection("donations").doc(session.id).get();
-    await persistDonationFromCheckoutSession(db, session);
+    await persistDonationFromCheckoutSession(db, session, stripe);
     rememberSessionPaymentIntent(session, knownPaymentIntentIds);
     if (existing.exists) {
       bucket.skipped += 1;
@@ -107,7 +108,7 @@ export async function syncDonationsFromStripe(db, stripe, options = {}) {
     });
 
     for (const session of page.data) {
-      await importCheckoutSession(db, session, summary.checkouts, knownPaymentIntentIds);
+      await importCheckoutSession(db, stripe, session, summary.checkouts, knownPaymentIntentIds);
     }
 
     if (!page.has_more || page.data.length === 0) break;
@@ -145,6 +146,7 @@ export async function syncDonationsFromStripe(db, stripe, options = {}) {
           if (session) {
             const outcome = await importCheckoutSession(
               db,
+              stripe,
               session,
               summary.payments,
               knownPaymentIntentIds,

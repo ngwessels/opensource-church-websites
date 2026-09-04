@@ -12,6 +12,21 @@ export function donationFrequencyFromStripeInterval(interval) {
 }
 
 /**
+ * Stripe API 2025-03-31+ moved period dates from Subscription to SubscriptionItem.
+ * @param {import("stripe").Stripe.Subscription} subscription
+ * @returns {string | undefined}
+ */
+export function subscriptionCurrentPeriodEndIso(subscription) {
+  const item = subscription.items?.data?.[0];
+  const legacySeconds = /** @type {{ current_period_end?: number }} */ (subscription)
+    .current_period_end;
+  const itemSeconds = item?.current_period_end;
+  const seconds = typeof itemSeconds === "number" ? itemSeconds : legacySeconds;
+  if (typeof seconds !== "number" || seconds <= 0) return undefined;
+  return new Date(seconds * 1000).toISOString();
+}
+
+/**
  * @param {import("stripe").Stripe.Subscription} subscription
  * @param {{ donorUid?: string, donorEmail?: string }} [options]
  */
@@ -25,6 +40,7 @@ export function buildSubscriptionRecord(subscription, options = {}) {
     typeof price?.product === "string" ? price.product : price?.product?.id;
   const donorEmail =
     options.donorEmail ?? normalizeDonorEmail(metadata.donorEmail) ?? undefined;
+  const currentPeriodEnd = subscriptionCurrentPeriodEndIso(subscription);
 
   const now = new Date().toISOString();
 
@@ -42,9 +58,7 @@ export function buildSubscriptionRecord(subscription, options = {}) {
     ...(metadata.fundLabel ? { fundLabel: metadata.fundLabel } : {}),
     ...(stripeProductId ? { stripeProductId } : {}),
     ...(item?.id ? { stripeSubscriptionItemId: item.id } : {}),
-    ...(subscription.current_period_end
-      ? { currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString() }
-      : {}),
+    ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
     cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
     ...(options.donorUid ? { donorUid: options.donorUid } : {}),
     ...(donorEmail ? { donorEmail } : {}),

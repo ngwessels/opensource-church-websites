@@ -4,6 +4,7 @@ export const COLLECTIONS = {
   pages: "pages",
   media: "media",
   mediaFolders: "mediaFolders",
+  mediaUploadLinks: "mediaUploadLinks",
   users: "users",
   donations: "donations",
   subscriptions: "subscriptions",

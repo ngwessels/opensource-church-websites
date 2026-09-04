@@ -185,14 +185,12 @@ const mediaUploadFileSchema = z.object({
   folderId: z.string(),
   filename: z.string(),
   mimeType: z.string().optional(),
-  base64: z.string().optional(),
-  sourceUrl: z.string().url().optional(),
-  expectedSizeBytes: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe("Original file size in bytes. Required when using base64 so truncated payloads are rejected."),
+  sourceUrl: z
+    .string()
+    .url()
+    .describe(
+      "Public URL of the file. Server fetches it (max 10MB). For local files use create_media_upload_link.",
+    ),
   description: z.string().max(500).optional(),
   alt: z.string().max(200).optional(),
   tags: z.array(z.string()).max(20).optional(),
@@ -321,7 +319,7 @@ export function registerMcpTools(server) {
     "update_module",
     {
       description:
-        "Update a module config on a page. Common types: links {title, items: [{label, href}]}; buttons {items: [{label, href}]}; photo_albums {title, albums: [{label, href, imageSrc, photoCount?}]}; documents {title, items: [{label, url, mediaId?, displayMode?: link|inline}]} — upload PDFs via upload_media with folderId documents-root, set url to downloadUrl and mediaId to returned id; use displayMode inline to embed PDF on page (library PDFs only); people {title, people: [{id, name, role?, email?, phone?, photoUrl?}]}. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
+        "Update a module config on a page. Common types: links {title, items: [{label, href}]}; buttons {items: [{label, href}]}; photo_albums {title, albums: [{label, href, imageSrc, photoCount?}]}; documents {title, items: [{label, url, mediaId?, displayMode?: link|inline}]} — for local PDFs use create_media_upload_link then get_media_upload; for a hosted PDF use upload_media with sourceUrl (folderId documents-root); set url to downloadUrl and mediaId to returned id; use displayMode inline to embed PDF on page (library PDFs only); people {title, people: [{id, name, role?, email?, phone?, photoUrl?}]}. Embed types: embed {title, embedUrl, html, height}; facebook {title, pageUrl, embedUrl, width, height}; google_maps {title, embedUrl, height}; instagram {title, postUrl, embedUrl, height}; rss {title, feedUrl, maxItems}.",
       inputSchema: {
         pageId: z.string(),
         moduleId: z.string(),
@@ -608,81 +606,60 @@ export function registerMcpTools(server) {
     "upload_media",
     {
       description:
-        "Upload media via sourceUrl (preferred, max 10MB — fetch is server-side) or small base64 (max ~1MB decoded). MCP runs on Vercel with a ~4.5 MB request body limit, so large base64 in one call will fail or truncate. For base64, expectedSizeBytes is REQUIRED. For local files over ~100KB use begin_media_upload/upload_media_chunk/complete_media_upload (~96KB chunks). folderId: documents-root for PDFs, pictures-root for images.",
+        "Upload media from a public sourceUrl (server-side fetch, max 10MB). Do not pass file bytes in this tool. For a local file, use create_media_upload_link, open the uploadUrl, then get_media_upload. folderId: documents-root for PDFs, pictures-root for images.",
       inputSchema: {
         folderId: z.string(),
         filename: z.string(),
         mimeType: z.string().optional(),
-        base64: z.string().optional(),
-        sourceUrl: z.string().url().optional(),
-        expectedSizeBytes: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe("Required with base64: original file size in bytes."),
+        sourceUrl: z.string().url().describe("Public HTTPS URL of the file."),
         description: z.string().max(500).optional(),
         alt: z.string().max(200).optional(),
         tags: z.array(z.string()).max(20).optional(),
       },
     },
-    async (args) => run("null", () => media.uploadMediaAdmin(args)),
+    async (args) => run("upload_media", () => media.uploadMediaAdmin(args)),
   );
 
   server.registerTool(
     "upload_media_batch",
     {
       description:
-        "Upload multiple small files. Prefer sourceUrl per file. Base64 max ~1MB each and requires expectedSizeBytes. Vercel ~4.5 MB body limit applies to the whole batch request — do not batch large base64 payloads. Use chunked upload for larger local files.",
+        "Upload multiple files that are already on the public web (sourceUrl each, max 10MB). For local files, call create_media_upload_link once per file instead.",
       inputSchema: {
         files: z.array(mediaUploadFileSchema),
       },
     },
-    async ({ files }) => run("null", () => media.uploadMediaBatchAdmin({ files })),
+    async ({ files }) => run("upload_media_batch", () => media.uploadMediaBatchAdmin({ files })),
   );
 
   server.registerTool(
-    "begin_media_upload",
+    "create_media_upload_link",
     {
       description:
-        "Start a chunked media upload for local files. Required when base64 cannot fit in one Vercel MCP request (~4.5 MB body limit). Pass expectedSizeBytes. Then upload_media_chunk with ~96KB binary chunks (base64 each chunk separately), then complete_media_upload. Prefer sourceUrl if the file is already hosted.",
+        "Create a one-time browser upload page for a local file (PDF or image, max 10MB). Returns uploadUrl with a long token. Open that URL, choose a file, click Upload, then call get_media_upload with the returned uploadId. Use this instead of sending file bytes through MCP. folderId: documents-root for PDFs, pictures-root for images.",
       inputSchema: {
-        folderId: z.string(),
-        filename: z.string(),
-        mimeType: z.string().optional(),
-        expectedSizeBytes: z.number().int().positive(),
+        folderId: z.string().describe("pictures-root, documents-root, or unused-pictures"),
+        filenameHint: z.string().optional().describe("Expected filename, shown on the upload page."),
+        mimeTypeHint: z.string().optional().describe("e.g. application/pdf or image/*"),
+        purpose: z.string().optional().describe("Short note shown on the page, e.g. Sunday bulletin."),
         description: z.string().max(500).optional(),
         alt: z.string().max(200).optional(),
         tags: z.array(z.string()).max(20).optional(),
       },
     },
-    async (args) => run("null", () => media.beginMediaUploadAdmin(args)),
+    async (args) => run("create_media_upload_link", () => media.createMediaUploadLinkAdmin(args)),
   );
 
   server.registerTool(
-    "upload_media_chunk",
+    "get_media_upload",
     {
       description:
-        "Append one base64-encoded binary chunk (~96KB recommended, hard cap ~260KB decoded). Keeps each Vercel MCP POST under the ~4.5 MB body limit. Chunks must be sequential from index 0. Encode each raw chunk separately — do not split one base64 string of the whole file.",
+        "Get the status of a browser upload created by create_media_upload_link. Pass the uploadId from that tool. When status is complete, the response includes media (id, downloadUrl, sizeBytes, name, mimeType, folderId).",
       inputSchema: {
-        uploadId: z.string(),
-        chunkIndex: z.number().int().min(0),
-        base64: z.string(),
+        uploadId: z.string().describe("Token returned as uploadId from create_media_upload_link."),
       },
     },
-    async (args) => run("null", () => media.uploadMediaChunkAdmin(args)),
-  );
-
-  server.registerTool(
-    "complete_media_upload",
-    {
-      description:
-        "Assemble chunks from begin_media_upload, validate size and file signature, and create the media library record. Returns the same shape as upload_media (id, downloadUrl, sizeBytes, …).",
-      inputSchema: {
-        uploadId: z.string(),
-      },
-    },
-    async ({ uploadId }) => run("null", () => media.completeMediaUploadAdmin({ uploadId })),
+    async ({ uploadId }) => run("get_media_upload", () => media.getMediaUploadAdmin({ uploadId })),
   );
 
   server.registerTool(
@@ -721,7 +698,7 @@ export function registerMcpTools(server) {
     "create_bulletin",
     {
       description:
-        "Create a bulletin record. Upload PDF first via upload_media (folderId documents-root), then pass mediaId and downloadUrl.",
+        "Create a bulletin record. Upload the PDF first (create_media_upload_link for a local file, or upload_media with sourceUrl if it is already hosted; folderId documents-root), then pass mediaId and downloadUrl.",
       inputSchema: {
         date: z.string().describe("Publish date YYYY-MM-DD"),
         title: z.string().optional(),

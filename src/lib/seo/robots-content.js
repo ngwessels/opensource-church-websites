@@ -12,6 +12,7 @@ export const BUILDER_DISALLOW = [
   "/signup",
   "/oauth/",
   "/api/",
+  "/mcp-upload/",
 ];
 
 /**

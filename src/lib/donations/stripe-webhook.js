@@ -83,8 +83,9 @@ export function getInvoiceSubscriptionMetadata(invoice) {
 /**
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {import("stripe").Stripe.Checkout.Session} session
+ * @param {import("stripe").Stripe} [stripeClient]
  */
-export async function persistDonationFromCheckoutSession(db, session) {
+export async function persistDonationFromCheckoutSession(db, session, stripeClient) {
   const frequency = session.metadata?.frequency ?? "once";
   const amountCents = session.amount_total ?? 0;
   const fundId = session.metadata?.fundId;
@@ -145,7 +146,7 @@ export async function persistDonationFromCheckoutSession(db, session) {
   }
 
   if (stripeSubscriptionId && session.subscription) {
-    const stripe = getStripe();
+    const stripe = stripeClient || getStripe();
     const subscription =
       typeof session.subscription === "string"
         ? await stripe.subscriptions.retrieve(session.subscription)
@@ -331,7 +332,7 @@ export async function persistChargeOrCheckoutDonation(db, stripe, charge, option
       ) {
         try {
           const existing = await db.collection("donations").doc(session.id).get();
-          await persistDonationFromCheckoutSession(db, session);
+          await persistDonationFromCheckoutSession(db, session, stripe);
           options.knownPaymentIntentIds?.add(session.id);
           options.knownPaymentIntentIds?.add(paymentIntentId);
           return {
@@ -580,17 +581,43 @@ export async function persistDonationFromInvoice(db, stripe, invoice) {
 }
 
 /**
+ * Guest Checkout does not put donorEmail on subscription metadata. Resolve it
+ * from the Stripe Customer so the gift can be linked to a later donor account.
+ *
  * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {import("stripe").Stripe} stripe
  * @param {import("stripe").Stripe.Subscription} subscription
  */
-export async function persistSubscriptionLifecycleEvent(db, subscription) {
-  const donorEmail = normalizeDonorEmail(subscription.metadata?.donorEmail);
-  const donorUid =
-    subscription.metadata?.donorUid ||
-    (donorEmail ? await resolveDonorUidByEmail(db, donorEmail) : undefined);
+export async function persistSubscriptionLifecycleEvent(db, stripe, subscription) {
+  const metadata = subscription.metadata ?? {};
+  let donorEmail = normalizeDonorEmail(metadata.donorEmail);
+  let donorUid = typeof metadata.donorUid === "string" ? metadata.donorUid.trim() : "";
+
+  if (!donorEmail) {
+    const customer = subscription.customer;
+    if (customer && typeof customer === "object" && "email" in customer && !customer.deleted) {
+      donorEmail = normalizeDonorEmail(customer.email);
+    } else {
+      const customerId = typeof customer === "string" ? customer : customer?.id;
+      if (customerId) {
+        try {
+          const retrieved = await stripe.customers.retrieve(customerId);
+          if (!retrieved.deleted) {
+            donorEmail = normalizeDonorEmail(retrieved.email);
+          }
+        } catch {
+          // Metadata-only donor fields are enough when customer retrieval fails.
+        }
+      }
+    }
+  }
+
+  if (!donorUid && donorEmail) {
+    donorUid = (await resolveDonorUidByEmail(db, donorEmail)) || "";
+  }
 
   await upsertSubscriptionFromStripe(db, subscription, {
-    donorUid,
+    ...(donorUid ? { donorUid } : {}),
     donorEmail,
   });
 }
@@ -623,7 +650,7 @@ export async function handleStripeWebhookEvent(db, stripe, event) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded": {
       const session = /** @type {import("stripe").Stripe.Checkout.Session} */ (event.data.object);
-      await persistDonationFromCheckoutSession(db, session);
+      await persistDonationFromCheckoutSession(db, session, stripe);
       return { handled: true, persisted: true, id: session.id };
     }
     case "charge.succeeded": {
@@ -645,7 +672,7 @@ export async function handleStripeWebhookEvent(db, stripe, event) {
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
       const subscription = /** @type {import("stripe").Stripe.Subscription} */ (event.data.object);
-      await persistSubscriptionLifecycleEvent(db, subscription);
+      await persistSubscriptionLifecycleEvent(db, stripe, subscription);
       return { handled: true, persisted: true, id: subscription.id };
     }
     case "invoice.payment_failed": {

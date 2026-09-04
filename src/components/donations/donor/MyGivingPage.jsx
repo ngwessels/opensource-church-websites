@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
   onSnapshot,
-  orderBy,
   query,
   where,
 } from "firebase/firestore";
@@ -41,6 +40,24 @@ function formatFrequency(frequency) {
   return "One-time";
 }
 
+const MANAGEABLE_SUBSCRIPTION_STATUSES = new Set([
+  "active",
+  "trialing",
+  "past_due",
+  "unpaid",
+  "paused",
+]);
+
+/**
+ * @param {{ updatedAt?: string, createdAt?: string }} a
+ * @param {{ updatedAt?: string, createdAt?: string }} b
+ */
+function compareUpdatedAtDesc(a, b) {
+  return String(b.updatedAt || b.createdAt || "").localeCompare(
+    String(a.updatedAt || a.createdAt || ""),
+  );
+}
+
 /**
  * @param {object} props
  * @param {import("@/types/firestore").SubscriptionRecord & { id: string }} props.subscription
@@ -56,7 +73,8 @@ function SubscriptionCard({ subscription, getIdToken, onUpdated }) {
   const [message, setMessage] = useState(null);
 
   const isActive =
-    subscription.status === "active" || subscription.status === "trialing";
+    MANAGEABLE_SUBSCRIPTION_STATUSES.has(subscription.status) ||
+    Boolean(subscription.cancelAtPeriodEnd);
   const isCancelScheduled = subscription.cancelAtPeriodEnd;
 
   async function handleCancel() {
@@ -237,12 +255,30 @@ export function MyGivingPage() {
   const { user, userRole, loading: authLoading, logOut } = useAuth();
   const [donations, setDonations] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [donationsLoading, setDonationsLoading] = useState(true);
+  const [subscriptionsLoading, setSubscriptionsLoading] = useState(true);
+  const [subscriptionsError, setSubscriptionsError] = useState(null);
 
   const getIdToken = useCallback(async () => {
     if (!user) return null;
     return user.getIdToken();
   }, [user]);
+
+  const syncSubscriptions = useCallback(async () => {
+    const token = await getIdToken();
+    if (!token) return;
+    const res = await fetch("/api/donor/subscriptions/sync", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || "Could not load recurring gifts.");
+    }
+    if (Array.isArray(data.subscriptions)) {
+      setSubscriptions([...data.subscriptions].sort(compareUpdatedAtDesc));
+    }
+  }, [getIdToken]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -260,31 +296,55 @@ export function MyGivingPage() {
       const donationsQuery = query(
         collection(db, COLLECTIONS.donations),
         where("donorUid", "==", user.uid),
-        orderBy("createdAt", "desc"),
       );
 
       const subscriptionsQuery = query(
         collection(db, COLLECTIONS.subscriptions),
         where("donorUid", "==", user.uid),
-        orderBy("updatedAt", "desc"),
       );
 
       const unsubDonations = onSnapshot(
         donationsQuery,
         (snap) => {
           if (cancelled) return;
-          setDonations(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-          setDataLoading(false);
+          setDonations(
+            snap.docs
+              .map((doc) => ({ id: doc.id, ...doc.data() }))
+              .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
+          );
+          setDonationsLoading(false);
         },
         () => {
-          if (!cancelled) setDataLoading(false);
+          if (!cancelled) setDonationsLoading(false);
         },
       );
 
-      const unsubSubscriptions = onSnapshot(subscriptionsQuery, (snap) => {
-        if (cancelled) return;
-        setSubscriptions(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-      });
+      const unsubSubscriptions = onSnapshot(
+        subscriptionsQuery,
+        (snap) => {
+          if (cancelled) return;
+          const rows = snap.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .sort(compareUpdatedAtDesc);
+          setSubscriptions((prev) => (rows.length === 0 && prev.length > 0 ? prev : rows));
+        },
+        () => {
+          // Keep server-synced rows when the live query cannot run.
+        },
+      );
+
+      try {
+        await syncSubscriptions();
+        if (!cancelled) setSubscriptionsError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setSubscriptionsError(
+            err instanceof Error ? err.message : "Could not load recurring gifts.",
+          );
+        }
+      } finally {
+        if (!cancelled) setSubscriptionsLoading(false);
+      }
 
       return () => {
         unsubDonations();
@@ -301,12 +361,13 @@ export function MyGivingPage() {
       cancelled = true;
       cleanup?.();
     };
-  }, [authLoading, user, userRole, router]);
+  }, [authLoading, user, userRole, router, syncSubscriptions]);
 
   const activeSubscriptions = useMemo(
     () =>
       subscriptions.filter(
-        (sub) => sub.status === "active" || sub.status === "trialing" || sub.cancelAtPeriodEnd,
+        (sub) =>
+          MANAGEABLE_SUBSCRIPTION_STATUSES.has(sub.status) || sub.cancelAtPeriodEnd,
       ),
     [subscriptions],
   );
@@ -346,14 +407,18 @@ export function MyGivingPage() {
 
         <section className="space-y-4">
           <h2 className="text-lg font-medium text-zinc-900">Recurring gifts</h2>
-          {dataLoading ? (
+          {subscriptionsLoading ? (
             <p className="text-sm text-zinc-600">Loading…</p>
           ) : activeSubscriptions.length === 0 ? (
             <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-4 text-sm text-zinc-600">
-              No active recurring gifts.{" "}
-              <Link href="/give" className="font-medium text-zinc-900 hover:underline">
-                Make a recurring donation
-              </Link>
+              {subscriptionsError
+                ? subscriptionsError
+                : "No active recurring gifts. "}
+              {!subscriptionsError && (
+                <Link href="/give" className="font-medium text-zinc-900 hover:underline">
+                  Make a recurring donation
+                </Link>
+              )}
             </p>
           ) : (
             <div className="space-y-3">
@@ -362,7 +427,9 @@ export function MyGivingPage() {
                   key={subscription.id}
                   subscription={subscription}
                   getIdToken={getIdToken}
-                  onUpdated={() => {}}
+                  onUpdated={() => {
+                    void syncSubscriptions();
+                  }}
                 />
               ))}
             </div>
@@ -375,7 +442,9 @@ export function MyGivingPage() {
 
         <section className="space-y-4">
           <h2 className="text-lg font-medium text-zinc-900">Donation history</h2>
-          {donations.length === 0 ? (
+          {donationsLoading ? (
+            <p className="text-sm text-zinc-600">Loading…</p>
+          ) : donations.length === 0 ? (
             <p className="rounded-lg border border-dashed border-zinc-300 bg-white p-4 text-sm text-zinc-600">
               No donations linked to this account yet. Past gifts made with {user.email} are added
               when you sign up or sign in.

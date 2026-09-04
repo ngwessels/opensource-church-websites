@@ -20,6 +20,7 @@ describe("analytics/schema", () => {
     assert.equal(isExcludedAnalyticsPath("/builder"), true);
     assert.equal(isExcludedAnalyticsPath("/builder/edit"), true);
     assert.equal(isExcludedAnalyticsPath("/login"), true);
+    assert.equal(isExcludedAnalyticsPath("/mcp-upload/abc"), true);
     assert.equal(isExcludedAnalyticsPath("/about"), false);
   });
 
