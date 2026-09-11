@@ -12,8 +12,11 @@ import { loadPublicSiteView } from "@/lib/pages/public-view";
 import { isPageHidden } from "@/lib/pages/visibility";
 import { resolvePublishedPageView } from "@/lib/pages/publish";
 
-/** Cache until publish triggers on-demand revalidation. */
-export const revalidate = false;
+/**
+ * ISR: publish expires caches immediately. A short interval heals a missed
+ * revalidate so visitors do not wait for a full rebuild.
+ */
+export const revalidate = 60;
 
 /** Pre-render published pages at build time; new slugs still work at runtime. */
 export const dynamicParams = true;

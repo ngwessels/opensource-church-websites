@@ -7,15 +7,26 @@ export async function requestPublicRevalidate({ getIdToken, scope = "page", slug
 
   try {
     const token = await getIdToken();
-    await fetch("/api/revalidate", {
+    if (!token) {
+      console.error("Public revalidate skipped: missing ID token");
+      return;
+    }
+
+    const response = await fetch("/api/revalidate", {
       method: "POST",
+      cache: "no-store",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ scope, slug }),
     });
-  } catch {
-    // Cache will refresh on the next deploy or manual revalidation.
+
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("Public revalidate failed", response.status, detail);
+    }
+  } catch (err) {
+    console.error("Public revalidate failed", err);
   }
 }
