@@ -514,6 +514,43 @@ export function summarizeDeliveryStats(recipients) {
 }
 
 /**
+ * Roll exclusive status buckets into the overlapping totals an email report
+ * shows. Opened and clicked recipients were also delivered; clicked recipients
+ * are included in opened.
+ *
+ * @param {ReturnType<typeof summarizeDeliveryStats> | null | undefined} summary
+ * @returns {{
+ *   delivered: number,
+ *   opened: number,
+ *   clicked: number,
+ *   failed: number,
+ *   pending: number,
+ *   complained: number,
+ *   unsubscribed: number,
+ * }}
+ */
+export function headlineDeliveryCounts(summary) {
+  const queued = Number(summary?.queued) || 0;
+  const accepted = Number(summary?.accepted) || 0;
+  const delivered = Number(summary?.delivered) || 0;
+  const opened = Number(summary?.opened) || 0;
+  const clicked = Number(summary?.clicked) || 0;
+  const failed = Number(summary?.failed) || 0;
+  const complained = Number(summary?.complained) || 0;
+  const unsubscribed = Number(summary?.unsubscribed) || 0;
+
+  return {
+    delivered: delivered + opened + clicked + complained + unsubscribed,
+    opened: opened + clicked,
+    clicked,
+    failed,
+    pending: queued + accepted,
+    complained,
+    unsubscribed,
+  };
+}
+
+/**
  * @param {unknown} value
  * @returns {number}
  */

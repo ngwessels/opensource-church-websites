@@ -8,7 +8,13 @@ import { MediaPicker } from "@/components/media/MediaPicker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { campaignStatusLabel, formatBytes, subscriberStatusLabel } from "@/lib/email-list/schema";
-import { emailStatusLabel } from "@/lib/mailgun/events";
+import { emailStatusLabel, headlineDeliveryCounts } from "@/lib/mailgun/events";
 import { cn } from "@/lib/utils";
 
 const SUBSCRIBERS_ENDPOINT = "/api/admin/email-list/subscribers";
@@ -31,6 +37,14 @@ function formatDateTime(value) {
   if (!value) return "—";
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
+
+/** @param {unknown} value */
+function formatShortDateTime(value) {
+  if (!value) return "—";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** @param {string} status */
@@ -50,7 +64,6 @@ function subscriberStatusVariant(status) {
 /** @param {string} status */
 function deliveryStatusVariant(status) {
   switch (status) {
-    case "delivered":
     case "opened":
     case "clicked":
       return "default";
@@ -61,26 +74,11 @@ function deliveryStatusVariant(status) {
     case "queued":
     case "accepted":
       return "secondary";
+    case "delivered":
+    case "unsubscribed":
     default:
       return "outline";
   }
-}
-
-/** @param {Record<string, number>} summary */
-function formatDeliverySummary(summary) {
-  return [
-    summary.delivered ? `${summary.delivered} delivered` : "",
-    summary.opened ? `${summary.opened} opened` : "",
-    summary.clicked ? `${summary.clicked} clicked` : "",
-    summary.failed ? `${summary.failed} failed` : "",
-    summary.complained ? `${summary.complained} spam` : "",
-    summary.unsubscribed ? `${summary.unsubscribed} unsubscribed` : "",
-    summary.queued || summary.accepted
-      ? `${summary.queued + summary.accepted} pending`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 /**
@@ -109,12 +107,8 @@ export function EmailListPanel({ onOpenSettings }) {
   const [pickingAttachment, setPickingAttachment] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [confirmingSend, setConfirmingSend] = useState(false);
-  const [deliveryCampaign, setDeliveryCampaign] = useState(
-    /** @type {Record<string, any> | null} */ (null),
-  );
-  const [deliveryReport, setDeliveryReport] = useState(
-    /** @type {{ summary: Record<string, number>, recipients: Array<Record<string, any>> } | null} */ (null),
-  );
+  const [deliveryCampaign, setDeliveryCampaign] = useState(/** @type {Record<string, any> | null} */ (null));
+  const [deliveryReport, setDeliveryReport] = useState(/** @type {{ summary: Record<string, number>, recipients: Array<Record<string, any>> } | null} */ (null));
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   const [deliveryError, setDeliveryError] = useState("");
 
@@ -728,111 +722,148 @@ export function EmailListPanel({ onOpenSettings }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={Boolean(deliveryCampaign)}
+      <DeliveryDetailsDialog
+        campaign={deliveryCampaign}
+        report={deliveryReport}
+        loading={loadingDelivery}
+        error={deliveryError}
         onOpenChange={(open) => {
           if (!open) closeDeliveryReport();
         }}
+      />
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   label: string,
+ *   value: number,
+ *   tone?: 'default' | 'danger',
+ * }} props
+ */
+function DeliveryStat({ label, value, tone = "default" }) {
+  const zero = value === 0;
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-0.5 text-lg font-semibold tabular-nums",
+          zero && "text-muted-foreground",
+          !zero && tone === "danger" && "text-destructive",
+        )}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Delivery details</DialogTitle>
-            {deliveryCampaign && (
-              <p className="text-sm text-muted-foreground">
-                {deliveryCampaign.subject}
-                {deliveryCampaign.sentAt && (
-                  <span className="block text-xs">
-                    Sent {formatDateTime(deliveryCampaign.sentAt)}
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   campaign: Record<string, any> | null,
+ *   report: { summary: Record<string, number>, recipients: Array<Record<string, any>> } | null,
+ *   loading: boolean,
+ *   error: string,
+ *   onOpenChange: (open: boolean) => void,
+ * }} props
+ */
+function DeliveryDetailsDialog({ campaign, report, loading, error, onOpenChange }) {
+  const metrics = headlineDeliveryCounts(report?.summary);
+  const recipientCount = report?.recipients.length ?? 0;
+
+  return (
+    <Dialog open={Boolean(campaign)} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[min(90vh,44rem)] flex-col gap-5 overflow-hidden sm:max-w-3xl">
+        <DialogHeader>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Delivery details
+          </p>
+          <DialogTitle className="text-lg leading-snug font-semibold">
+            {campaign?.subject?.trim() ? campaign.subject : "(no subject)"}
+          </DialogTitle>
+          <DialogDescription>
+            {campaign?.sentAt ? `Sent ${formatDateTime(campaign.sentAt)}` : "Sent time unavailable"}
+            {campaign?.kind === "bulletin" ? " · Bulletin" : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading && (
+          <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            Loading delivery details…
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {report && !loading && (
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <DeliveryStat label="Delivered" value={metrics.delivered} />
+              <DeliveryStat label="Opened" value={metrics.opened} />
+              <DeliveryStat label="Clicked" value={metrics.clicked} />
+              <DeliveryStat label="Failed" value={metrics.failed} tone="danger" />
+              <DeliveryStat label="Pending" value={metrics.pending} />
+              {metrics.complained > 0 && (
+                <DeliveryStat label="Marked as spam" value={metrics.complained} tone="danger" />
+              )}
+              {metrics.unsubscribed > 0 && (
+                <DeliveryStat label="Unsubscribed" value={metrics.unsubscribed} />
+              )}
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <p className="text-sm font-medium text-foreground">
+                Recipients
+                {recipientCount > 0 ? (
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    {recipientCount}
                   </span>
-                )}
+                ) : null}
               </p>
-            )}
-          </DialogHeader>
 
-          {loadingDelivery && (
-            <p className="text-sm text-muted-foreground">Loading delivery details…</p>
-          )}
-
-          {deliveryError && <p className="text-sm text-destructive">{deliveryError}</p>}
-
-          {deliveryReport && !loadingDelivery && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {deliveryReport.summary.delivered > 0 && (
-                  <Badge variant="default">
-                    {deliveryReport.summary.delivered} delivered
-                  </Badge>
-                )}
-                {deliveryReport.summary.opened > 0 && (
-                  <Badge variant="default">
-                    {deliveryReport.summary.opened} opened
-                  </Badge>
-                )}
-                {deliveryReport.summary.clicked > 0 && (
-                  <Badge variant="default">
-                    {deliveryReport.summary.clicked} clicked
-                  </Badge>
-                )}
-                {(deliveryReport.summary.queued + deliveryReport.summary.accepted) > 0 && (
-                  <Badge variant="secondary">
-                    {deliveryReport.summary.queued + deliveryReport.summary.accepted} pending
-                  </Badge>
-                )}
-                {deliveryReport.summary.failed > 0 && (
-                  <Badge variant="destructive">
-                    {deliveryReport.summary.failed} failed
-                  </Badge>
-                )}
-                {deliveryReport.summary.complained > 0 && (
-                  <Badge variant="destructive">
-                    {deliveryReport.summary.complained} spam
-                  </Badge>
-                )}
-                {deliveryReport.summary.unsubscribed > 0 && (
-                  <Badge variant="secondary">
-                    {deliveryReport.summary.unsubscribed} unsubscribed
-                  </Badge>
-                )}
-                {deliveryReport.summary.total > 0 &&
-                  !formatDeliverySummary(deliveryReport.summary) && (
-                    <Badge variant="outline">
-                      {deliveryReport.summary.total} recipient
-                      {deliveryReport.summary.total === 1 ? "" : "s"}
-                    </Badge>
-                  )}
-              </div>
-
-              {deliveryReport.recipients.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+              {recipientCount === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                   No per-recipient tracking yet. Details appear once Mailgun reports delivery
                   events.
-                </p>
+                </div>
               ) : (
-                <div className="max-h-[360px] overflow-y-auto overflow-x-auto">
+                <div className="max-h-[min(24rem,50vh)] overflow-auto rounded-lg border border-border">
                   <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
-                      <tr>
-                        <th className="py-2 pr-3 font-medium">Recipient</th>
-                        <th className="py-2 pr-3 font-medium">Status</th>
-                        <th className="py-2 font-medium">Last activity</th>
+                    <thead className="sticky top-0 bg-popover text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr className="border-b border-border">
+                        <th className="px-3 py-2.5 font-medium">Recipient</th>
+                        <th className="px-3 py-2.5 font-medium">Status</th>
+                        <th className="px-3 py-2.5 font-medium">Opened</th>
+                        <th className="px-3 py-2.5 font-medium">Clicked</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {deliveryReport.recipients.map((row) => (
-                        <tr key={row.email} className="border-t border-border align-top">
-                          <td className="py-2 pr-3 font-medium">{row.email}</td>
-                          <td className="py-2 pr-3">
+                      {report.recipients.map((row) => (
+                        <tr key={row.email} className="border-b border-border last:border-0">
+                          <td className="px-3 py-2.5 align-top font-medium break-all">
+                            {row.email}
+                          </td>
+                          <td className="px-3 py-2.5 align-top whitespace-nowrap">
                             <Badge variant={deliveryStatusVariant(String(row.status))}>
                               {emailStatusLabel(String(row.status))}
                             </Badge>
                             {row.failureReason && (
-                              <p className="mt-1 text-xs text-destructive">{row.failureReason}</p>
+                              <p className="mt-1 max-w-[16rem] text-xs leading-snug text-destructive">
+                                {row.failureReason}
+                              </p>
                             )}
                           </td>
-                          <td className="py-2 whitespace-nowrap text-muted-foreground">
-                            {formatDateTime(
-                              row.clickedAt || row.openedAt || row.deliveredAt || row.lastEventAt,
-                            )}
+                          <td className="px-3 py-2.5 align-top whitespace-nowrap tabular-nums text-muted-foreground">
+                            {formatShortDateTime(row.openedAt)}
+                          </td>
+                          <td className="px-3 py-2.5 align-top whitespace-nowrap tabular-nums text-muted-foreground">
+                            {formatShortDateTime(row.clickedAt)}
                           </td>
                         </tr>
                       ))}
@@ -841,9 +872,9 @@ export function EmailListPanel({ onOpenSettings }) {
                 </div>
               )}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

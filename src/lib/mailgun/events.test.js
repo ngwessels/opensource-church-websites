@@ -12,6 +12,7 @@ import {
   normalizeMailgunWebhookEvent,
   normalizeMessageId,
   normalizeMessageKind,
+  headlineDeliveryCounts,
   summarizeDeliveryStats,
   summarizeWebhookRegistrationFailures,
 } from "./events.js";
@@ -221,6 +222,33 @@ describe("mailgun delivery summaries", () => {
     assert.equal(summary.opened, 1);
     assert.equal(summary.delivered, 1);
     assert.equal(summary.failed, 1);
+  });
+
+  it("rolls exclusive buckets into overlapping headline counts", () => {
+    const counts = headlineDeliveryCounts(
+      summarizeDeliveryStats([
+        { status: "opened" },
+        { status: "clicked" },
+        { status: "delivered" },
+        { status: "queued" },
+        { status: "failed" },
+      ]),
+    );
+
+    assert.equal(counts.delivered, 3);
+    assert.equal(counts.opened, 2);
+    assert.equal(counts.clicked, 1);
+    assert.equal(counts.failed, 1);
+    assert.equal(counts.pending, 1);
+  });
+
+  it("keeps zeros visible when nothing has happened yet", () => {
+    const counts = headlineDeliveryCounts(summarizeDeliveryStats([{ status: "queued" }]));
+    assert.equal(counts.delivered, 0);
+    assert.equal(counts.opened, 0);
+    assert.equal(counts.clicked, 0);
+    assert.equal(counts.failed, 0);
+    assert.equal(counts.pending, 1);
   });
 });
 
