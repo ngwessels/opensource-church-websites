@@ -12,6 +12,7 @@ import {
   normalizeMessageId,
   normalizeMessageKind,
   normalizeRecipientEmail,
+  summarizeDeliveryStats,
   summarizeRecipientStatuses,
 } from "./events.js";
 
@@ -269,6 +270,53 @@ function storedEventToEmailEvent(stored) {
     code: typeof stored.code === "number" ? stored.code : null,
     url: String(stored.url || ""),
     tags: Array.isArray(stored.tags) ? stored.tags.filter((tag) => typeof tag === "string") : [],
+  };
+}
+
+/**
+ * Per-recipient delivery stats for one list or bulletin campaign.
+ *
+ * @param {string} campaignId
+ * @returns {Promise<{
+ *   campaignId: string,
+ *   summary: ReturnType<typeof summarizeDeliveryStats>,
+ *   recipients: Array<{
+ *     email: string,
+ *     status: string,
+ *     deliveredAt: string,
+ *     openedAt: string,
+ *     clickedAt: string,
+ *     lastEventAt: string,
+ *     failureReason: string,
+ *   }>,
+ * } | null>}
+ */
+export async function getCampaignDeliveryReport(campaignId) {
+  const db = getFirebaseAdminFirestore();
+  const id = typeof campaignId === "string" ? campaignId.trim() : "";
+  if (!db || !id) return null;
+
+  const snap = await db.collection(COLLECTIONS.emailMessages).where("context.campaignId", "==", id).get();
+  const messages = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const withStatuses = await backfillRecipientStatuses(messages);
+  const expanded = expandEmailMessagesForAdmin(withStatuses);
+
+  const recipients = expanded
+    .map((row) => ({
+      email: Array.isArray(row.to) ? String(row.to[0] || "") : "",
+      status: String(row.status || "queued"),
+      deliveredAt: row.deliveredAt ? String(row.deliveredAt) : "",
+      openedAt: row.openedAt ? String(row.openedAt) : "",
+      clickedAt: row.clickedAt ? String(row.clickedAt) : "",
+      lastEventAt: row.lastEventAt ? String(row.lastEventAt) : "",
+      failureReason: row.failureReason ? String(row.failureReason) : "",
+    }))
+    .filter((row) => row.email);
+
+  return {
+    campaignId: id,
+    summary: summarizeDeliveryStats(recipients),
+    recipients,
   };
 }
 

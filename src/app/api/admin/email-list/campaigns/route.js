@@ -6,6 +6,7 @@ import { listCampaigns, sendCampaign, sendCampaignTest } from "@/lib/email-list/
 import { normalizeCampaignKind, validateCampaignInput } from "@/lib/email-list/schema";
 import { getSubscriberStats } from "@/lib/email-list/subscribers.server";
 import { isFirebaseAdminConfigured } from "@/lib/firebase/admin";
+import { getCampaignDeliveryReport } from "@/lib/mailgun/messages.server";
 import { isMailgunConfigured } from "@/lib/mailgun/settings.server";
 
 export const runtime = "nodejs";
@@ -27,7 +28,17 @@ export async function GET(request) {
     }
     await getAdminActorFromRequest(request);
 
-    const limitParam = Number(new URL(request.url).searchParams.get("limit"));
+    const { searchParams } = new URL(request.url);
+    const campaignId = searchParams.get("campaignId")?.trim() || "";
+    if (campaignId) {
+      const report = await getCampaignDeliveryReport(campaignId);
+      if (!report) {
+        return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+      }
+      return NextResponse.json(report);
+    }
+
+    const limitParam = Number(searchParams.get("limit"));
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 25;
 
     return NextResponse.json({

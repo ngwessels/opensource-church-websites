@@ -458,6 +458,62 @@ export function expandEmailMessagesForAdmin(messages) {
 }
 
 /**
+ * Count how many recipients are at each delivery stage for a campaign report.
+ *
+ * @param {Array<{ status?: string }>} recipients
+ * @returns {{
+ *   total: number,
+ *   queued: number,
+ *   accepted: number,
+ *   delivered: number,
+ *   opened: number,
+ *   clicked: number,
+ *   failed: number,
+ *   complained: number,
+ *   unsubscribed: number,
+ * }}
+ */
+export function summarizeDeliveryStats(recipients) {
+  /** @type {ReturnType<typeof summarizeDeliveryStats>} */
+  const counts = {
+    total: 0,
+    queued: 0,
+    accepted: 0,
+    delivered: 0,
+    opened: 0,
+    clicked: 0,
+    failed: 0,
+    complained: 0,
+    unsubscribed: 0,
+  };
+
+  for (const row of recipients) {
+    counts.total += 1;
+    const status = typeof row.status === "string" ? row.status : "queued";
+    switch (status) {
+      case "queued":
+      case "accepted":
+      case "delivered":
+      case "opened":
+      case "clicked":
+      case "failed":
+      case "complained":
+      case "unsubscribed":
+        counts[status] += 1;
+        break;
+      case "rejected":
+        counts.failed += 1;
+        break;
+      default:
+        counts.queued += 1;
+        break;
+    }
+  }
+
+  return counts;
+}
+
+/**
  * @param {unknown} value
  * @returns {number}
  */

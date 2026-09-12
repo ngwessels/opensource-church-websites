@@ -12,6 +12,7 @@ import {
   normalizeMailgunWebhookEvent,
   normalizeMessageId,
   normalizeMessageKind,
+  summarizeDeliveryStats,
   summarizeWebhookRegistrationFailures,
 } from "./events.js";
 
@@ -205,6 +206,21 @@ describe("mailgun recipient tracking", () => {
     assert.equal(rows[0].status, "opened");
     assert.deepEqual(rows[1].to, ["b@example.org"]);
     assert.equal(rows[1].status, "delivered");
+  });
+});
+
+describe("mailgun delivery summaries", () => {
+  it("counts recipients by delivery status", () => {
+    const summary = summarizeDeliveryStats([
+      { status: "opened" },
+      { status: "delivered" },
+      { status: "failed" },
+    ]);
+
+    assert.equal(summary.total, 3);
+    assert.equal(summary.opened, 1);
+    assert.equal(summary.delivered, 1);
+    assert.equal(summary.failed, 1);
   });
 });
 

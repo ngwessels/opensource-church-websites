@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { campaignStatusLabel, formatBytes, subscriberStatusLabel } from "@/lib/email-list/schema";
+import { emailStatusLabel } from "@/lib/mailgun/events";
 import { cn } from "@/lib/utils";
 
 const SUBSCRIBERS_ENDPOINT = "/api/admin/email-list/subscribers";
@@ -33,7 +34,7 @@ function formatDateTime(value) {
 }
 
 /** @param {string} status */
-function statusVariant(status) {
+function subscriberStatusVariant(status) {
   switch (status) {
     case "subscribed":
       return "default";
@@ -44,6 +45,42 @@ function statusVariant(status) {
     default:
       return "outline";
   }
+}
+
+/** @param {string} status */
+function deliveryStatusVariant(status) {
+  switch (status) {
+    case "delivered":
+    case "opened":
+    case "clicked":
+      return "default";
+    case "failed":
+    case "rejected":
+    case "complained":
+      return "destructive";
+    case "queued":
+    case "accepted":
+      return "secondary";
+    default:
+      return "outline";
+  }
+}
+
+/** @param {Record<string, number>} summary */
+function formatDeliverySummary(summary) {
+  return [
+    summary.delivered ? `${summary.delivered} delivered` : "",
+    summary.opened ? `${summary.opened} opened` : "",
+    summary.clicked ? `${summary.clicked} clicked` : "",
+    summary.failed ? `${summary.failed} failed` : "",
+    summary.complained ? `${summary.complained} spam` : "",
+    summary.unsubscribed ? `${summary.unsubscribed} unsubscribed` : "",
+    summary.queued || summary.accepted
+      ? `${summary.queued + summary.accepted} pending`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /**
@@ -72,11 +109,49 @@ export function EmailListPanel({ onOpenSettings }) {
   const [pickingAttachment, setPickingAttachment] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [confirmingSend, setConfirmingSend] = useState(false);
+  const [deliveryCampaign, setDeliveryCampaign] = useState(
+    /** @type {Record<string, any> | null} */ (null),
+  );
+  const [deliveryReport, setDeliveryReport] = useState(
+    /** @type {{ summary: Record<string, number>, recipients: Array<Record<string, any>> } | null} */ (
+      null,
+    ),
+  );
+  const [loadingDelivery, setLoadingDelivery] = useState(false);
+  const [deliveryError, setDeliveryError] = useState("");
 
   const getAuthHeaders = useCallback(async () => {
     const token = await user?.getIdToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, [user]);
+
+  async function openDeliveryReport(campaign) {
+    setDeliveryCampaign(campaign);
+    setDeliveryReport(null);
+    setDeliveryError("");
+    setLoadingDelivery(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(
+        `${CAMPAIGNS_ENDPOINT}?campaignId=${encodeURIComponent(campaign.id)}`,
+        { headers },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load delivery details.");
+      setDeliveryReport(data);
+    } catch (err) {
+      setDeliveryError(err instanceof Error ? err.message : "Could not load delivery details.");
+    } finally {
+      setLoadingDelivery(false);
+    }
+  }
+
+  function closeDeliveryReport() {
+    setDeliveryCampaign(null);
+    setDeliveryReport(null);
+    setDeliveryError("");
+    setLoadingDelivery(false);
+  }
 
   const loadSubscribers = useCallback(async () => {
     const headers = await getAuthHeaders();
@@ -375,7 +450,7 @@ export function EmailListPanel({ onOpenSettings }) {
                         {row.name && <span className="block text-xs text-muted-foreground">{row.name}</span>}
                       </td>
                       <td className="py-2 pr-3">
-                        <Badge variant={statusVariant(String(row.status))}>
+                        <Badge variant={subscriberStatusVariant(String(row.status))}>
                           {subscriberStatusLabel(String(row.status))}
                         </Badge>
                       </td>
@@ -570,9 +645,19 @@ export function EmailListPanel({ onOpenSettings }) {
                         {campaign.sentCount} of {campaign.recipientCount}
                       </td>
                       <td className="py-2">
-                        <Badge variant={campaign.status === "failed" ? "destructive" : "outline"}>
-                          {campaignStatusLabel(campaign.status)}
-                        </Badge>
+                        <button
+                          type="button"
+                          className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => openDeliveryReport(campaign)}
+                          title="View delivery details"
+                        >
+                          <Badge
+                            variant={campaign.status === "failed" ? "destructive" : "outline"}
+                            className="cursor-pointer hover:bg-accent"
+                          >
+                            {campaignStatusLabel(campaign.status)}
+                          </Badge>
+                        </button>
                         {campaign.error && (
                           <p className="mt-1 text-xs text-destructive">{campaign.error}</p>
                         )}
@@ -642,6 +727,123 @@ export function EmailListPanel({ onOpenSettings }) {
               Send now
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deliveryCampaign)}
+        onOpenChange={(open) => {
+          if (!open) closeDeliveryReport();
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Delivery details</DialogTitle>
+            {deliveryCampaign && (
+              <p className="text-sm text-muted-foreground">
+                {deliveryCampaign.subject}
+                {deliveryCampaign.sentAt && (
+                  <span className="block text-xs">
+                    Sent {formatDateTime(deliveryCampaign.sentAt)}
+                  </span>
+                )}
+              </p>
+            )}
+          </DialogHeader>
+
+          {loadingDelivery && (
+            <p className="text-sm text-muted-foreground">Loading delivery details…</p>
+          )}
+
+          {deliveryError && <p className="text-sm text-destructive">{deliveryError}</p>}
+
+          {deliveryReport && !loadingDelivery && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {deliveryReport.summary.delivered > 0 && (
+                  <Badge variant="default">
+                    {deliveryReport.summary.delivered} delivered
+                  </Badge>
+                )}
+                {deliveryReport.summary.opened > 0 && (
+                  <Badge variant="default">
+                    {deliveryReport.summary.opened} opened
+                  </Badge>
+                )}
+                {deliveryReport.summary.clicked > 0 && (
+                  <Badge variant="default">
+                    {deliveryReport.summary.clicked} clicked
+                  </Badge>
+                )}
+                {(deliveryReport.summary.queued + deliveryReport.summary.accepted) > 0 && (
+                  <Badge variant="secondary">
+                    {deliveryReport.summary.queued + deliveryReport.summary.accepted} pending
+                  </Badge>
+                )}
+                {deliveryReport.summary.failed > 0 && (
+                  <Badge variant="destructive">
+                    {deliveryReport.summary.failed} failed
+                  </Badge>
+                )}
+                {deliveryReport.summary.complained > 0 && (
+                  <Badge variant="destructive">
+                    {deliveryReport.summary.complained} spam
+                  </Badge>
+                )}
+                {deliveryReport.summary.unsubscribed > 0 && (
+                  <Badge variant="secondary">
+                    {deliveryReport.summary.unsubscribed} unsubscribed
+                  </Badge>
+                )}
+                {deliveryReport.summary.total > 0 &&
+                  !formatDeliverySummary(deliveryReport.summary) && (
+                    <Badge variant="outline">
+                      {deliveryReport.summary.total} recipient
+                      {deliveryReport.summary.total === 1 ? "" : "s"}
+                    </Badge>
+                  )}
+              </div>
+
+              {deliveryReport.recipients.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No per-recipient tracking yet. Details appear once Mailgun reports delivery
+                  events.
+                </p>
+              ) : (
+                <div className="max-h-[360px] overflow-y-auto overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-3 font-medium">Recipient</th>
+                        <th className="py-2 pr-3 font-medium">Status</th>
+                        <th className="py-2 font-medium">Last activity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deliveryReport.recipients.map((row) => (
+                        <tr key={row.email} className="border-t border-border align-top">
+                          <td className="py-2 pr-3 font-medium">{row.email}</td>
+                          <td className="py-2 pr-3">
+                            <Badge variant={deliveryStatusVariant(String(row.status))}>
+                              {emailStatusLabel(String(row.status))}
+                            </Badge>
+                            {row.failureReason && (
+                              <p className="mt-1 text-xs text-destructive">{row.failureReason}</p>
+                            )}
+                          </td>
+                          <td className="py-2 whitespace-nowrap text-muted-foreground">
+                            {formatDateTime(
+                              row.clickedAt || row.openedAt || row.deliveredAt || row.lastEventAt,
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
