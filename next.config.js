@@ -18,6 +18,11 @@ const nextConfig = {
         destination: "/builder/admin/bulletins",
         permanent: false,
       },
+      {
+        source: "/builder/admin/email-list",
+        destination: "/builder/admin/email",
+        permanent: false,
+      },
     ];
   },
   images: {

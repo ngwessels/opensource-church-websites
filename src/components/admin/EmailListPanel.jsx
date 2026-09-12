@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
-import { adminSectionHref } from "@/lib/builder/navigation";
 import { campaignStatusLabel, formatBytes, subscriberStatusLabel } from "@/lib/email-list/schema";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +46,10 @@ function statusVariant(status) {
   }
 }
 
-export function EmailListPanel() {
+/**
+ * @param {{ onOpenSettings?: () => void }} props
+ */
+export function EmailListPanel({ onOpenSettings }) {
   const { user } = useAuth();
   const [subscribers, setSubscribers] = useState(/** @type {Array<Record<string, any>>} */ ([]));
   const [stats, setStats] = useState({ total: 0, subscribed: 0, unsubscribed: 0, bounced: 0 });
@@ -255,7 +257,7 @@ export function EmailListPanel() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="space-y-6">
       {(notice || error) && (
         <div
           className={cn(
@@ -272,11 +274,15 @@ export function EmailListPanel() {
           <div className="flex items-start gap-3">
             <Mail className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              You can build the list now, but sending needs email set up. Connect Mailgun under{" "}
-              <a className="underline" href={adminSectionHref("email")}>
-                Admin → Email
-              </a>
-              , then come back here to write to everyone.
+              You can build the list now, but sending needs Mailgun connected.{" "}
+              {onOpenSettings ? (
+                <button type="button" className="underline" onClick={onOpenSettings}>
+                  Open email settings
+                </button>
+              ) : (
+                "Open email settings from the gear icon above."
+              )}{" "}
+              to connect Mailgun, then write to everyone.
             </p>
           </div>
         </Card>
@@ -512,7 +518,14 @@ export function EmailListPanel() {
           </div>
           {!mailgunConfigured && (
             <p className="text-xs text-muted-foreground">
-              Sending is off until Mailgun is connected under Admin → Email.
+              Sending is off until Mailgun is connected.{" "}
+              {onOpenSettings ? (
+                <button type="button" className="underline" onClick={onOpenSettings}>
+                  Open email settings
+                </button>
+              ) : (
+                "Use the gear icon above to connect Mailgun."
+              )}
             </p>
           )}
         </CardContent>
@@ -525,8 +538,8 @@ export function EmailListPanel() {
         <CardContent>
           {campaigns.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nothing sent yet. Delivery, opens, and clicks for each send also appear under Admin →
-              Email.
+              Nothing sent yet. Delivery, opens, and clicks for each send also appear in email
+              settings.
             </p>
           ) : (
             <div className="overflow-x-auto">

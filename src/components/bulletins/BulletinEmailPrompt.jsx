@@ -82,11 +82,11 @@ export function BulletinEmailPrompt({
     return (
       <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
         <p className="text-xs text-zinc-700">
-          <strong>{label}</strong> is published. Connect Mailgun under{" "}
+          <strong>{label}</strong> is published. Connect Mailgun in{" "}
           <a className="underline" href={adminSectionHref("email")}>
             Admin → Email
           </a>{" "}
-          before you can email bulletins to your list.
+          (gear icon) before you can email bulletins to your list.
         </p>
         <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
           Dismiss
@@ -100,7 +100,7 @@ export function BulletinEmailPrompt({
       <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
         <p className="text-xs text-zinc-700">
           <strong>{label}</strong> is published. Add people to your{" "}
-          <a className="underline" href={adminSectionHref("emailList")}>
+          <a className="underline" href={adminSectionHref("email")}>
             email list
           </a>{" "}
           before you can email bulletins to everyone.
@@ -116,7 +116,7 @@ export function BulletinEmailPrompt({
     <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
       <p className="text-xs text-zinc-700">
         <strong>{label}</strong> is published. Email it to the {subscriberCount} people on your{" "}
-        <a className="underline" href={adminSectionHref("emailList")}>
+        <a className="underline" href={adminSectionHref("email")}>
           email list
         </a>
         ?

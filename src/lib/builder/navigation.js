@@ -71,6 +71,11 @@ export const BUILDER_DESTINATIONS = [
   },
 ];
 
+/** Old section ids that now resolve to a merged admin page. */
+export const ADMIN_SECTION_LEGACY_IDS = {
+  emailList: "email",
+};
+
 /** Sidebar groups for the Admin destination, in display order. */
 export const ADMIN_SECTION_GROUPS = [
   { id: "site", label: "Site" },
@@ -102,14 +107,7 @@ export const ADMIN_SECTIONS = [
     id: "email",
     slug: "email",
     label: "Email",
-    description: "Mailgun delivery settings and webhook status",
-    group: "site",
-  },
-  {
-    id: "emailList",
-    slug: "email-list",
-    label: "Email List",
-    description: "Subscribers and messages sent to the parish list",
+    description: "Parish list, newsletters, and Mailgun settings",
     group: "site",
   },
   {
@@ -194,14 +192,19 @@ export function findBuilderDestination(pathname) {
 }
 
 export function findAdminSectionById(sectionId) {
-  return ADMIN_SECTIONS.find((section) => section.id === sectionId);
+  const resolvedId = ADMIN_SECTION_LEGACY_IDS[sectionId] ?? sectionId;
+  return ADMIN_SECTIONS.find((section) => section.id === resolvedId);
 }
 
 /** @param {string} [idOrSlug] Section id (`mass`) or URL slug (`mass-times`). */
 export function adminSectionHref(idOrSlug) {
+  const resolvedId = ADMIN_SECTION_LEGACY_IDS[idOrSlug] ?? idOrSlug;
   const section =
-    ADMIN_SECTIONS.find((item) => item.id === idOrSlug) ??
-    ADMIN_SECTIONS.find((item) => item.slug && item.slug === idOrSlug);
+    ADMIN_SECTIONS.find((item) => item.id === resolvedId) ??
+    ADMIN_SECTIONS.find((item) => item.slug && item.slug === idOrSlug) ??
+    (idOrSlug === "email-list"
+      ? ADMIN_SECTIONS.find((item) => item.id === "email")
+      : undefined);
   if (!section?.slug) return ADMIN_ROOT_HREF;
   return `${ADMIN_ROOT_HREF}/${section.slug}`;
 }
@@ -224,7 +227,11 @@ export function resolveAdminSection(segments) {
     return findAdminSectionById(DEFAULT_ADMIN_SECTION_ID);
   }
   if (segments.length > 1) return undefined;
-  return ADMIN_SECTIONS.find((section) => section.slug === segments[0]);
+  const slug = segments[0];
+  if (slug === "email-list") {
+    return findAdminSectionById("email");
+  }
+  return ADMIN_SECTIONS.find((section) => section.slug === slug);
 }
 
 /** Admin section id for a builder pathname, or undefined when outside Admin. */

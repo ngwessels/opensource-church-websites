@@ -27,7 +27,7 @@ import {
 /** Firestore caps a batch at 500 writes. */
 const WRITE_BATCH_LIMIT = 450;
 
-const AUDIT_CONTEXT = { builderPath: "/builder/admin/email-list", section: "emailList" };
+const AUDIT_CONTEXT = { builderPath: "/builder/admin/email", section: "email" };
 
 function getDb() {
   const db = getFirebaseAdminFirestore();

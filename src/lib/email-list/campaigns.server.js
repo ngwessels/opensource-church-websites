@@ -34,7 +34,7 @@ import { listSendableSubscribers, markSubscribersSent } from "./subscribers.serv
  */
 const UNSUBSCRIBE_VARIABLE = "%recipient.unsubscribe_url%";
 
-const AUDIT_CONTEXT = { builderPath: "/builder/admin/email-list", section: "emailList" };
+const AUDIT_CONTEXT = { builderPath: "/builder/admin/email", section: "email" };
 
 function getDb() {
   const db = getFirebaseAdminFirestore();
