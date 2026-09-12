@@ -406,11 +406,11 @@ export function EmailIntegrationPanel() {
                 className="mt-1"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Leave blank and nothing changes. With an address here, anything sent to{" "}
-                <strong>{settings?.domain || "your sending domain"}</strong> — replies to email the site
-                sent, and brand-new messages — is forwarded to that mailbox. Mailgun needs the
-                MX records for the sending domain pointed at it for inbound mail to arrive, and the
-                address has to be outside the sending domain so mail cannot loop.
+                Leave blank for no forwarding. With an address here, Mailgun forwards everything sent
+                to <strong>{settings?.domain || "your sending domain"}</strong> — replies to email the
+                site sent, and brand-new messages — on to that mailbox. Inbound mail only reaches
+                Mailgun once the sending domain&apos;s MX records point at it, and the address has to be
+                outside the sending domain so mail cannot loop.
               </p>
             </div>
             <div>
