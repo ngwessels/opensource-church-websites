@@ -85,6 +85,8 @@ Each deployment is a single parish. Data lives in one Firebase project.
 | `integrations/mailgun` | Mailgun alias, API key, and webhook state — server-only, closed to all clients in `firestore.rules` |
 | `emailMessages/{id}` | One record per sent email, keyed by Mailgun message id, with its latest delivery status |
 | `emailEvents/{id}` | Individual Mailgun events (delivered, opened, clicked, failed, …) |
+| `emailSubscribers/{email}` | Emailing list members, keyed by address, with status and unsubscribe token |
+| `emailCampaigns/{id}` | One record per send to the list, with recipient counts and Mailgun batch ids |
 
 ## Donor accounts (My Giving)
 
@@ -135,6 +137,20 @@ Mailgun is configured in the app at **Builder → Admin → Email** (alias + API
 - `POST /api/mailgun/webhook/[token]` — inbound events. The token is a per-site secret generated on save; supplying a signing key additionally verifies Mailgun's payload signature.
 
 Local webhook testing needs a public URL, e.g. `cloudflared tunnel --url http://localhost:3000`, with `NEXT_PUBLIC_SITE_URL` set to the tunnel origin before saving settings so the registered webhook points at it.
+
+## Emailing list
+
+**Builder → Admin → Email List** keeps the parish subscriber list and sends rich messages to it. List management works without Mailgun; sending is disabled until Mailgun is connected.
+
+- `src/lib/email-list/schema.js` — address parsing, subscriber/campaign normalization, batching, and send validation. Pure and unit-tested.
+- `src/lib/email-list/html.js` — HTML allowlist, plain-text alternative, and the email shell with the unsubscribe footer. Pure and unit-tested.
+- `src/lib/email-list/subscribers.server.js` — list CRUD and token-based unsubscribes. Every write goes through the Admin SDK; `emailSubscribers` is read-only for clients.
+- `src/lib/email-list/campaigns.server.js` — renders the message, downloads attachments (10 MB total cap), sends in batches, and records the campaign.
+- `src/lib/email-list/bulletin-email.server.js` — composes the bulletin email offered after a bulletin upload.
+- `src/lib/mailgun/bulk.server.js` — multipart Mailgun send with attachments and `recipient-variables`, so one call covers up to 900 addresses and each gets a personal unsubscribe link plus `List-Unsubscribe` headers.
+- `GET/POST /api/email-list/unsubscribe` — public. GET renders a confirmation page (scanners cannot opt people out); POST handles that form and RFC 8058 one-click unsubscribe.
+
+Sends appear in `emailMessages` under the kinds `list_campaign` and `bulletin_campaign`, so Admin → Email shows their delivery status alongside every other email.
 
 ## reCAPTCHA v3 (local)
 
