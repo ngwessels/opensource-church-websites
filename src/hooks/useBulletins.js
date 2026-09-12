@@ -7,8 +7,8 @@ export function useBulletins() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (options = {}) => {
+    if (!options.silent) setLoading(true);
     try {
       const res = await fetch("/api/bulletins");
       const data = await res.json();

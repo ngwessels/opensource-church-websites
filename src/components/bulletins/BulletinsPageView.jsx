@@ -9,6 +9,7 @@ import {
   BulletinAdminControls,
   deleteBulletin,
 } from "@/components/bulletins/BulletinAdminControls";
+import { BulletinEmailPrompt } from "@/components/bulletins/BulletinEmailPrompt";
 import { useAuth } from "@/hooks/useAuth";
 import { toBuilderHref } from "@/lib/builder/navigation";
 import {
@@ -44,6 +45,7 @@ function BulletinArchive({
   pageSlug,
   editing = false,
   onBulletinsRefresh,
+  onBulletinUploaded,
   getIdToken,
 }) {
   const groups = groupBulletinsByYearMonth(bulletins);
@@ -137,7 +139,12 @@ function BulletinArchive({
   return (
     <aside className="w-full lg:w-1/3">
       <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        {editing && <BulletinAdminControls onChange={onBulletinsRefresh} />}
+        {editing && (
+          <BulletinAdminControls
+            onChange={onBulletinsRefresh}
+            onBulletinUploaded={onBulletinUploaded}
+          />
+        )}
 
         {years.length === 0 ? (
           editing ? (
@@ -199,6 +206,16 @@ export function BulletinsPageView({
   const { user } = useAuth();
   const dateParam = searchParams.get("date");
   const [displayBulletins, setDisplayBulletins] = useState(bulletins);
+  const [emailPrompt, setEmailPrompt] = useState(
+    /** @type {{ bulletin: Record<string, any>, subscriberCount: number } | null} */ (null),
+  );
+
+  const handleBulletinUploaded = (bulletin, audience) => {
+    setEmailPrompt({
+      bulletin,
+      subscriberCount: audience.subscribed,
+    });
+  };
 
   useEffect(() => {
     if (editing) {
@@ -252,6 +269,15 @@ export function BulletinsPageView({
     );
   }
 
+  const emailPromptCard =
+    emailPrompt && editing ? (
+      <BulletinEmailPrompt
+        bulletin={emailPrompt.bulletin}
+        subscriberCount={emailPrompt.subscriberCount}
+        onDismiss={() => setEmailPrompt(null)}
+      />
+    ) : null;
+
   if (sorted.length === 0 && editing) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8">
@@ -264,9 +290,11 @@ export function BulletinsPageView({
             pageSlug={slugPath}
             editing={editing}
             onBulletinsRefresh={onBulletinsRefresh}
+            onBulletinUploaded={handleBulletinUploaded}
             getIdToken={getIdToken}
           />
           <div className="min-w-0 flex-1">
+            {emailPromptCard}
             <h1 className="mb-4 text-2xl font-semibold uppercase tracking-wide text-zinc-900">
               {page?.title || "Bulletins"}
             </h1>
@@ -290,10 +318,12 @@ export function BulletinsPageView({
           pageSlug={slugPath}
           editing={editing}
           onBulletinsRefresh={onBulletinsRefresh}
+          onBulletinUploaded={handleBulletinUploaded}
           getIdToken={getIdToken}
         />
 
         <div className="min-w-0 flex-1">
+          {emailPromptCard}
           <h1 className="mb-4 text-2xl font-semibold uppercase tracking-wide text-zinc-900">
             Bulletin
           </h1>

@@ -31,7 +31,7 @@ export function BulletinsPanel() {
           bulletins={bulletins}
           editing
           pageSlug={ADMIN_BULLETINS_PATH}
-          onBulletinsRefresh={refresh}
+          onBulletinsRefresh={() => refresh({ silent: true })}
         />
       </Suspense>
     </div>

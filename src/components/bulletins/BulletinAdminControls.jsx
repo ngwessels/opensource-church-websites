@@ -4,7 +4,6 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { BulletinEmailPrompt } from "@/components/bulletins/BulletinEmailPrompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,35 +31,35 @@ export async function deleteBulletin(bulletinId, { getIdToken } = {}) {
 }
 
 /**
- * Number of people a new bulletin could be emailed to, or 0 when email is not
- * set up. A failure here never blocks the upload that just succeeded.
+ * Whether a bulletin can be emailed after upload. A failure here never blocks
+ * the upload that just succeeded.
  *
  * @param {string} idToken
- * @returns {Promise<number>}
+ * @returns {Promise<{ mailgunConfigured: boolean, subscribed: number }>}
  */
 async function loadEmailAudience(idToken) {
   try {
     const res = await fetch("/api/admin/email-list/subscribers", {
       headers: { Authorization: `Bearer ${idToken}` },
     });
-    if (!res.ok) return 0;
+    if (!res.ok) return { mailgunConfigured: false, subscribed: 0 };
     const data = await res.json();
-    return data.mailgunConfigured ? Number(data.stats?.subscribed) || 0 : 0;
+    return {
+      mailgunConfigured: Boolean(data.mailgunConfigured),
+      subscribed: Number(data.stats?.subscribed) || 0,
+    };
   } catch {
-    return 0;
+    return { mailgunConfigured: false, subscribed: 0 };
   }
 }
 
-export function BulletinAdminControls({ onChange }) {
+export function BulletinAdminControls({ onChange, onBulletinUploaded }) {
   const { user } = useAuth();
   const [date, setDate] = useState(getDefaultBulletinDate);
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
-  const [emailPrompt, setEmailPrompt] = useState(
-    /** @type {{ bulletin: Record<string, any>, subscriberCount: number } | null} */ (null),
-  );
   const inputRef = useRef(null);
 
   const handleUpload = async (e) => {
@@ -130,8 +129,8 @@ export function BulletinAdminControls({ onChange }) {
       await onChange?.();
 
       const audience = await loadEmailAudience(token);
-      if (audience) {
-        setEmailPrompt({ bulletin: data.bulletin, subscriberCount: audience });
+      if (audience.mailgunConfigured) {
+        onBulletinUploaded?.(data.bulletin, audience);
       }
     } catch (err) {
       setError(err.message || "Failed to upload bulletin.");
@@ -144,13 +143,6 @@ export function BulletinAdminControls({ onChange }) {
 
   return (
     <div className="mb-4 border-b border-zinc-200 pb-4">
-      {emailPrompt && (
-        <BulletinEmailPrompt
-          bulletin={emailPrompt.bulletin}
-          subscriberCount={emailPrompt.subscriberCount}
-          onDismiss={() => setEmailPrompt(null)}
-        />
-      )}
       <h3 className="mb-3 text-sm font-semibold text-zinc-900">Add bulletin</h3>
       <div className="space-y-3">
         <div className="space-y-1">
