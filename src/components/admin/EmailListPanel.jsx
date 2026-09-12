@@ -113,9 +113,7 @@ export function EmailListPanel({ onOpenSettings }) {
     /** @type {Record<string, any> | null} */ (null),
   );
   const [deliveryReport, setDeliveryReport] = useState(
-    /** @type {{ summary: Record<string, number>, recipients: Array<Record<string, any>> } | null} */ (
-      null,
-    ),
+    /** @type {{ summary: Record<string, number>, recipients: Array<Record<string, any>> } | null} */ (null),
   );
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   const [deliveryError, setDeliveryError] = useState("");
