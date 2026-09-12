@@ -392,17 +392,22 @@ export function UsersAdmin({ users }) {
                               </SelectContent>
                             </Select>
                           )}
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            disabled={busy || removeBlockedReason !== null}
+                          {/* Disabled buttons drop pointer events, so the wrapper carries the tooltip. */}
+                          <span
+                            className="inline-flex"
                             title={removeBlockedReason ?? undefined}
-                            onClick={() => handleRemove(u)}
                           >
-                            <Trash2 className="size-3.5" />
-                            {removing === u.id ? "Removing…" : "Remove"}
-                          </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              disabled={busy || removeBlockedReason !== null}
+                              onClick={() => handleRemove(u)}
+                            >
+                              <Trash2 className="size-3.5" />
+                              {removing === u.id ? "Removing…" : "Remove"}
+                            </Button>
+                          </span>
                         </div>
                       </td>
                     </tr>
