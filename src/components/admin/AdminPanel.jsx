@@ -10,6 +10,7 @@ import { MassTimesForm } from "@/components/mass-times/MassTimesForm";
 import { DonationsManager } from "@/components/donations/DonationsManager";
 import { AuditLogPanel } from "@/components/admin/AuditLogPanel";
 import { AdminDocumentation } from "@/components/admin/AdminDocumentation";
+import { BulletinsPanel } from "@/components/admin/BulletinsPanel";
 import { EmailIntegrationPanel } from "@/components/admin/EmailIntegrationPanel";
 import { PrayerIntentionsPanel } from "@/components/admin/PrayerIntentionsPanel";
 import { MediaPicker } from "@/components/media/MediaPicker";
@@ -269,6 +270,8 @@ export function AdminPanel({ siteConfig, pageCount = 0, sectionId = "overview" }
             onSave={(massTimes) => saveConfig({ massTimes })}
           />
         )}
+
+        {sectionId === "bulletins" && <BulletinsPanel />}
 
         {sectionId === "export" && <SiteDataExport siteName={config.name} />}
       </div>

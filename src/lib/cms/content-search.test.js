@@ -115,4 +115,15 @@ describe("cms/content-search", () => {
     assert.equal(result.results[0].source, "adminDocumentation");
     assert.equal(result.results[0].builderUrl, "/builder/admin/documentation");
   });
+
+  it("searchInSiteData links bulletins to the admin bulletin archive", () => {
+    const result = searchInSiteData({
+      query: "Pentecost",
+      bulletins: [{ id: "b1", title: "Pentecost Sunday", date: "2026-05-24" }],
+    });
+
+    assert.equal(result.total, 1);
+    assert.equal(result.results[0].source, "bulletin");
+    assert.equal(result.results[0].builderUrl, "/builder/admin/bulletins?date=2026-05-24");
+  });
 });

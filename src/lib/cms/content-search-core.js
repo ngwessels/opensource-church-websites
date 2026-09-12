@@ -82,6 +82,12 @@ export function builderEditUrl(slug) {
   return `/builder/edit${path}`;
 }
 
+/** @param {string} [date] Bulletin date (`YYYY-MM-DD`). */
+export function builderBulletinUrl(date) {
+  const base = "/builder/admin/bulletins";
+  return date ? `${base}?date=${encodeURIComponent(date)}` : base;
+}
+
 /**
  * @param {object} params
  * @param {string} params.query
@@ -246,7 +252,7 @@ export function searchInSiteData({
         bulletinId: bulletin.id,
         field: bulletin.title ? "title" : "date",
         snippet: makeSnippet(combined, q),
-        builderUrl: "/builder/edit",
+        builderUrl: builderBulletinUrl(bulletin.date),
       });
     }
   }
