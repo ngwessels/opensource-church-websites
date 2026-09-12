@@ -82,29 +82,46 @@ export async function registerMailgunWebhooks(config, webhookUrl) {
  * @param {string} webhookUrl
  * @returns {Promise<void>}
  */
+async function mailgunErrorMessage(res, action) {
+  const payload = await res.json().catch(() => ({}));
+  const detail =
+    (typeof payload?.message === "string" && payload.message) ||
+    (typeof payload?.Reason === "string" && payload.Reason) ||
+    "";
+  return detail
+    ? `Mailgun returned ${res.status} ${action}: ${detail}`
+    : `Mailgun returned ${res.status} ${action}.`;
+}
+
 async function upsertWebhook(config, id, webhookUrl) {
   const base = `${config.apiBaseUrl}/v3/domains/${config.domain}/webhooks`;
+  const form = new FormData();
+  form.set("url", webhookUrl);
 
   const update = await fetch(`${base}/${id}`, {
     method: "PUT",
-    headers: { ...authHeaders(config), "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ url: webhookUrl }).toString(),
+    headers: authHeaders(config),
+    body: form,
   });
 
   if (update.ok) return;
 
   if (update.status !== 404) {
-    throw new Error(`Mailgun returned ${update.status} updating the ${id} webhook.`);
+    throw new Error(await mailgunErrorMessage(update, `updating the ${id}`));
   }
+
+  const createForm = new FormData();
+  createForm.set("id", id);
+  createForm.set("url", webhookUrl);
 
   const create = await fetch(base, {
     method: "POST",
-    headers: { ...authHeaders(config), "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ id, url: webhookUrl }).toString(),
+    headers: authHeaders(config),
+    body: createForm,
   });
 
   if (!create.ok) {
-    throw new Error(`Mailgun returned ${create.status} creating the ${id} webhook.`);
+    throw new Error(await mailgunErrorMessage(create, `creating the ${id}`));
   }
 }
 

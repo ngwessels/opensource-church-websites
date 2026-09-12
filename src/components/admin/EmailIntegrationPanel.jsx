@@ -163,9 +163,10 @@ export function EmailIntegrationPanel() {
       setStatus(data);
       setForm((prev) => ({ ...prev, apiKey: "", webhookSigningKey: "" }));
       const failed = data.registration?.failed || [];
+      const lastError = data.settings?.webhook?.lastError || "";
       setNotice(
         failed.length > 0
-          ? `Saved. Mailgun accepted the key, but ${failed.length} webhook(s) could not be registered.`
+          ? `Saved. Mailgun accepted the key, but ${failed.length} webhook(s) could not be registered.${lastError ? ` ${lastError}` : ""}`
           : `Saved. Mailgun is connected and ${data.registration?.registered?.length ?? 0} webhooks are registered.`,
       );
     } catch (err) {

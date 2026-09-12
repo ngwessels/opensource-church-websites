@@ -56,7 +56,7 @@ export const MAILGUN_WEBHOOK_IDS = /** @type {const} */ ([
   "clicked",
   "permanent_fail",
   "temporary_fail",
-  "unsubscribe",
+  "unsubscribed",
   "complained",
 ]);
 
