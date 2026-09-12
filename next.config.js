@@ -10,6 +10,16 @@ const nextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  async redirects() {
+    return [
+      // Bulletins moved from the page editor into Builder → Admin.
+      {
+        source: "/builder/bulletins",
+        destination: "/builder/admin/bulletins",
+        permanent: false,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

@@ -113,6 +113,13 @@ export const ADMIN_SECTIONS = [
     group: "site",
   },
   {
+    id: "bulletins",
+    slug: "bulletins",
+    label: "Bulletins",
+    description: "Upload PDFs and manage the bulletin archive",
+    group: "site",
+  },
+  {
     id: "users",
     slug: "users",
     label: "Admin Users",
@@ -159,7 +166,6 @@ export const ADMIN_SECTIONS = [
 /** Builder pages reachable from menus rather than the destination rail. */
 export const BUILDER_UTILITY_PAGES = [
   { id: "account", label: "Account", href: "/builder/account" },
-  { id: "bulletins", label: "Bulletins", href: "/builder/bulletins" },
 ];
 
 export const ADMIN_ROOT_HREF = "/builder/admin";

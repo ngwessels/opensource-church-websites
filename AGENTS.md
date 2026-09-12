@@ -63,6 +63,7 @@ If the file is already on the public web, use `upload_media` with `sourceUrl` in
 
 - `list_bulletins`, `create_bulletin`, `delete_bulletin`
 - Workflow: set page `pageType: "bulletins"` → `create_media_upload_link` (local PDF) or `upload_media` with `sourceUrl` (`folderId: "documents-root"`) → `create_bulletin` → `publish_page` if needed
+- Admins can also upload, preview, and delete bulletins in the builder under **Admin → Bulletins** (`/builder/admin/bulletins`), independent of the public bulletins page
 
 **Admin documentation**
 
