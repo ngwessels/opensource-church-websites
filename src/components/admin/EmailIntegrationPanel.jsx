@@ -268,10 +268,15 @@ export function EmailIntegrationPanel() {
       </Card>
 
       {usingEnv && (
-        <Card className="p-4 text-sm text-muted-foreground">
-          This site is using the legacy <code>MAILGUN_API_KEY</code>, <code>MAILGUN_DOMAIN</code>, and{" "}
-          <code>MAILGUN_FROM</code> environment variables. Saving an alias and API key below moves the
-          settings into the app, where delivery tracking is available.
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">
+            This site is using the legacy{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-foreground">MAILGUN_API_KEY</code>,{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-foreground">MAILGUN_DOMAIN</code>, and{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-foreground">MAILGUN_FROM</code>{" "}
+            environment variables. Saving an alias and API key below moves the settings into the app,
+            where delivery tracking is available.
+          </p>
         </Card>
       )}
 
@@ -303,8 +308,12 @@ export function EmailIntegrationPanel() {
             className="mt-1"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Either <code>parish@mg.yourparish.org</code> or <code>Name &lt;parish@mg.yourparish.org&gt;</code>.
-            The sending domain is taken from this address.
+            Either{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-foreground">parish@mg.yourparish.org</code> or{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-foreground">
+              Name &lt;parish@mg.yourparish.org&gt;
+            </code>
+            . The sending domain is taken from this address.
           </p>
         </div>
 
