@@ -369,7 +369,7 @@ Your site works without Mailgun. Contact form submissions are always saved and v
 You bring your own Mailgun account, and you configure it inside your website — no redeploy needed.
 
 1. Create an account at [mailgun.com](https://www.mailgun.com) (the free tier is enough for most parishes) and add your sending domain. Mailgun shows the DNS records to add at your registrar.
-2. Copy your **private API key** from **Mailgun → API keys**.
+2. Copy the **Primary Private API key** from **Mailgun → Account Settings → API Security** (Admin or Developer role). Do not use a Domain Sending key — those can send mail but cannot register delivery webhooks.
 3. In your site, open **Builder → Admin → Email** and enter:
    - **Alias** — the address email is sent from, e.g. `Parish Office <parish@mg.yourparish.org>`. The sending domain is taken from this address.
    - **Mailgun API key** — the key you copied.

@@ -4,10 +4,12 @@ import { describe, it } from "node:test";
 import {
   applyEventToMessageStatus,
   emailEventRank,
+  isWebhookPermissionError,
   messageDocId,
   normalizeMailgunWebhookEvent,
   normalizeMessageId,
   normalizeMessageKind,
+  summarizeWebhookRegistrationFailures,
 } from "./events.js";
 
 /**
@@ -160,5 +162,29 @@ describe("mailgun/events", () => {
     assert.equal(normalizeMessageKind("form_notification"), "form_notification");
     assert.equal(normalizeMessageKind("unknown-kind"), "other");
     assert.equal(normalizeMessageKind(undefined), "other");
+  });
+});
+
+describe("mailgun webhook registration helpers", () => {
+  it("detects Mailgun webhook permission errors", () => {
+    assert.equal(
+      isWebhookPermissionError(
+        "Mailgun returned 401 updating the delivered: API key does not have sufficient permissions to perform this action",
+      ),
+      true,
+    );
+    assert.equal(isWebhookPermissionError("Mailgun returned 404 creating the delivered."), false);
+  });
+
+  it("collapses repeated permission failures into one hint", () => {
+    const summary = summarizeWebhookRegistrationFailures([
+      {
+        id: "delivered",
+        error:
+          "Mailgun returned 401 updating the delivered: API key does not have sufficient permissions to perform this action",
+      },
+    ]);
+    assert.match(summary, /Primary Private API key/);
+    assert.doesNotMatch(summary, /accepted:/);
   });
 });

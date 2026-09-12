@@ -5,7 +5,7 @@ import { getAdminActorFromRequest } from "@/lib/cms/auth";
 import { getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { sendMailgunTestEmail } from "@/lib/mailgun/client";
-import { MAILGUN_WEBHOOK_IDS } from "@/lib/mailgun/events";
+import { MAILGUN_WEBHOOK_IDS, summarizeWebhookRegistrationFailures } from "@/lib/mailgun/events";
 import { describeMailgunForwardingAction } from "@/lib/mailgun/forwarding";
 import {
   deleteMailgunForwardingRoute,
@@ -115,7 +115,7 @@ export async function PUT(request) {
           url: webhookUrl,
           events: registration.registered,
           registeredAt: registration.registered.length > 0 ? new Date().toISOString() : "",
-          lastError: registration.failed.map((f) => `${f.id}: ${f.error}`).join("; "),
+          lastError: summarizeWebhookRegistrationFailures(registration.failed),
         },
         inboundRoute: forwarding.route,
       },
@@ -204,7 +204,7 @@ export async function POST(request) {
               url: webhookUrl,
               events: registration.registered,
               registeredAt: registration.registered.length > 0 ? new Date().toISOString() : "",
-              lastError: registration.failed.map((f) => `${f.id}: ${f.error}`).join("; "),
+              lastError: summarizeWebhookRegistrationFailures(registration.failed),
             },
             inboundRoute: forwarding.route,
           },

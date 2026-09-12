@@ -65,6 +65,38 @@ export const MAILGUN_WEBHOOK_IDS = /** @type {const} */ ([
   "complained",
 ]);
 
+/** Shown when Mailgun accepts the key for domain reads but rejects webhook writes. */
+export const MAILGUN_WEBHOOK_PERMISSION_HINT =
+  "Use Mailgun's Primary Private API key (Admin or Developer role) from Account Settings → API Security. Domain Sending keys and Support/Analyst keys cannot register webhooks.";
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isWebhookPermissionError(error) {
+  const message = typeof error === "string" ? error.toLowerCase() : "";
+  return (
+    message.includes("401") &&
+    (message.includes("sufficient permissions") ||
+      message.includes("not authorized") ||
+      message.includes("forbidden"))
+  );
+}
+
+/**
+ * Collapse repetitive webhook registration failures into one operator-facing line.
+ *
+ * @param {Array<{ id: string, error: string }>} failed
+ * @returns {string}
+ */
+export function summarizeWebhookRegistrationFailures(failed) {
+  if (!Array.isArray(failed) || failed.length === 0) return "";
+  if (failed.every((entry) => isWebhookPermissionError(entry.error))) {
+    return MAILGUN_WEBHOOK_PERMISSION_HINT;
+  }
+  return failed.map((entry) => `${entry.id}: ${entry.error}`).join("; ");
+}
+
 export const EMAIL_EVENT_LABELS = {
   accepted: "Accepted",
   rejected: "Rejected",

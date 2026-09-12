@@ -1,6 +1,6 @@
 import "server-only";
 
-import { MAILGUN_WEBHOOK_IDS } from "./events.js";
+import { isWebhookPermissionError, MAILGUN_WEBHOOK_IDS } from "./events.js";
 
 /**
  * @typedef {import('./settings.js').MailgunConfig} MailgunConfig
@@ -69,7 +69,11 @@ export async function registerMailgunWebhooks(config, webhookUrl) {
       await upsertWebhook(config, id, webhookUrl);
       registered.push(id);
     } catch (err) {
-      failed.push({ id, error: err instanceof Error ? err.message : "Registration failed" });
+      const error = err instanceof Error ? err.message : "Registration failed";
+      failed.push({ id, error });
+      // Domain Sending keys and read-only RBAC keys fail every webhook the same
+      // way — stop after the first so we do not hammer Mailgun eight times.
+      if (isWebhookPermissionError(error)) break;
     }
   }
 

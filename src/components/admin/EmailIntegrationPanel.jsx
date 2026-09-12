@@ -16,7 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
-import { emailStatusLabel } from "@/lib/mailgun/events";
+import {
+  emailStatusLabel,
+  isWebhookPermissionError,
+  MAILGUN_WEBHOOK_PERMISSION_HINT,
+} from "@/lib/mailgun/events";
 import { MAILGUN_REGIONS, MAILGUN_REGION_LABELS } from "@/lib/mailgun/settings";
 
 const EMPTY_FORM = {
@@ -340,7 +344,9 @@ export function EmailIntegrationPanel() {
               and add (or verify) your sending domain.
             </li>
             <li>
-              Copy your private API key from <strong>Mailgun → API keys</strong>.
+              Copy the <strong>Primary Private API key</strong> from{" "}
+              <strong>Mailgun → Account Settings → API Security</strong> (Admin or Developer role).
+              Domain Sending keys cannot register delivery webhooks.
             </li>
             <li>Enter the alias you want email to come from, paste the key, and save.</li>
           </ol>
@@ -372,7 +378,11 @@ export function EmailIntegrationPanel() {
             type="password"
             value={form.apiKey}
             onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-            placeholder={settings?.hasApiKey ? `Saved (${settings.apiKeyPreview}) — leave blank to keep` : "key-…"}
+            placeholder={
+              settings?.hasApiKey
+                ? `Saved (${settings.apiKeyPreview}) — leave blank to keep`
+                : "Primary Private API key (key-…)"
+            }
             autoComplete="off"
             className="mt-1"
           />
@@ -524,7 +534,12 @@ export function EmailIntegrationPanel() {
           </div>
         )}
         {settings?.webhook?.lastError && (
-          <p className="text-sm text-destructive">Last webhook error: {settings.webhook.lastError}</p>
+          <div className="space-y-2">
+            <p className="text-sm text-destructive">Last webhook error: {settings.webhook.lastError}</p>
+            {isWebhookPermissionError(settings.webhook.lastError) && (
+              <p className="text-sm text-muted-foreground">{MAILGUN_WEBHOOK_PERMISSION_HINT}</p>
+            )}
+          </div>
         )}
         {settings?.configured && (
           <div className="flex flex-wrap items-end gap-2">
