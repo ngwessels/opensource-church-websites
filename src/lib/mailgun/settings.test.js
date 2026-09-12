@@ -95,6 +95,81 @@ describe("mailgun/settings", () => {
     assert.equal(ok.ok, true);
   });
 
+  it("normalizes the forward-to address and route state", () => {
+    const settings = normalizeMailgunSettings({
+      alias: "a@mg.example.org",
+      forwardTo: "  Office@Example.ORG ",
+      inboundRoute: { id: " route-1 ", forwardTo: "Office@Example.ORG", expression: "x" },
+    });
+    assert.equal(settings.forwardTo, "office@example.org");
+    assert.equal(settings.inboundRoute.id, "route-1");
+    assert.equal(settings.inboundRoute.forwardTo, "office@example.org");
+
+    const empty = normalizeMailgunSettings(null);
+    assert.equal(empty.forwardTo, "");
+    assert.deepEqual(empty.inboundRoute, {
+      id: "",
+      expression: "",
+      forwardTo: "",
+      updatedAt: "",
+      lastError: "",
+    });
+  });
+
+  it("validates the forward-to address", () => {
+    const base = { alias: "a@mg.example.org", apiKey: "k" };
+
+    assert.equal(validateMailgunSettings(normalizeMailgunSettings(base)).ok, true);
+    assert.equal(
+      validateMailgunSettings(normalizeMailgunSettings({ ...base, forwardTo: "office@example.org" })).ok,
+      true,
+    );
+
+    const malformed = validateMailgunSettings(
+      normalizeMailgunSettings({ ...base, forwardTo: "not-an-email" }),
+    );
+    assert.equal(malformed.ok, false);
+
+    // Forwarding to the sending domain would bounce mail straight back at Mailgun.
+    const loop = validateMailgunSettings(
+      normalizeMailgunSettings({ ...base, forwardTo: "office@mg.example.org" }),
+    );
+    assert.equal(loop.ok, false);
+
+    const loopViaOverride = validateMailgunSettings(
+      normalizeMailgunSettings({
+        alias: "a@example.org",
+        apiKey: "k",
+        sendingDomain: "mg.example.org",
+        forwardTo: "office@mg.example.org",
+      }),
+    );
+    assert.equal(loopViaOverride.ok, false);
+  });
+
+  it("reports forwarding state to the UI", () => {
+    const off = describeMailgunSettings({ alias: "a@mg.example.org", apiKey: "k" }, {});
+    assert.equal(off.forwardTo, "");
+    assert.equal(off.inboundRoute.active, false);
+
+    const on = describeMailgunSettings(
+      {
+        alias: "a@mg.example.org",
+        apiKey: "k",
+        forwardTo: "office@example.org",
+        inboundRoute: {
+          id: "route-1",
+          expression: 'match_recipient(".*@mg\\.example\\.org")',
+          forwardTo: "office@example.org",
+        },
+      },
+      {},
+    );
+    assert.equal(on.forwardTo, "office@example.org");
+    assert.equal(on.inboundRoute.active, true);
+    assert.equal(on.inboundRoute.id, "route-1");
+  });
+
   it("masks secrets", () => {
     assert.equal(maskSecret(""), "");
     assert.equal(maskSecret("abc"), "••••");

@@ -53,6 +53,7 @@ export async function saveMailgunSettings(patch, options = {}) {
     ...current,
     ...patch,
     webhook: { ...current.webhook, ...(patch.webhook || {}) },
+    inboundRoute: { ...current.inboundRoute, ...(patch.inboundRoute || {}) },
     updatedAt: new Date().toISOString(),
     updatedBy: options.actorEmail ?? current.updatedBy,
   });

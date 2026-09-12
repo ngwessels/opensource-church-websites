@@ -27,7 +27,10 @@ const EMPTY_FORM = {
   webhookSigningKey: "",
   trackOpens: true,
   trackClicks: true,
+  forwardTo: "",
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * @param {string} status
@@ -106,6 +109,7 @@ export function EmailIntegrationPanel() {
       sendingDomain: data.settings.sendingDomain || "",
       trackOpens: data.settings.trackOpens !== false,
       trackClicks: data.settings.trackClicks !== false,
+      forwardTo: data.settings.forwardTo || "",
     }));
     return data;
   }, [getAuthHeaders]);
@@ -138,6 +142,13 @@ export function EmailIntegrationPanel() {
   }, [user?.uid, loadStatus, loadMessages]);
 
   async function saveSettings() {
+    const forwardTo = form.forwardTo.trim();
+    if (forwardTo && !EMAIL_RE.test(forwardTo)) {
+      setNotice("");
+      setError("Enter a valid address in “Forward replies and inbound email to”, or leave it blank.");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setNotice("");
@@ -152,6 +163,7 @@ export function EmailIntegrationPanel() {
           sendingDomain: form.sendingDomain,
           trackOpens: form.trackOpens,
           trackClicks: form.trackClicks,
+          forwardTo,
           enabled: true,
           // Secrets are only sent when the admin typed a new value.
           ...(form.apiKey.trim() ? { apiKey: form.apiKey } : {}),
@@ -165,10 +177,16 @@ export function EmailIntegrationPanel() {
       const failed = data.registration?.failed || [];
       const lastError = data.settings?.webhook?.lastError || "";
       setNotice(
-        failed.length > 0
-          ? `Saved. Mailgun accepted the key, but ${failed.length} webhook(s) could not be registered.${lastError ? ` ${lastError}` : ""}`
-          : `Saved. Mailgun is connected and ${data.registration?.registered?.length ?? 0} webhooks are registered.`,
+        [
+          failed.length > 0
+            ? `Saved. Mailgun accepted the key, but ${failed.length} webhook(s) could not be registered.${lastError ? ` ${lastError}` : ""}`
+            : `Saved. Mailgun is connected and ${data.registration?.registered?.length ?? 0} webhooks are registered.`,
+          data.forwarding?.summary,
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
+      if (data.forwarding?.error) setError(data.forwarding.error);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save email settings.");
     } finally {
@@ -198,7 +216,15 @@ export function EmailIntegrationPanel() {
           break;
         case "register_webhooks":
           setStatus(data);
-          setNotice(`Registered ${data.registration?.registered?.length ?? 0} Mailgun webhooks.`);
+          setNotice(
+            [
+              `Registered ${data.registration?.registered?.length ?? 0} Mailgun webhooks.`,
+              data.forwarding?.summary,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          );
+          if (data.forwarding?.error) setError(data.forwarding.error);
           break;
         default:
           break;
@@ -264,6 +290,12 @@ export function EmailIntegrationPanel() {
           <p className="text-sm text-foreground">
             Sending as <strong>{settings.alias}</strong> through <strong>{settings.domain}</strong>
             {usingEnv ? " (from MAILGUN_* environment variables)" : ""}.
+          </p>
+        )}
+        {settings?.inboundRoute?.active && (
+          <p className="text-sm text-foreground">
+            Replies and inbound email are forwarded to{" "}
+            <strong>{settings.inboundRoute.forwardTo}</strong>.
           </p>
         )}
       </Card>
@@ -364,6 +396,25 @@ export function EmailIntegrationPanel() {
               </p>
             </div>
             <div>
+              <Label htmlFor="mailgun-forward-to">Forward replies and inbound email to</Label>
+              <Input
+                id="mailgun-forward-to"
+                type="email"
+                value={form.forwardTo}
+                onChange={(e) => setForm({ ...form, forwardTo: e.target.value })}
+                placeholder="Optional — office@yourparish.org"
+                autoComplete="off"
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Leave blank for no forwarding. With an address here, Mailgun forwards everything sent
+                to <strong>{settings?.domain || "your sending domain"}</strong> — replies to email the
+                site sent, and brand-new messages — on to that mailbox. Inbound mail only reaches
+                Mailgun once the sending domain&apos;s MX records point at it, and the address has to be
+                outside the sending domain so mail cannot loop.
+              </p>
+            </div>
+            <div>
               <Label htmlFor="mailgun-signing-key">Webhook signing key</Label>
               <Input
                 id="mailgun-signing-key"
@@ -431,7 +482,23 @@ export function EmailIntegrationPanel() {
             done={Boolean(settings?.configured && settings?.trackClicks)}
             label="Click tracking enabled"
           />
+          {settings?.forwardTo && (
+            <CheckItem
+              done={Boolean(settings?.inboundRoute?.active)}
+              label={`Inbound email forwarded to ${settings.forwardTo}`}
+              detail={
+                settings?.inboundRoute?.active
+                  ? `Mailgun route ${settings.inboundRoute.expression}`
+                  : "Save again to register the Mailgun route."
+              }
+            />
+          )}
         </ul>
+        {settings?.inboundRoute?.lastError && (
+          <p className="text-sm text-destructive">
+            Last forwarding error: {settings.inboundRoute.lastError}
+          </p>
+        )}
         {status?.webhookUrl && (
           <div>
             <Label htmlFor="mailgun-webhook-url">Webhook URL</Label>

@@ -82,7 +82,7 @@ Each deployment is a single parish. Data lives in one Firebase project.
 | `donations/{id}` | Stripe donation records |
 | `subscriptions/{id}` | Active recurring gift state (synced from Stripe webhooks) |
 | `formSubmissions/{id}` | CMS form responses |
-| `integrations/mailgun` | Mailgun alias, API key, and webhook state — server-only, closed to all clients in `firestore.rules` |
+| `integrations/mailgun` | Mailgun alias, API key, webhook state, and the optional inbound forwarding route — server-only, closed to all clients in `firestore.rules` |
 | `emailMessages/{id}` | One record per sent email, keyed by Mailgun message id, with its latest delivery status |
 | `emailEvents/{id}` | Individual Mailgun events (delivered, opened, clicked, failed, …) |
 
@@ -132,7 +132,11 @@ Mailgun is configured in the app at **Builder → Admin → Email** (alias + API
 - `src/lib/mailgun/send.server.js` — the single outbound transport; records each send in `emailMessages`.
 - `src/lib/mailgun/events.js` — webhook payload normalization and the status fold (`delivered` → `opened` → `clicked`, failures win). Pure and unit-tested.
 - `src/lib/mailgun/webhooks.server.js` — registers the delivery webhooks with Mailgun over its API.
+- `src/lib/mailgun/forwarding.js` — the optional forward-to mailbox: route expression, description tag, and the create/update/delete/none plan. Pure and unit-tested.
+- `src/lib/mailgun/forwarding.server.js` — applies that plan through the Mailgun Routes API (`/v3/routes`).
 - `POST /api/mailgun/webhook/[token]` — inbound events. The token is a per-site secret generated on save; supplying a signing key additionally verifies Mailgun's payload signature.
+
+Forwarding is a Mailgun **route**, not an app endpoint: mail never touches the site. Saving a `forwardTo` address upserts one account-level route with expression `match_recipient(".*@<sending domain>")`, priority 10, and a single `forward("<address>")` action — no `stop()`, so any route an operator added by hand still runs. The route is identified by its description (`church-website-forward:<domain>`), so a lost route id is reclaimed instead of duplicated, and `integrations/mailgun.inboundRoute` holds `{ id, expression, forwardTo, updatedAt, lastError }`. Clearing the address deletes the route; disconnecting Mailgun deletes it along with the webhooks. Mailgun failures are reported and stored in `inboundRoute.lastError` rather than thrown, so saving settings never fails because of forwarding.
 
 Local webhook testing needs a public URL, e.g. `cloudflared tunnel --url http://localhost:3000`, with `NEXT_PUBLIC_SITE_URL` set to the tunnel origin before saving settings so the registered webhook points at it.
 
