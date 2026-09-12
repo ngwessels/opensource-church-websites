@@ -62,9 +62,7 @@ export function BulletinAdminControls({ onChange }) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
   const [emailPrompt, setEmailPrompt] = useState(
-    /** @type {{ bulletin: Record<string, any>, mailgunConfigured: boolean, subscribed: number } | null} */ (
-      null,
-    ),
+    /** @type {{ bulletin: Record<string, any>, mailgunConfigured: boolean, subscribed: number } | null} */ (null),
   );
   const inputRef = useRef(null);
 
