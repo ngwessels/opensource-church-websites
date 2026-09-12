@@ -4,7 +4,7 @@
  *
  * The body comes from a trusted admin editor, but it is still reduced to a
  * small allowlist: mail clients drop most of what a browser accepts, and a
- * pasted fragment should never carry script or style into an inbox.
+ * pasted fragment should never carry script or a stylesheet into an inbox.
  */
 
 const ALLOWED_TAGS = new Set([
