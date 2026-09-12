@@ -16,6 +16,15 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { MODULE_LABELS } from "@/lib/design/admin-tokens";
+import {
+  ADMIN_SECTION_ICONS,
+  BUILDER_DESTINATION_ICONS,
+} from "@/lib/design/builder-nav-icons";
+import {
+  ADMIN_SECTIONS,
+  adminSectionHref,
+  builderDestinationsForRole,
+} from "@/lib/builder/navigation";
 
 const SOURCE_LABELS = {
   site: "Site settings",
@@ -25,6 +34,32 @@ const SOURCE_LABELS = {
   bulletin: "Bulletin",
   media: "Media library",
 };
+
+/** Every builder capability as a jump target, so nesting never hides a feature. */
+const NAV_TARGETS = [
+  ...builderDestinationsForRole("admin").map((destination) => ({
+    id: `destination-${destination.id}`,
+    label: destination.label,
+    context: "Builder",
+    href: destination.href,
+    Icon: BUILDER_DESTINATION_ICONS[destination.id],
+    keywords: `${destination.label} ${destination.description}`,
+  })),
+  ...ADMIN_SECTIONS.filter((section) => section.id !== "overview").map((section) => ({
+    id: `admin-${section.id}`,
+    label: section.label,
+    context: "Admin",
+    href: adminSectionHref(section.id),
+    Icon: ADMIN_SECTION_ICONS[section.id],
+    keywords: `${section.label} ${section.description}`,
+  })),
+];
+
+function matchNavTargets(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return NAV_TARGETS;
+  return NAV_TARGETS.filter((target) => target.keywords.toLowerCase().includes(q));
+}
 
 function formatResultMeta(result) {
   if (result.source === "module") {
@@ -112,13 +147,16 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
     return () => clearTimeout(timer);
   }, [open, query, runSearch]);
 
+  const navMatches = matchNavTargets(query);
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl" showCloseButton>
         <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle>Search site content</DialogTitle>
+          <DialogTitle>Search &amp; jump to</DialogTitle>
           <DialogDescription>
-            Find names, events, and text across pages, modules, settings, bulletins, and media.
+            Go to any builder section, or find names, events, and text across pages, modules,
+            settings, bulletins, and media.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,7 +167,7 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for a person, event, page title…"
+              placeholder="Search a person, page title, or section…"
               className="pl-9"
             />
           </div>
@@ -138,6 +176,31 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
         <div className="min-h-0 max-h-[50vh] flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="px-2 py-2">
+            {navMatches.length > 0 && (
+              <div className="mb-1">
+                <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                  Jump to
+                </p>
+                <ul>
+                  {navMatches.map((target) => (
+                    <li key={target.id}>
+                      <Link
+                        href={target.href}
+                        onClick={() => handleOpenChange(false)}
+                        className="flex items-center gap-3 rounded-md px-4 py-2 hover:bg-muted"
+                      >
+                        {target.Icon && (
+                          <target.Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                        )}
+                        <span className="text-sm font-medium text-foreground">{target.label}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">{target.context}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {loading && (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -149,9 +212,19 @@ export function SiteContentSearchDialog({ open, onOpenChange }) {
               <p className="px-4 py-8 text-center text-sm text-destructive">{error}</p>
             )}
 
-            {!loading && !error && query.trim() && results.length === 0 && (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No matches for &ldquo;{query.trim()}&rdquo;
+            {!loading &&
+              !error &&
+              query.trim() &&
+              results.length === 0 &&
+              navMatches.length === 0 && (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No matches for &ldquo;{query.trim()}&rdquo;
+                </p>
+              )}
+
+            {!loading && !error && results.length > 0 && (
+              <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                Site content
               </p>
             )}
 
