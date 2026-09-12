@@ -16,6 +16,15 @@
  */
 
 /**
+ * @typedef {object} MailgunRouteState
+ * @property {string} id Mailgun route id, empty when no route is registered.
+ * @property {string} expression Route filter as registered with Mailgun.
+ * @property {string} forwardTo Address the registered route forwards to.
+ * @property {string} updatedAt
+ * @property {string} lastError
+ */
+
+/**
  * @typedef {object} MailgunSettings
  * @property {boolean} enabled
  * @property {string} alias Sending alias, e.g. `St Mary Parish <parish@mg.stmary.org>`.
@@ -25,7 +34,9 @@
  * @property {string} webhookSigningKey Optional Mailgun HTTP webhook signing key.
  * @property {boolean} trackOpens
  * @property {boolean} trackClicks
+ * @property {string} forwardTo Optional mailbox that receives replies and inbound mail.
  * @property {MailgunWebhookState} webhook
+ * @property {MailgunRouteState} inboundRoute
  * @property {string} updatedAt
  * @property {string} updatedBy
  */
@@ -125,6 +136,21 @@ function normalizeWebhookState(raw) {
 
 /**
  * @param {unknown} raw
+ * @returns {MailgunRouteState}
+ */
+function normalizeRouteState(raw) {
+  const r = raw && typeof raw === "object" ? /** @type {Record<string, unknown>} */ (raw) : {};
+  return {
+    id: str(r.id),
+    expression: str(r.expression),
+    forwardTo: str(r.forwardTo).toLowerCase(),
+    updatedAt: str(r.updatedAt),
+    lastError: str(r.lastError),
+  };
+}
+
+/**
+ * @param {unknown} raw
  * @returns {MailgunSettings}
  */
 export function normalizeMailgunSettings(raw) {
@@ -140,7 +166,9 @@ export function normalizeMailgunSettings(raw) {
     webhookSigningKey: str(s.webhookSigningKey),
     trackOpens: s.trackOpens !== false,
     trackClicks: s.trackClicks !== false,
+    forwardTo: str(s.forwardTo).toLowerCase(),
     webhook: normalizeWebhookState(s.webhook),
+    inboundRoute: normalizeRouteState(s.inboundRoute),
     updatedAt: str(s.updatedAt),
     updatedBy: str(s.updatedBy),
   };
@@ -161,6 +189,18 @@ export function validateMailgunSettings(settings) {
   }
   if (settings.sendingDomain && !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(settings.sendingDomain)) {
     return { ok: false, error: "Sending domain must be a domain name, e.g. mg.yourparish.org." };
+  }
+  if (settings.forwardTo) {
+    if (!EMAIL_RE.test(settings.forwardTo)) {
+      return { ok: false, error: "Forward replies to must be an email address, e.g. office@yourparish.org." };
+    }
+    const domain = resolveSendingDomain(settings);
+    if (domain && settings.forwardTo.endsWith(`@${domain}`)) {
+      return {
+        ok: false,
+        error: `Forward replies to cannot be an address on ${domain} — mail would loop back into Mailgun. Use a mailbox you actually read, e.g. a Gmail or Outlook address.`,
+      };
+    }
   }
   return { ok: true };
 }
@@ -277,7 +317,16 @@ export function resolveMailgunConfig(settings, env = {}) {
  *   hasWebhookSigningKey: boolean,
  *   trackOpens: boolean,
  *   trackClicks: boolean,
+ *   forwardTo: string,
  *   webhook: { registered: boolean, url: string, events: string[], registeredAt: string, lastError: string },
+ *   inboundRoute: {
+ *     active: boolean,
+ *     id: string,
+ *     expression: string,
+ *     forwardTo: string,
+ *     updatedAt: string,
+ *     lastError: string,
+ *   },
  *   updatedAt: string,
  *   updatedBy: string,
  * }}
@@ -299,12 +348,21 @@ export function describeMailgunSettings(settings, env = {}) {
     hasWebhookSigningKey: Boolean(normalized.webhookSigningKey),
     trackOpens: normalized.trackOpens,
     trackClicks: normalized.trackClicks,
+    forwardTo: normalized.forwardTo,
     webhook: {
       registered: Boolean(normalized.webhook.url && normalized.webhook.events.length > 0),
       url: normalized.webhook.url,
       events: normalized.webhook.events,
       registeredAt: normalized.webhook.registeredAt,
       lastError: normalized.webhook.lastError,
+    },
+    inboundRoute: {
+      active: Boolean(normalized.inboundRoute.id && normalized.inboundRoute.forwardTo),
+      id: normalized.inboundRoute.id,
+      expression: normalized.inboundRoute.expression,
+      forwardTo: normalized.inboundRoute.forwardTo,
+      updatedAt: normalized.inboundRoute.updatedAt,
+      lastError: normalized.inboundRoute.lastError,
     },
     updatedAt: normalized.updatedAt,
     updatedBy: normalized.updatedBy,

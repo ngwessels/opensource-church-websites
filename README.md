@@ -382,6 +382,17 @@ Once connected, every email the site sends is listed under **Admin → Email** w
 
 If your site later moves to a different domain, open **Admin → Email** and click **Re-register webhooks**.
 
+### Optional — forward replies and inbound email
+
+By default nobody reads the mailbox your site sends from, so a parishioner who hits *Reply* is talking to nothing. Under **Admin → Email → Advanced**, put a real mailbox in **Forward replies and inbound email to** — e.g. `office@yourparish.org` — and Mailgun forwards everything addressed to your sending domain there: replies to email the site sent, and any brand-new message someone writes to an address on that domain.
+
+Two things to know:
+
+- **Inbound mail needs MX records.** Mailgun can only receive mail for your sending domain once that domain's MX records point at Mailgun (**Mailgun → Domain settings → DNS records**). Without them, outbound email still works, but nothing arrives to forward.
+- **The address must be outside the sending domain.** Forwarding `parish@mg.yourparish.org` to another `@mg.yourparish.org` address would loop, so the site refuses to save it.
+
+Clear the field and save to turn forwarding off again. The Email tab shows whether the forwarding rule is live, and **Re-register webhooks** re-creates it if you ever delete it by hand in Mailgun.
+
 ### Environment variables instead (optional)
 
 `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` are still honoured for existing deployments, and are used when nothing is configured in the Builder. Settings saved in the Builder take precedence and are the only way to get delivery tracking. On App Hosting the env-var route uses the Mailgun block in [`apphosting.yaml`](apphosting.yaml).

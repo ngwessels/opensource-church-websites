@@ -6,6 +6,11 @@ import { getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/fire
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { sendMailgunTestEmail } from "@/lib/mailgun/client";
 import { MAILGUN_WEBHOOK_IDS } from "@/lib/mailgun/events";
+import { describeMailgunForwardingAction } from "@/lib/mailgun/forwarding";
+import {
+  deleteMailgunForwardingRoute,
+  syncMailgunForwardingRoute,
+} from "@/lib/mailgun/forwarding.server";
 import {
   buildMailgunWebhookUrl,
   describeMailgunSettings,
@@ -33,9 +38,10 @@ export const maxDuration = 60;
  * Mailgun integration settings.
  *
  * GET    — current status (secrets masked)
- * PUT    — save alias + API key, verify with Mailgun, register webhooks
+ * PUT    — save alias + API key, verify with Mailgun, register webhooks and the
+ *          inbound forwarding route
  * POST   — { action: "send_test" | "register_webhooks" }
- * DELETE — disconnect and remove the webhooks we registered
+ * DELETE — disconnect and remove the webhooks and route we registered
  */
 export async function GET(request) {
   try {
@@ -62,7 +68,15 @@ export async function PUT(request) {
     const current = await getMailgunSettings();
     const candidate = normalizeMailgunSettings({
       ...current,
-      ...pickDefined(body, ["alias", "region", "sendingDomain", "trackOpens", "trackClicks", "enabled"]),
+      ...pickDefined(body, [
+        "alias",
+        "region",
+        "sendingDomain",
+        "trackOpens",
+        "trackClicks",
+        "forwardTo",
+        "enabled",
+      ]),
       // A blank secret means "keep the stored one" so admins can edit the alias
       // without retyping their key.
       apiKey: keepOrReplaceSecret(current.apiKey, body.apiKey),
@@ -86,6 +100,13 @@ export async function PUT(request) {
       ? await registerMailgunWebhooks(config, webhookUrl)
       : { registered: [], failed: [] };
 
+    // Clearing the address removes the route, so forwarding stops as soon as
+    // the field is emptied.
+    const forwarding = await syncMailgunForwardingRoute(config, {
+      forwardTo: candidate.forwardTo,
+      route: current.inboundRoute,
+    });
+
     const saved = await saveMailgunSettings(
       {
         ...candidate,
@@ -96,6 +117,7 @@ export async function PUT(request) {
           registeredAt: registration.registered.length > 0 ? new Date().toISOString() : "",
           lastError: registration.failed.map((f) => `${f.id}: ${f.error}`).join("; "),
         },
+        inboundRoute: forwarding.route,
       },
       { actorEmail: actor.email },
     );
@@ -110,7 +132,12 @@ export async function PUT(request) {
         path: "integrations/mailgun",
         apiRoute: "/api/admin/email",
       },
-      summary: `Updated Mailgun email settings (${saved.alias})`,
+      summary: [
+        `Updated Mailgun email settings (${saved.alias})`,
+        describeMailgunForwardingAction(forwarding.plan),
+      ]
+        .filter(Boolean)
+        .join(" — "),
       before: auditSnapshot(current),
       after: auditSnapshot(saved),
       context: { builderPath: "/builder/admin", section: "email" },
@@ -120,6 +147,11 @@ export async function PUT(request) {
       ...(await buildStatusResponse(saved)),
       domainState: verification.state,
       registration,
+      forwarding: {
+        action: forwarding.plan.action,
+        summary: describeMailgunForwardingAction(forwarding.plan),
+        error: forwarding.error,
+      },
     });
   } catch (err) {
     return errorResponse(err);
@@ -157,6 +189,13 @@ export async function POST(request) {
         const secret = settings.webhook.secret || generateWebhookSecret();
         const webhookUrl = buildMailgunWebhookUrl(await siteBaseUrl(), secret);
         const registration = await registerMailgunWebhooks(config, webhookUrl);
+        // Re-registering is the repair button, so push the forwarding route
+        // back out even when nothing about it changed.
+        const forwarding = await syncMailgunForwardingRoute(config, {
+          forwardTo: settings.forwardTo,
+          route: settings.inboundRoute,
+          force: true,
+        });
         const saved = await saveMailgunSettings(
           {
             webhook: {
@@ -167,10 +206,19 @@ export async function POST(request) {
               registeredAt: registration.registered.length > 0 ? new Date().toISOString() : "",
               lastError: registration.failed.map((f) => `${f.id}: ${f.error}`).join("; "),
             },
+            inboundRoute: forwarding.route,
           },
           { actorEmail: actor.email },
         );
-        return NextResponse.json({ ...(await buildStatusResponse(saved)), registration });
+        return NextResponse.json({
+          ...(await buildStatusResponse(saved)),
+          registration,
+          forwarding: {
+            action: forwarding.plan.action,
+            summary: describeMailgunForwardingAction(forwarding.plan),
+            error: forwarding.error,
+          },
+        });
       }
 
       default:
@@ -192,6 +240,14 @@ export async function DELETE(request) {
     const config = resolveMailgunConfig(current, {});
     if (config.configured) {
       await deleteMailgunWebhooks(config);
+      if (current.inboundRoute.id) {
+        await deleteMailgunForwardingRoute(config, current.inboundRoute.id).catch((err) => {
+          console.warn(
+            "[mailgun] Could not remove the forwarding route:",
+            err instanceof Error ? err.message : err,
+          );
+        });
+      }
     }
     await deleteMailgunSettings();
 
