@@ -209,7 +209,7 @@ export function AdminDocumentation() {
           action: "update",
           resource: { type: "admin_documentation", path: "site/adminDocumentation" },
           summary: "Saved admin documentation",
-          context: { builderPath: "/builder/admin", section: "documentation" },
+          context: { builderPath: "/builder/admin/documentation", section: "documentation" },
         });
       } else {
         const { setDoc } = await import("firebase/firestore");

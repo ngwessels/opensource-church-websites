@@ -135,7 +135,7 @@ Config shape: `{ moduleInstanceId, title, description, submitLabel, notification
 2. `update_module` with intro copy / notification emails
 3. `publish_page` — public submissions go to `POST /api/prayer-intentions/submit`
 4. Gemini moderates each submission (`GOOGLE_AI_API_KEY`); spam / non-prayer / negative-impact entries are stored as `rejected` for Admin audit; others are `approved`
-5. Review under **Admin → Prayer Intentions** (`/builder/admin?tab=prayer`); configure prayer group emails and send weekly digests (Vercel cron Monday 15:00 UTC, or Send digest now)
+5. Review under **Admin → Prayer Intentions** (`/builder/admin/prayer-intentions`); configure prayer group emails and send weekly digests (Vercel cron Monday 15:00 UTC, or Send digest now)
 
 **Donation pages**
 

@@ -228,7 +228,7 @@ export async function PUT(request) {
       summary: "Updated prayer intentions settings",
       before: { prayerIntentions: before },
       after: { prayerIntentions: after },
-      context: { builderPath: "/builder/admin", section: "prayer" },
+      context: { builderPath: "/builder/admin/prayer-intentions", section: "prayer" },
     });
 
     return NextResponse.json({ settings: after });

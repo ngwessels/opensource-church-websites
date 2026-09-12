@@ -87,6 +87,7 @@
   --admin-accent: oklch(0.52 0.13 200);
   --admin-toolbar-height: 65px;
   --admin-page-nav-height: 60px;
+  --builder-rail-width: 76px;
   --admin-module-tray-height: 320px;
   --sitemap-bottom-bar-height: 140px;
   /* Parish site (overridden per-site in PublicSite) */

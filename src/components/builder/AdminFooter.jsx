@@ -27,7 +27,7 @@ export function AdminFooter({
 }) {
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0"
+      className="pointer-events-none fixed bottom-0 left-0 right-0 lg:left-[var(--builder-rail-width)]"
       style={{ zIndex: ADMIN_Z.pageNav }}
     >
       {dropError && (

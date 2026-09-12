@@ -679,7 +679,7 @@ export function SitemapEditor({ initialNodes }) {
 
           <div
             id="navAdminNewBackground"
-            className="sitemap-bottom-bar fixed inset-x-0 bottom-0 z-50 border-t border-border bg-muted/95 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md"
+            className="sitemap-bottom-bar fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-muted/95 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md lg:left-[var(--builder-rail-width)]"
           >
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/60 px-6 py-3">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

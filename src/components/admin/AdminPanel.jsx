@@ -3,7 +3,6 @@
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { CheckCircle2, Circle } from "lucide-react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { SocialMediaEditor } from "@/components/builder/SocialMediaEditor";
@@ -28,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { adminSectionHref, findAdminSectionById } from "@/lib/builder/navigation";
 import { requestPublicRevalidate } from "@/lib/cache/revalidate-client";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { auditedUpdateDoc, buildClientAuditActor } from "@/lib/firestore/audited-mutation";
@@ -39,26 +39,13 @@ import { sanitizeSocialMediaConfig } from "@/lib/site/social-media";
 import { DEFAULT_SITE_TIMEZONE, SITE_TIMEZONE_OPTIONS } from "@/lib/site/timezone";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
-const ADMIN_PANEL_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "settings", label: "Settings" },
-  { id: "donations", label: "Donations" },
-  { id: "prayer", label: "Prayer Intentions" },
-  { id: "users", label: "Admin Users" },
-  { id: "documentation", label: "Documentation" },
-  { id: "audit", label: "Audit Log" },
-  { id: "mass", label: "Sacraments & Mass Times" },
-  { id: "export", label: "Data Export" },
-];
-
-export function AdminPanel({ siteConfig, pageCount = 0 }) {
+export function AdminPanel({ siteConfig, pageCount = 0, sectionId = "overview" }) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
-  const searchParams = useSearchParams();
-  const [tab, setTab] = useState("overview");
   const [users, setUsers] = useState([]);
   const [config, setConfig] = useState(siteConfig || {});
   const [mediaSize, setMediaSize] = useState(0);
+  const section = findAdminSectionById(sectionId);
 
   useEffect(() => {
     const db = getFirebaseFirestore();
@@ -73,13 +60,6 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
       unsubMedia();
     };
   }, []);
-
-  useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam && ADMIN_PANEL_TABS.some((item) => item.id === tabParam)) {
-      setTab(tabParam);
-    }
-  }, [searchParams]);
 
   const saveConfig = async (partial) => {
     const db = getFirebaseFirestore();
@@ -98,7 +78,7 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
         action: "update",
         resource: { type: "site_config", id: SITE_CONFIG_ID, path: "site/config" },
         summary: "Updated site settings in admin",
-        context: { builderPath: "/builder/admin", section: tab },
+        context: { builderPath: adminSectionHref(sectionId), section: sectionId },
       });
     } else {
       const { updateDoc } = await import("firebase/firestore");
@@ -110,27 +90,17 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
     });
   };
 
-  const tabs = ADMIN_PANEL_TABS;
-
   return (
     <div className="flex h-full flex-col bg-muted">
-      <div className="flex border-b border-border bg-card">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`px-6 py-3 text-sm font-medium ${
-              tab === t.id ? "admin-tab-active text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <header className="border-b border-border bg-card px-6 py-4">
+        <h1 className="text-lg font-semibold text-foreground">{section?.label || "Admin"}</h1>
+        {section?.description && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{section.description}</p>
+        )}
+      </header>
 
       <div className="flex-1 overflow-auto p-6">
-        {tab === "overview" && (
+        {sectionId === "overview" && (
           <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
@@ -164,7 +134,7 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
           </div>
         )}
 
-        {tab === "settings" && (
+        {sectionId === "settings" && (
           <div className="mx-auto max-w-2xl space-y-4">
             <Card className="p-4 space-y-4">
               <div>
@@ -276,28 +246,28 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
           </div>
         )}
 
-        {tab === "donations" && (
+        {sectionId === "donations" && (
           <DonationsManager
             siteName={config.name || config.seo?.title || "Donations Report"}
           />
         )}
 
-        {tab === "prayer" && <PrayerIntentionsPanel />}
+        {sectionId === "prayer" && <PrayerIntentionsPanel />}
 
-        {tab === "users" && <UsersAdmin users={users} />}
+        {sectionId === "users" && <UsersAdmin users={users} />}
 
-        {tab === "documentation" && <AdminDocumentation />}
+        {sectionId === "documentation" && <AdminDocumentation />}
 
-        {tab === "audit" && <AuditLogPanel users={users} />}
+        {sectionId === "audit" && <AuditLogPanel users={users} />}
 
-        {tab === "mass" && (
+        {sectionId === "mass" && (
           <MassTimesEditor
             massTimes={config.massTimes || {}}
             onSave={(massTimes) => saveConfig({ massTimes })}
           />
         )}
 
-        {tab === "export" && <SiteDataExport siteName={config.name} />}
+        {sectionId === "export" && <SiteDataExport siteName={config.name} />}
       </div>
     </div>
   );
@@ -378,7 +348,7 @@ function SearchAppearanceEditor({ seo, onSave }) {
               action: "create",
               resource: { type: "media", path: "media/pictures-root" },
               summary: `Uploaded favicon ${file.name}`,
-              context: { builderPath: "/builder/admin", section: "settings" },
+              context: { builderPath: "/builder/admin/settings", section: "settings" },
             }
           : undefined,
       );
