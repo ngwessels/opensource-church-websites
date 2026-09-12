@@ -73,6 +73,23 @@ export function BulletinEmailPrompt({ bulletin, subscriberCount, onDismiss }) {
     );
   }
 
+  if (subscriberCount <= 0) {
+    return (
+      <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+        <p className="text-xs text-zinc-700">
+          <strong>{label}</strong> is published. Add people to your{" "}
+          <a className="underline" href={adminSectionHref("emailList")}>
+            email list
+          </a>{" "}
+          before you can email bulletins to everyone.
+        </p>
+        <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
       <p className="text-xs text-zinc-700">
