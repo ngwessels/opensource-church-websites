@@ -409,11 +409,18 @@ export function EmailIntegrationPanel() {
         <ul className="space-y-2 text-sm">
           <CheckItem done={Boolean(settings?.configured)} label="Mailgun connected" />
           <CheckItem
-            done={Boolean(status?.settings?.webhook?.registered)}
-            label={`Webhooks registered (${(status?.webhookEvents || []).join(", ")})`}
+            done={Boolean(settings?.webhook?.registered)}
+            label="Webhooks registered"
+            detail={(settings?.webhook?.events?.length ? settings.webhook.events : status?.webhookEvents || []).join(", ")}
           />
-          <CheckItem done={Boolean(settings?.trackOpens)} label="Open tracking enabled" />
-          <CheckItem done={Boolean(settings?.trackClicks)} label="Click tracking enabled" />
+          <CheckItem
+            done={Boolean(settings?.configured && settings?.trackOpens)}
+            label="Open tracking enabled"
+          />
+          <CheckItem
+            done={Boolean(settings?.configured && settings?.trackClicks)}
+            label="Click tracking enabled"
+          />
         </ul>
         {status?.webhookUrl && (
           <div>
@@ -511,13 +518,16 @@ export function EmailIntegrationPanel() {
   );
 }
 
-/** @param {{ done: boolean, label: string }} props */
-function CheckItem({ done, label }) {
+/** @param {{ done: boolean, label: string, detail?: string }} props */
+function CheckItem({ done, label, detail }) {
   const Icon = done ? CheckCircle2 : Circle;
   return (
-    <li className="flex items-center gap-2 text-foreground">
-      <Icon className={`h-4 w-4 ${done ? "text-emerald-600" : "text-muted-foreground/40"}`} />
-      {label}
+    <li className="flex items-start gap-2 text-foreground">
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${done ? "text-emerald-600" : "text-muted-foreground/40"}`} />
+      <span>
+        {label}
+        {detail && <span className="block text-xs text-muted-foreground">{detail}</span>}
+      </span>
     </li>
   );
 }
