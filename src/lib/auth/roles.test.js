@@ -5,18 +5,25 @@ import {
   canAccessBuilder,
   canAccessDonorPortal,
   canManageDonations,
+  filterStaffUsers,
   formatUserRoleLabel,
   getBuilderHomeHref,
   isAdminRole,
   isDonorRole,
   isFinanceRole,
+  isStaffUserRole,
   normalizeUserRole,
+  STAFF_USER_ROLES,
   USER_ROLES,
 } from "./roles.js";
 
 describe("auth/roles", () => {
   it("exports all supported roles", () => {
     assert.deepEqual(USER_ROLES, ["admin", "finance", "member", "donor"]);
+  });
+
+  it("exports staff roles ordered by access level", () => {
+    assert.deepEqual(STAFF_USER_ROLES, ["member", "finance", "admin"]);
   });
 
   describe("normalizeUserRole", () => {
@@ -52,6 +59,52 @@ describe("auth/roles", () => {
       assert.equal(isDonorRole("donor"), true);
       assert.equal(canManageDonations("finance"), true);
       assert.equal(canManageDonations("member"), false);
+    });
+  });
+
+  describe("isStaffUserRole", () => {
+    it("accepts the roles managed in Admin Users", () => {
+      assert.equal(isStaffUserRole("admin"), true);
+      assert.equal(isStaffUserRole("finance"), true);
+      assert.equal(isStaffUserRole("member"), true);
+    });
+
+    it("rejects donor accounts", () => {
+      assert.equal(isStaffUserRole("donor"), false);
+    });
+
+    it("treats missing and unknown roles as member", () => {
+      assert.equal(isStaffUserRole(undefined), true);
+      assert.equal(isStaffUserRole(null), true);
+      assert.equal(isStaffUserRole("editor"), true);
+    });
+  });
+
+  describe("filterStaffUsers", () => {
+    it("drops donor accounts and keeps the rest in order", () => {
+      const users = [
+        { id: "a", role: "donor" },
+        { id: "b", role: "admin" },
+        { id: "c", role: "donor" },
+        { id: "d", role: "finance" },
+        { id: "e", role: "member" },
+        { id: "f" },
+      ];
+      assert.deepEqual(
+        filterStaffUsers(users).map((u) => u.id),
+        ["b", "d", "e", "f"],
+      );
+    });
+
+    it("returns an empty array for missing input", () => {
+      assert.deepEqual(filterStaffUsers(undefined), []);
+      assert.deepEqual(filterStaffUsers([]), []);
+    });
+
+    it("does not mutate the source list", () => {
+      const users = [{ id: "a", role: "donor" }, { id: "b", role: "admin" }];
+      filterStaffUsers(users);
+      assert.equal(users.length, 2);
     });
   });
 
