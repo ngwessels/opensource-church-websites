@@ -106,6 +106,13 @@ export const ADMIN_SECTIONS = [
     group: "site",
   },
   {
+    id: "emailList",
+    slug: "email-list",
+    label: "Email List",
+    description: "Subscribers and messages sent to the parish list",
+    group: "site",
+  },
+  {
     id: "mass",
     slug: "mass-times",
     label: "Sacraments & Mass Times",
@@ -124,13 +131,6 @@ export const ADMIN_SECTIONS = [
     slug: "users",
     label: "Admin Users",
     description: "Who can sign in to the builder",
-    group: "people",
-  },
-  {
-    id: "emailList",
-    slug: "email-list",
-    label: "Email List",
-    description: "Subscribers and messages sent to the parish list",
     group: "people",
   },
   {
