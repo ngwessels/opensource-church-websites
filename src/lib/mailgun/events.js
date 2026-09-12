@@ -8,7 +8,10 @@
  *   | 'unsubscribed' | 'complained' | 'failed' | 'stored'} EmailEventType
  */
 
-/** @typedef {'form_notification' | 'prayer_digest' | 'user_invite' | 'test' | 'other'} EmailMessageKind */
+/**
+ * @typedef {'form_notification' | 'prayer_digest' | 'user_invite' | 'list_campaign'
+ *   | 'bulletin_campaign' | 'test' | 'other'} EmailMessageKind
+ */
 
 /**
  * @typedef {object} EmailEvent
@@ -41,6 +44,8 @@ export const EMAIL_MESSAGE_KINDS = /** @type {const} */ ([
   "form_notification",
   "prayer_digest",
   "user_invite",
+  "list_campaign",
+  "bulletin_campaign",
   "test",
   "other",
 ]);

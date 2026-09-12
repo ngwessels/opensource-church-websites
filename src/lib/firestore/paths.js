@@ -14,6 +14,8 @@ export const COLLECTIONS = {
   integrations: "integrations",
   emailMessages: "emailMessages",
   emailEvents: "emailEvents",
+  emailSubscribers: "emailSubscribers",
+  emailCampaigns: "emailCampaigns",
   mcpTokenLookup: "mcpTokenLookup",
   mcpOAuthClients: "mcpOAuthClients",
   mcpOAuthCodes: "mcpOAuthCodes",

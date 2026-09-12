@@ -12,6 +12,7 @@ import { AuditLogPanel } from "@/components/admin/AuditLogPanel";
 import { AdminDocumentation } from "@/components/admin/AdminDocumentation";
 import { BulletinsPanel } from "@/components/admin/BulletinsPanel";
 import { EmailIntegrationPanel } from "@/components/admin/EmailIntegrationPanel";
+import { EmailListPanel } from "@/components/admin/EmailListPanel";
 import { PrayerIntentionsPanel } from "@/components/admin/PrayerIntentionsPanel";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { SiteDataExport } from "@/components/admin/SiteDataExport";
@@ -255,6 +256,8 @@ export function AdminPanel({ siteConfig, pageCount = 0, sectionId = "overview" }
         )}
 
         {sectionId === "email" && <EmailIntegrationPanel />}
+
+        {sectionId === "emailList" && <EmailListPanel />}
 
         {sectionId === "prayer" && <PrayerIntentionsPanel />}
 

@@ -94,6 +94,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Emailing list. Admins read the list in the builder; every write goes
+    // through the Admin SDK so unsubscribe tokens stay server-controlled.
+    match /emailSubscribers/{subscriberId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /emailCampaigns/{campaignId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /donations/{donationId} {
       allow read: if canManageDonations() || isDonationOwner();
       allow write: if false;

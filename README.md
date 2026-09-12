@@ -399,6 +399,20 @@ Clear the field and save to turn forwarding off again. The Email tab shows wheth
 
 ---
 
+## Emailing list
+
+**Builder → Admin → Email List** holds the addresses of parishioners who want parish email, and lets you write to all of them at once.
+
+- **Build the list** — paste addresses one per line or separated by commas; `Anne Smith <anne@example.org>` works too. You can search the list, unsubscribe or resubscribe someone, remove them, and download a CSV.
+- **Write a message** — a subject, formatted text (bold, headings, lists, links), photos from your Files, and attachments such as a PDF. Send a test to yourself first, then send to everyone.
+- **Email a bulletin** — right after you upload a bulletin PDF, the sidebar offers to email it to the list. Add a short note if you like, and choose whether to attach the PDF as well as link to it.
+
+Every message carries its own unsubscribe link, and anyone who uses it stops receiving email immediately. Delivery, opens, and clicks appear under **Admin → Email** like any other email the site sends.
+
+You can build the list at any time, but **sending needs Mailgun connected** (see above). Until then the send buttons are disabled and the page says so.
+
+---
+
 ## Optional — Bot protection (reCAPTCHA)
 
 Protects donation checkout and form submissions from automated spam.

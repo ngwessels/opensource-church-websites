@@ -3,7 +3,7 @@
 /** @typedef {'ui' | 'mcp' | 'api'} AuditSource */
 
 /**
- * @typedef {'page' | 'module' | 'site_config' | 'nav' | 'media' | 'bulletin' | 'user' | 'admin_documentation' | 'donation_page' | 'form_submission' | 'prayer_intention' | 'email_integration'} AuditResourceType
+ * @typedef {'page' | 'module' | 'site_config' | 'nav' | 'media' | 'bulletin' | 'user' | 'admin_documentation' | 'donation_page' | 'form_submission' | 'prayer_intention' | 'email_integration' | 'email_subscriber' | 'email_campaign'} AuditResourceType
  */
 
 /**
@@ -71,6 +71,8 @@ export const AUDIT_RESOURCE_TYPES = /** @type {const} */ ([
   "form_submission",
   "prayer_intention",
   "email_integration",
+  "email_subscriber",
+  "email_campaign",
 ]);
 
 /** Firestore document size guard (~900 KB JSON). */

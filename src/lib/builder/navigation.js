@@ -127,6 +127,13 @@ export const ADMIN_SECTIONS = [
     group: "people",
   },
   {
+    id: "emailList",
+    slug: "email-list",
+    label: "Email List",
+    description: "Subscribers and messages sent to the parish list",
+    group: "people",
+  },
+  {
     id: "prayer",
     slug: "prayer-intentions",
     label: "Prayer Intentions",

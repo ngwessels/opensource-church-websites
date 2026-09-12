@@ -61,6 +61,17 @@ function formatDateTime(value) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
+/**
+ * List sends go to hundreds of addresses at once, so only name the first few.
+ *
+ * @param {unknown} to
+ */
+function formatRecipients(to) {
+  const recipients = Array.isArray(to) ? to.map(String) : [];
+  if (recipients.length <= 3) return recipients.join(", ") || "—";
+  return `${recipients.slice(0, 3).join(", ")} +${recipients.length - 3} more`;
+}
+
 /** @param {unknown} kind */
 function formatKind(kind) {
   switch (kind) {
@@ -70,6 +81,10 @@ function formatKind(kind) {
       return "Prayer digest";
     case "user_invite":
       return "Admin invite";
+    case "list_campaign":
+      return "Email list";
+    case "bulletin_campaign":
+      return "Bulletin email";
     case "test":
       return "Test email";
     default:
@@ -573,7 +588,7 @@ export function EmailIntegrationPanel() {
                     <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
                       {formatDateTime(row.sentAt)}
                     </td>
-                    <td className="py-2 pr-3">{(row.to || []).join(", ")}</td>
+                    <td className="py-2 pr-3">{formatRecipients(row.to)}</td>
                     <td className="py-2 pr-3 text-muted-foreground">{formatKind(row.kind)}</td>
                     <td className="py-2 pr-3">{row.subject || "—"}</td>
                     <td className="py-2">
