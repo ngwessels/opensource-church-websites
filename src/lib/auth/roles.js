@@ -4,6 +4,13 @@
 export const USER_ROLES = ["admin", "finance", "member", "donor"];
 
 /**
+ * Roles that are managed from Admin → Admin Users, ordered by access level.
+ * Donor accounts come from the public giving flow and belong to Donations.
+ * @type {readonly UserRole[]}
+ */
+export const STAFF_USER_ROLES = ["member", "finance", "admin"];
+
+/**
  * @param {unknown} value
  * @returns {UserRole}
  */
@@ -42,6 +49,21 @@ export function isDonorRole(role) {
 /** @param {unknown} role @returns {boolean} */
 export function canAccessDonorPortal(role) {
   return isDonorRole(role) || isAdminRole(role) || isFinanceRole(role);
+}
+
+/** @param {unknown} role @returns {boolean} */
+export function isStaffUserRole(role) {
+  return !isDonorRole(normalizeUserRole(role));
+}
+
+/**
+ * @template {{ role?: unknown }} T
+ * @param {readonly T[] | null | undefined} users
+ * @returns {T[]}
+ */
+export function filterStaffUsers(users) {
+  if (!users?.length) return [];
+  return users.filter((u) => isStaffUserRole(u?.role));
 }
 
 /** @param {unknown} role @returns {string} */

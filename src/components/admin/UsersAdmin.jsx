@@ -1,24 +1,64 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Trash2, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
-import { formatUserRoleLabel } from "@/lib/auth/roles";
-import { getFounderUserId, isFounderUser } from "@/lib/site/founder";
+import {
+  filterStaffUsers,
+  formatUserRoleLabel,
+  isAdminRole,
+  isFinanceRole,
+  normalizeUserRole,
+  STAFF_USER_ROLES,
+} from "@/lib/auth/roles";
+import { getFounderUserId } from "@/lib/site/founder";
 
 /** @typedef {{ type: "success" | "error", title: string, description?: string, resetLink?: string }} StatusNotice */
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** @type {Record<string, string>} */
+const ROLE_DESCRIPTIONS = {
+  member: "Can sign in, but cannot open the builder.",
+  finance: "Can view donations and configure giving pages.",
+  admin: "Full builder access, including users and settings.",
+};
+
+/** @param {unknown} role @returns {"default" | "secondary" | "outline"} */
+function getRoleBadgeVariant(role) {
+  if (isAdminRole(role)) return "default";
+  if (isFinanceRole(role)) return "secondary";
+  return "outline";
+}
 
 export function UsersAdmin({ users }) {
   const { user } = useAuth();
   const founderId = useMemo(() => getFounderUserId(users), [users]);
+  const staffUsers = useMemo(() => filterStaffUsers(users), [users]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
+  const [emailError, setEmailError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState(null);
   const [roleUpdating, setRoleUpdating] = useState(null);
@@ -47,6 +87,14 @@ export function UsersAdmin({ users }) {
 
   async function handleInvite(event) {
     event.preventDefault();
+
+    const email = inviteEmail.trim();
+    if (!EMAIL_PATTERN.test(email)) {
+      setEmailError(email ? "Enter a valid email address." : "Enter an email address.");
+      return;
+    }
+
+    setEmailError(null);
     setSubmitting(true);
     clearStatus();
 
@@ -56,7 +104,7 @@ export function UsersAdmin({ users }) {
         method: "POST",
         headers,
         body: JSON.stringify({
-          email: inviteEmail.trim(),
+          email,
           displayName: inviteName.trim() || undefined,
           role: inviteRole,
         }),
@@ -159,7 +207,7 @@ export function UsersAdmin({ users }) {
       setStatus({
         type: "success",
         title: "Role updated",
-        description: `User is now a ${role}.`,
+        description: `User is now a ${formatUserRoleLabel(role).toLowerCase()}.`,
       });
     } catch (err) {
       setStatus({
@@ -173,48 +221,75 @@ export function UsersAdmin({ users }) {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <form onSubmit={handleInvite} className="space-y-4 rounded-lg border border-border bg-card p-4">
-        <h3 className="font-medium text-foreground">Invite user</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="invite-email">Email</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              required
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="user@church.org"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="invite-name">Name (optional)</Label>
-            <Input
-              id="invite-name"
-              type="text"
-              value={inviteName}
-              onChange={(e) => setInviteName(e.target.value)}
-              placeholder="Jane Doe"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="invite-role">Role</Label>
-            <select
-              id="invite-role"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-            >
-              <option value="member">Member</option>
-              <option value="finance">Finance</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-        </div>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Sending…" : "Send invitation"}
-        </Button>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <form onSubmit={handleInvite} noValidate>
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>Invite a user</CardTitle>
+            <CardDescription>
+              They receive an email to set a password, then sign in with the role you choose.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="invite-email">Email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                required
+                autoComplete="off"
+                value={inviteEmail}
+                onChange={(e) => {
+                  setInviteEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
+                placeholder="user@church.org"
+                aria-invalid={emailError ? true : undefined}
+                aria-describedby={emailError ? "invite-email-error" : undefined}
+              />
+              {emailError && (
+                <p id="invite-email-error" className="text-xs text-destructive">
+                  {emailError}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-name">
+                Name <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="invite-name"
+                type="text"
+                autoComplete="off"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-role">Role</Label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger id="invite-role" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAFF_USER_ROLES.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {formatUserRoleLabel(role)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS[inviteRole]}</p>
+            <Button type="submit" disabled={submitting}>
+              <UserPlus className="size-3.5" />
+              {submitting ? "Sending…" : "Send invitation"}
+            </Button>
+          </CardFooter>
+        </Card>
       </form>
 
       {status && (
@@ -226,71 +301,149 @@ export function UsersAdmin({ users }) {
         />
       )}
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="py-2">Email</th>
-            <th className="py-2">Role</th>
-            <th className="py-2">Name</th>
-            <th className="py-2">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} className="border-b">
-              <td className="py-2">{u.email}</td>
-              <td className="py-2">
-                {formatUserRoleLabel(u.role)}
-                {isFounderUser(users, u.id) && (
-                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">(owner)</span>
-                )}
-              </td>
-              <td className="py-2">{u.displayName}</td>
-              <td className="py-2">
-                <div className="flex flex-wrap gap-2">
-                  {!isFounderUser(users, u.id) &&
-                    ["member", "finance", "admin"]
-                      .filter((nextRole) => nextRole !== u.role)
-                      .map((nextRole) => (
-                        <Button
-                          key={nextRole}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={roleUpdating === u.id || removing === u.id}
-                          onClick={() => handleRoleChange(u.id, nextRole)}
-                        >
-                          Make {nextRole}
-                        </Button>
-                      ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={
-                      roleUpdating === u.id ||
-                      removing === u.id ||
-                      u.id === user?.uid ||
-                      u.id === founderId
-                    }
-                    onClick={() => handleRemove(u)}
-                    className="text-red-700 hover:text-red-800"
-                  >
-                    {removing === u.id ? "Removing…" : "Remove"}
-                  </Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Site accounts</CardTitle>
+          <CardDescription>
+            {staffUsers.length === 1 ? "1 account" : `${staffUsers.length} accounts`} with member,
+            finance, or admin access. Donor accounts created by online giving are managed on the
+            Donations tab.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
+                <tr>
+                  <th scope="col" className="px-4 py-2 font-medium">
+                    User
+                  </th>
+                  <th scope="col" className="px-4 py-2 font-medium">
+                    Role
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {staffUsers.map((u) => {
+                  const isFounder = u.id === founderId;
+                  const isSelf = u.id === user?.uid;
+                  const busy = roleUpdating === u.id || removing === u.id;
+                  const removeBlockedReason = isFounder
+                    ? "The original site owner cannot be removed."
+                    : isSelf
+                      ? "You cannot remove your own account."
+                      : null;
 
-      <p className="text-xs text-muted-foreground">
-        The first account on a new site becomes admin automatically. After that, invite users here.
-        Members can sign in but cannot access the builder. Finance users can view donations and
-        configure giving pages. Admins have full builder access. Remove deletes their profile and
-        Firebase sign-in. The original site owner cannot be removed or demoted.
-      </p>
+                  return (
+                    <tr key={u.id} className="border-b border-border/60 last:border-0">
+                      <td className="px-4 py-3 align-middle">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-medium text-foreground">
+                            {u.displayName || u.email || "Unknown user"}
+                          </span>
+                          {isFounder && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              Owner
+                            </Badge>
+                          )}
+                          {isSelf && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              You
+                            </Badge>
+                          )}
+                        </div>
+                        {u.displayName && u.email && (
+                          <p className="mt-0.5 text-xs break-all text-muted-foreground">{u.email}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-middle">
+                        <Badge variant={getRoleBadgeVariant(u.role)}>
+                          {formatUserRoleLabel(u.role)}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 align-middle">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {isFounder ? (
+                            <span className="text-xs text-muted-foreground">
+                              Role cannot be changed
+                            </span>
+                          ) : (
+                            <Select
+                              value={normalizeUserRole(u.role)}
+                              disabled={busy}
+                              onValueChange={(role) => handleRoleChange(u.id, role)}
+                            >
+                              <SelectTrigger
+                                size="sm"
+                                className="w-32"
+                                aria-label={`Role for ${u.email || u.displayName || "user"}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STAFF_USER_ROLES.map((role) => (
+                                  <SelectItem key={role} value={role}>
+                                    {formatUserRoleLabel(role)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          {/* Disabled buttons drop pointer events, so the wrapper carries the tooltip. */}
+                          <span
+                            className="inline-flex"
+                            title={removeBlockedReason ?? undefined}
+                          >
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              disabled={busy || removeBlockedReason !== null}
+                              onClick={() => handleRemove(u)}
+                            >
+                              <Trash2 className="size-3.5" />
+                              {removing === u.id ? "Removing…" : "Remove"}
+                            </Button>
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {staffUsers.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                      No member, finance, or admin accounts yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardContent className="space-y-3">
+          <dl className="grid gap-3 sm:grid-cols-3">
+            {STAFF_USER_ROLES.map((role) => (
+              <div key={role} className="space-y-0.5">
+                <dt className="text-xs font-medium text-foreground">
+                  {formatUserRoleLabel(role)}
+                </dt>
+                <dd className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS[role]}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-xs text-muted-foreground">
+            The first account on a new site becomes admin automatically. Remove deletes the profile
+            and the Firebase sign-in. The original site owner cannot be removed or demoted.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -309,7 +462,7 @@ function StatusNotice({ status, copied, onCopy, onDismiss }) {
           : "border-green-200 bg-green-50/80"
       }
     >
-      <CardContent className="space-y-3 pt-4">
+      <CardContent className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <p
