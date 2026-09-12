@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { getDefaultBulletinDate } from "@/lib/bulletins/schema";
 import { getFirebaseFirestore } from "@/lib/firebase/firestore";
 import { COLLECTIONS } from "@/lib/firestore/paths";
+import { BulletinEmailPrompt } from "@/components/bulletins/BulletinEmailPrompt";
 import { uploadMediaFile } from "@/lib/media/upload";
 import { DEFAULT_MEDIA_FOLDERS } from "@/types/firestore";
 
@@ -53,13 +54,18 @@ async function loadEmailAudience(idToken) {
   }
 }
 
-export function BulletinAdminControls({ onChange, onBulletinUploaded }) {
+export function BulletinAdminControls({ onChange }) {
   const { user } = useAuth();
   const [date, setDate] = useState(getDefaultBulletinDate);
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
+  const [emailPrompt, setEmailPrompt] = useState(
+    /** @type {{ bulletin: Record<string, any>, mailgunConfigured: boolean, subscribed: number } | null} */ (
+      null,
+    ),
+  );
   const inputRef = useRef(null);
 
   const handleUpload = async (e) => {
@@ -129,9 +135,11 @@ export function BulletinAdminControls({ onChange, onBulletinUploaded }) {
       await onChange?.();
 
       const audience = await loadEmailAudience(token);
-      if (audience.mailgunConfigured) {
-        onBulletinUploaded?.(data.bulletin, audience);
-      }
+      setEmailPrompt({
+        bulletin: data.bulletin,
+        mailgunConfigured: audience.mailgunConfigured,
+        subscribed: audience.subscribed,
+      });
     } catch (err) {
       setError(err.message || "Failed to upload bulletin.");
     } finally {
@@ -190,6 +198,14 @@ export function BulletinAdminControls({ onChange, onBulletinUploaded }) {
           </Button>
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
+        {emailPrompt && (
+          <BulletinEmailPrompt
+            bulletin={emailPrompt.bulletin}
+            mailgunConfigured={emailPrompt.mailgunConfigured}
+            subscriberCount={emailPrompt.subscribed}
+            onDismiss={() => setEmailPrompt(null)}
+          />
+        )}
       </div>
     </div>
   );

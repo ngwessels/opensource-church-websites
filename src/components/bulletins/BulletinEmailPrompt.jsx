@@ -73,6 +73,23 @@ export function BulletinEmailPrompt({ bulletin, subscriberCount, onDismiss }) {
     );
   }
 
+  if (!mailgunConfigured) {
+    return (
+      <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+        <p className="text-xs text-zinc-700">
+          <strong>{label}</strong> is published. Connect Mailgun under{" "}
+          <a className="underline" href={adminSectionHref("email")}>
+            Admin → Email
+          </a>{" "}
+          before you can email bulletins to your list.
+        </p>
+        <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </div>
+    );
+  }
+
   if (subscriberCount <= 0) {
     return (
       <div className="mb-4 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
