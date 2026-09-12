@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 
 import {
   buildMailgunWebhookUrl,
+  confirmWebhooksManually,
   describeMailgunSettings,
   formatMailgunAlias,
   maskSecret,
+  mergeWebhookRegistrationResult,
   normalizeMailgunSettings,
   parseMailgunAlias,
   resolveMailgunConfig,
@@ -244,5 +246,42 @@ describe("mailgun/settings", () => {
       buildMailgunWebhookUrl("https://www.parish.org/", "abc123"),
       "https://www.parish.org/api/mailgun/webhook/abc123",
     );
+  });
+
+  it("preserves manual webhook confirmation when automatic registration fails", () => {
+    const current = confirmWebhooksManually(
+      { secret: "s3cret", url: "", events: [], registeredAt: "", lastError: "", manual: false },
+      "https://parish.org/api/mailgun/webhook/s3cret",
+    );
+    const merged = mergeWebhookRegistrationResult(
+      current,
+      {
+        registered: [],
+        failed: [
+          {
+            id: "delivered",
+            error:
+              "Mailgun returned 401 updating the delivered: API key does not have sufficient permissions to perform this action",
+          },
+        ],
+      },
+      "https://parish.org/api/mailgun/webhook/s3cret",
+    );
+
+    assert.equal(merged.manual, true);
+    assert.equal(merged.events.length, 8);
+    assert.match(merged.lastError, /Primary Private API key/);
+  });
+
+  it("records manual webhook confirmation", () => {
+    const confirmed = confirmWebhooksManually(
+      { secret: "s3cret", url: "", events: [], registeredAt: "", lastError: "failed", manual: false },
+      "https://parish.org/api/mailgun/webhook/s3cret",
+    );
+
+    assert.equal(confirmed.manual, true);
+    assert.equal(confirmed.events.length, 8);
+    assert.equal(confirmed.lastError, "");
+    assert.equal(confirmed.url, "https://parish.org/api/mailgun/webhook/s3cret");
   });
 });

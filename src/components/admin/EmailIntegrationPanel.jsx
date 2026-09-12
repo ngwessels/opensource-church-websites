@@ -213,7 +213,7 @@ export function EmailIntegrationPanel() {
     }
   }
 
-  /** @param {'send_test' | 'register_webhooks'} action */
+  /** @param {'send_test' | 'register_webhooks' | 'confirm_webhooks'} action */
   async function runAction(action) {
     setBusyAction(action);
     setError("");
@@ -237,13 +237,19 @@ export function EmailIntegrationPanel() {
           setStatus(data);
           setNotice(
             [
-              `Registered ${data.registration?.registered?.length ?? 0} Mailgun webhooks.`,
+              data.settings?.webhook?.manual
+                ? "Automatic registration still failed. Your manual confirmation is unchanged."
+                : `Registered ${data.registration?.registered?.length ?? 0} Mailgun webhooks.`,
               data.forwarding?.summary,
             ]
               .filter(Boolean)
               .join(" "),
           );
           if (data.forwarding?.error) setError(data.forwarding.error);
+          break;
+        case "confirm_webhooks":
+          setStatus(data);
+          setNotice("Marked delivery webhooks as registered. Send a test email to confirm events arrive.");
           break;
         default:
           break;
@@ -497,7 +503,14 @@ export function EmailIntegrationPanel() {
           <CheckItem
             done={Boolean(settings?.webhook?.registered)}
             label="Webhooks registered"
-            detail={(settings?.webhook?.events?.length ? settings.webhook.events : status?.webhookEvents || []).join(", ")}
+            detail={[
+              settings?.webhook?.manual ? "Confirmed manually in Mailgun" : "",
+              (settings?.webhook?.events?.length ? settings.webhook.events : status?.webhookEvents || []).join(
+                ", ",
+              ),
+            ]
+              .filter(Boolean)
+              .join(" — ")}
           />
           <CheckItem
             done={Boolean(settings?.configured && settings?.trackOpens)}
@@ -525,15 +538,35 @@ export function EmailIntegrationPanel() {
           </p>
         )}
         {status?.webhookUrl && (
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="mailgun-webhook-url">Webhook URL</Label>
             <Input id="mailgun-webhook-url" readOnly value={status.webhookUrl} className="mt-1 font-mono text-xs" />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Registered with Mailgun automatically. Re-register it after changing your site domain.
+            <p className="text-xs text-muted-foreground">
+              {settings?.webhook?.registered
+                ? settings.webhook.manual
+                  ? "You added this URL in Mailgun by hand. Update it there if your site domain changes."
+                  : "Registered with Mailgun automatically. Re-register it after changing your site domain."
+                : "Copy this URL into Mailgun for each event type listed above, then click Mark as registered below."}
             </p>
           </div>
         )}
-        {settings?.webhook?.lastError && (
+        {!settings?.webhook?.registered && status?.webhookUrl && (
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Register webhooks in Mailgun</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>
+                In Mailgun open <strong>Sending → Domains → {settings?.domain}</strong> →{" "}
+                <strong>Webhooks</strong>.
+              </li>
+              <li>
+                For each event —{" "}
+                {(status.webhookEvents || []).join(", ")} — paste the webhook URL above.
+              </li>
+              <li>Click <strong>Mark as registered</strong> below once every event points at your site.</li>
+            </ol>
+          </div>
+        )}
+        {settings?.webhook?.lastError && !settings?.webhook?.registered && (
           <div className="space-y-2">
             <p className="text-sm text-destructive">Last webhook error: {settings.webhook.lastError}</p>
             {isWebhookPermissionError(settings.webhook.lastError) && (
@@ -568,6 +601,15 @@ export function EmailIntegrationPanel() {
             >
               {busyAction === "register_webhooks" ? "Registering…" : "Re-register webhooks"}
             </Button>
+            {!settings?.webhook?.registered && (
+              <Button
+                variant="outline"
+                onClick={() => runAction("confirm_webhooks")}
+                disabled={busyAction === "confirm_webhooks"}
+              >
+                {busyAction === "confirm_webhooks" ? "Saving…" : "Mark as registered"}
+              </Button>
+            )}
           </div>
         )}
       </Card>

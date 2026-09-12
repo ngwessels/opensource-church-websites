@@ -4,6 +4,8 @@
  * working when nothing here is configured.
  */
 
+import { MAILGUN_WEBHOOK_IDS, summarizeWebhookRegistrationFailures } from "./events.js";
+
 /** @typedef {'us' | 'eu'} MailgunRegion */
 
 /**
@@ -13,6 +15,7 @@
  * @property {string[]} events Mailgun webhook ids that were registered.
  * @property {string} registeredAt
  * @property {string} lastError
+ * @property {boolean} manual True when an admin confirmed webhooks in Mailgun by hand.
  */
 
 /**
@@ -131,6 +134,7 @@ function normalizeWebhookState(raw) {
     events: Array.isArray(w.events) ? w.events.filter((e) => typeof e === "string") : [],
     registeredAt: str(w.registeredAt),
     lastError: str(w.lastError),
+    manual: w.manual === true,
   };
 }
 
@@ -318,7 +322,14 @@ export function resolveMailgunConfig(settings, env = {}) {
  *   trackOpens: boolean,
  *   trackClicks: boolean,
  *   forwardTo: string,
- *   webhook: { registered: boolean, url: string, events: string[], registeredAt: string, lastError: string },
+ *   webhook: {
+ *     registered: boolean,
+ *     manual: boolean,
+ *     url: string,
+ *     events: string[],
+ *     registeredAt: string,
+ *     lastError: string,
+ *   },
  *   inboundRoute: {
  *     active: boolean,
  *     id: string,
@@ -351,6 +362,7 @@ export function describeMailgunSettings(settings, env = {}) {
     forwardTo: normalized.forwardTo,
     webhook: {
       registered: Boolean(normalized.webhook.url && normalized.webhook.events.length > 0),
+      manual: normalized.webhook.manual,
       url: normalized.webhook.url,
       events: normalized.webhook.events,
       registeredAt: normalized.webhook.registeredAt,
@@ -366,6 +378,67 @@ export function describeMailgunSettings(settings, env = {}) {
     },
     updatedAt: normalized.updatedAt,
     updatedBy: normalized.updatedBy,
+  };
+}
+
+/**
+ * Fold an automatic webhook registration attempt into stored settings. When the
+ * API cannot register anything but the admin already confirmed webhooks
+ * manually, their confirmation is left intact.
+ *
+ * @param {MailgunWebhookState} current
+ * @param {{ registered: string[], failed: Array<{ id: string, error: string }> }} registration
+ * @param {string} webhookUrl
+ * @returns {MailgunWebhookState}
+ */
+export function mergeWebhookRegistrationResult(current, registration, webhookUrl) {
+  const lastError = summarizeWebhookRegistrationFailures(registration.failed);
+  const allRegistered = registration.registered.length === MAILGUN_WEBHOOK_IDS.length;
+
+  if (allRegistered) {
+    return {
+      ...current,
+      url: webhookUrl,
+      events: [...MAILGUN_WEBHOOK_IDS],
+      registeredAt: new Date().toISOString(),
+      lastError: "",
+      manual: false,
+    };
+  }
+
+  if (current.manual && current.events.length > 0 && registration.registered.length === 0) {
+    return {
+      ...current,
+      url: webhookUrl,
+      lastError,
+    };
+  }
+
+  return {
+    ...current,
+    url: webhookUrl,
+    events: registration.registered,
+    registeredAt: registration.registered.length > 0 ? new Date().toISOString() : current.registeredAt,
+    lastError,
+    manual: false,
+  };
+}
+
+/**
+ * Record that an admin added the webhook URL to Mailgun by hand.
+ *
+ * @param {MailgunWebhookState} current
+ * @param {string} webhookUrl
+ * @returns {MailgunWebhookState}
+ */
+export function confirmWebhooksManually(current, webhookUrl) {
+  return {
+    ...current,
+    url: webhookUrl,
+    events: [...MAILGUN_WEBHOOK_IDS],
+    registeredAt: new Date().toISOString(),
+    lastError: "",
+    manual: true,
   };
 }
 

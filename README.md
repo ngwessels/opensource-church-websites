@@ -382,6 +382,8 @@ Once connected, every email the site sends is listed under **Admin → Email** w
 
 If your site later moves to a different domain, open **Admin → Email** and click **Re-register webhooks**.
 
+If your Mailgun API key cannot register webhooks automatically (some Domain Sending keys and read-only roles cannot), copy the **Webhook URL** from **Admin → Email**, add it in **Mailgun → Sending → Domains → your domain → Webhooks** for each event type, then click **Mark as registered**.
+
 ### Optional — forward replies and inbound email
 
 By default nobody reads the mailbox your site sends from, so a parishioner who hits *Reply* is talking to nothing. Under **Admin → Email → Advanced**, put a real mailbox in **Forward replies and inbound email to** — e.g. `office@yourparish.org` — and Mailgun forwards everything addressed to your sending domain there: replies to email the site sent, and any brand-new message someone writes to an address on that domain.

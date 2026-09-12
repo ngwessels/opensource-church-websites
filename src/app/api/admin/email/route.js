@@ -5,7 +5,7 @@ import { getAdminActorFromRequest } from "@/lib/cms/auth";
 import { getFirebaseAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { COLLECTIONS, SITE_CONFIG_ID } from "@/lib/firestore/paths";
 import { sendMailgunTestEmail } from "@/lib/mailgun/client";
-import { MAILGUN_WEBHOOK_IDS, summarizeWebhookRegistrationFailures } from "@/lib/mailgun/events";
+import { MAILGUN_WEBHOOK_IDS } from "@/lib/mailgun/events";
 import { describeMailgunForwardingAction } from "@/lib/mailgun/forwarding";
 import {
   deleteMailgunForwardingRoute,
@@ -13,7 +13,9 @@ import {
 } from "@/lib/mailgun/forwarding.server";
 import {
   buildMailgunWebhookUrl,
+  confirmWebhooksManually,
   describeMailgunSettings,
+  mergeWebhookRegistrationResult,
   normalizeMailgunSettings,
   resolveMailgunConfig,
   validateMailgunSettings,
@@ -40,7 +42,7 @@ export const maxDuration = 60;
  * GET    — current status (secrets masked)
  * PUT    — save alias + API key, verify with Mailgun, register webhooks and the
  *          inbound forwarding route
- * POST   — { action: "send_test" | "register_webhooks" }
+ * POST   — { action: "send_test" | "register_webhooks" | "confirm_webhooks" }
  * DELETE — disconnect and remove the webhooks and route we registered
  */
 export async function GET(request) {
@@ -110,13 +112,7 @@ export async function PUT(request) {
     const saved = await saveMailgunSettings(
       {
         ...candidate,
-        webhook: {
-          ...candidate.webhook,
-          url: webhookUrl,
-          events: registration.registered,
-          registeredAt: registration.registered.length > 0 ? new Date().toISOString() : "",
-          lastError: summarizeWebhookRegistrationFailures(registration.failed),
-        },
+        webhook: mergeWebhookRegistrationResult(current.webhook, registration, webhookUrl),
         inboundRoute: forwarding.route,
       },
       { actorEmail: actor.email },
@@ -199,12 +195,8 @@ export async function POST(request) {
         const saved = await saveMailgunSettings(
           {
             webhook: {
-              ...settings.webhook,
               secret,
-              url: webhookUrl,
-              events: registration.registered,
-              registeredAt: registration.registered.length > 0 ? new Date().toISOString() : "",
-              lastError: summarizeWebhookRegistrationFailures(registration.failed),
+              ...mergeWebhookRegistrationResult(settings.webhook, registration, webhookUrl),
             },
             inboundRoute: forwarding.route,
           },
@@ -218,6 +210,39 @@ export async function POST(request) {
             summary: describeMailgunForwardingAction(forwarding.plan),
             error: forwarding.error,
           },
+        });
+      }
+
+      case "confirm_webhooks": {
+        const secret = settings.webhook.secret || generateWebhookSecret();
+        const webhookUrl = buildMailgunWebhookUrl(await siteBaseUrl(), secret);
+        const saved = await saveMailgunSettings(
+          {
+            webhook: {
+              secret,
+              ...confirmWebhooksManually(settings.webhook, webhookUrl),
+            },
+          },
+          { actorEmail: actor.email },
+        );
+        await recordAuditEvent({
+          action: "update",
+          actor,
+          source: "api",
+          resource: {
+            type: "email_integration",
+            id: "mailgun",
+            path: "integrations/mailgun",
+            apiRoute: "/api/admin/email",
+          },
+          summary: "Marked Mailgun delivery webhooks as registered manually",
+          before: auditSnapshot(settings),
+          after: auditSnapshot(saved),
+          context: { builderPath: "/builder/admin", section: "email" },
+        });
+        return NextResponse.json({
+          ...(await buildStatusResponse(saved)),
+          confirmed: true,
         });
       }
 
