@@ -27,6 +27,11 @@ export const ADMIN_TOOLBAR_HEIGHT = 65;
 export const ADMIN_PAGE_NAV_HEIGHT = 60;
 export const MODULE_TRAY_HEIGHT = 320;
 
+/** Width (px) of the builder destination rail. Mirrors `--builder-rail-width`. */
+export const BUILDER_RAIL_WIDTH = 76;
+/** Width (px) of the section sidebar shown inside destinations that have sections. */
+export const BUILDER_SECTION_NAV_WIDTH = 248;
+
 /** Minimum browser width (px) required to use the website builder. */
 export const BUILDER_MIN_VIEWPORT_WIDTH = 1024;
 
