@@ -118,6 +118,7 @@ export async function POST(request) {
         formTitle: config.title || "Form",
         pageTitle,
         rows: displayRows,
+        formId: config.formId,
       });
     }
 

@@ -1,26 +1,23 @@
 import "server-only";
 
+import { escapeHtml, sendMailgunEmail } from "./send.server.js";
+
 /**
- * @param {{ to: string[], formTitle: string, pageTitle?: string, rows: Array<{ label: string, value: string }> }}
- * @returns {Promise<{ sent: boolean, error?: string }>}
+ * @param {{
+ *   to: string[],
+ *   formTitle: string,
+ *   pageTitle?: string,
+ *   rows: Array<{ label: string, value: string }>,
+ *   formId?: string,
+ * }} input
+ * @returns {Promise<{ sent: boolean, messageId?: string, error?: string }>}
  */
-export async function sendFormNotification({ to, formTitle, pageTitle, rows }) {
-  const apiKey = process.env.MAILGUN_API_KEY;
-  const domain = process.env.MAILGUN_DOMAIN;
-  const from = process.env.MAILGUN_FROM;
+export async function sendFormNotification({ to, formTitle, pageTitle, rows, formId }) {
+  const subject = pageTitle
+    ? `New form submission: ${formTitle} (${pageTitle})`
+    : `New form submission: ${formTitle}`;
 
-  if (!apiKey || !domain || !from) {
-    console.warn("[mailgun] Not configured — skipping form notification email.");
-    return { sent: false, error: "Mailgun is not configured" };
-  }
-
-  if (!to.length) {
-    return { sent: false, error: "No notification recipients configured" };
-  }
-
-  const subject = pageTitle ? `New form submission: ${formTitle} (${pageTitle})` : `New form submission: ${formTitle}`;
-
-  const textBody = [
+  const text = [
     `A new submission was received for "${formTitle}".`,
     pageTitle ? `Page: ${pageTitle}` : "",
     "",
@@ -36,47 +33,16 @@ export async function sendFormNotification({ to, formTitle, pageTitle, rows }) {
     )
     .join("");
 
-  const htmlBody = `<p>A new submission was received for <strong>${escapeHtml(formTitle)}</strong>.</p>${pageTitle ? `<p>Page: ${escapeHtml(pageTitle)}</p>` : ""}<table>${htmlRows}</table>`;
+  const html = `<p>A new submission was received for <strong>${escapeHtml(formTitle)}</strong>.</p>${pageTitle ? `<p>Page: ${escapeHtml(pageTitle)}</p>` : ""}<table>${htmlRows}</table>`;
 
-  const body = new URLSearchParams({
-    from,
-    to: to.join(","),
+  return sendMailgunEmail({
+    to,
     subject,
-    text: textBody,
-    html: htmlBody,
+    text,
+    html,
+    kind: "form_notification",
+    ...(formId || pageTitle ? { context: { ...(formId ? { formId } : {}), ...(pageTitle ? { pageTitle } : {}) } } : {}),
   });
-
-  try {
-    const res = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: body.toString(),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[mailgun] send failed:", res.status, errText);
-      return { sent: false, error: `Mailgun error: ${res.status}` };
-    }
-
-    return { sent: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Mailgun request failed";
-    console.error("[mailgun]", message);
-    return { sent: false, error: message };
-  }
-}
-
-/** @param {string} str */
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /**
@@ -85,23 +51,10 @@ function escapeHtml(str) {
  *   groupName: string,
  *   intentions: Array<{ name: string, intention: string }>,
  *   siteName?: string,
- * }} opts
- * @returns {Promise<{ sent: boolean, error?: string }>}
+ * }} input
+ * @returns {Promise<{ sent: boolean, messageId?: string, error?: string }>}
  */
 export async function sendPrayerIntentionsDigestEmail({ to, groupName, intentions, siteName }) {
-  const apiKey = process.env.MAILGUN_API_KEY;
-  const domain = process.env.MAILGUN_DOMAIN;
-  const from = process.env.MAILGUN_FROM;
-
-  if (!apiKey || !domain || !from) {
-    console.warn("[mailgun] Not configured — skipping prayer intentions digest.");
-    return { sent: false, error: "Mailgun is not configured" };
-  }
-
-  if (!to.length) {
-    return { sent: false, error: "No recipients configured" };
-  }
-
   if (!intentions.length) {
     return { sent: false, error: "No intentions to send" };
   }
@@ -109,7 +62,7 @@ export async function sendPrayerIntentionsDigestEmail({ to, groupName, intention
   const parish = siteName || "Parish";
   const subject = `Weekly Prayer Intentions for ${groupName} — ${parish}`;
 
-  const textBody = [
+  const text = [
     `Dear ${groupName},`,
     "",
     `Please include the following prayer intentions in your prayers this week (${intentions.length}):`,
@@ -126,45 +79,37 @@ export async function sendPrayerIntentionsDigestEmail({ to, groupName, intention
     )
     .join("");
 
-  const htmlBody = `
+  const html = `
     <p>Dear ${escapeHtml(groupName)},</p>
     <p>Please include the following prayer intentions in your prayers this week (<strong>${intentions.length}</strong>):</p>
     <ol>${listHtml}</ol>
     <p>Thank you for praying with our parish community.</p>
   `;
 
-  const body = new URLSearchParams({
-    from,
-    to: to.join(","),
+  return sendMailgunEmail({
+    to,
     subject,
-    text: textBody,
-    html: htmlBody,
+    text,
+    html,
+    kind: "prayer_digest",
+    context: { groupName },
   });
-
-  try {
-    const res = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: body.toString(),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[mailgun] prayer digest failed:", res.status, errText);
-      return { sent: false, error: `Mailgun error: ${res.status}` };
-    }
-
-    return { sent: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Mailgun request failed";
-    console.error("[mailgun]", message);
-    return { sent: false, error: message };
-  }
 }
 
-export function isMailgunConfigured() {
-  return Boolean(process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN && process.env.MAILGUN_FROM);
+/**
+ * @param {{ to: string, siteName?: string }} input
+ * @returns {Promise<{ sent: boolean, messageId?: string, error?: string }>}
+ */
+export async function sendMailgunTestEmail({ to, siteName = "your church website" }) {
+  const subject = `Mailgun test from ${siteName}`;
+  const text = [
+    `This is a test email from ${siteName}.`,
+    "",
+    "If you received it, outbound email is working. Delivery and open events will",
+    "appear under Admin → Email once Mailgun calls the webhook back.",
+  ].join("\n");
+
+  const html = `<p>This is a test email from <strong>${escapeHtml(siteName)}</strong>.</p><p>If you received it, outbound email is working. Delivery and open events will appear under <strong>Admin → Email</strong> once Mailgun calls the webhook back.</p>`;
+
+  return sendMailgunEmail({ to: [to], subject, text, html, kind: "test" });
 }

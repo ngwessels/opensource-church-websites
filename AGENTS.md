@@ -125,7 +125,7 @@ Field types: `heading`, `paragraph`, `text`, `email`, `phone`, `textarea`, `sele
 2. `update_module` with fields and `notificationEmails` (Mailgun recipients)
 3. `publish_page` — public submissions go to `POST /api/forms/submit` with `formId`
 
-Requires `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` for email notifications.
+Email notifications require Mailgun, which is optional and configured in the app under **Admin → Email** (alias + API key, stored in `integrations/mailgun`). `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` still work as a fallback. Without Mailgun, submissions are saved but no email is sent. Delivery status (delivered, opened, clicked, failed) is recorded in `emailMessages` / `emailEvents` from `POST /api/mailgun/webhook/[token]`.
 
 **Prayer intentions module**
 

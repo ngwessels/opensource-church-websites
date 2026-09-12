@@ -8,6 +8,7 @@ import {
   Heart,
   History,
   LayoutDashboard,
+  Mail,
   Network,
   Palette,
   Settings,
@@ -31,6 +32,7 @@ export const BUILDER_DESTINATION_ICONS = {
 export const ADMIN_SECTION_ICONS = {
   overview: LayoutDashboard,
   settings: SlidersHorizontal,
+  email: Mail,
   mass: Church,
   users: Users,
   prayer: Heart,

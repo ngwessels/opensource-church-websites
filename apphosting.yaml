@@ -137,7 +137,9 @@ env:
   #   availability:
   #     - RUNTIME
 
-  # Mailgun (optional — form notification emails). Uncomment after creating secrets:
+  # Mailgun (optional — email notifications). Most sites should instead connect
+  # Mailgun in Builder → Admin → Email, which also records delivery status.
+  # These variables remain supported as a fallback. Uncomment after creating secrets:
   #   firebase apphosting:secrets:set mailgunApiKey --project <PROJECT_ID>
   #   firebase apphosting:secrets:set mailgunDomain --project <PROJECT_ID>
   #   firebase apphosting:secrets:set mailgunFrom --project <PROJECT_ID>

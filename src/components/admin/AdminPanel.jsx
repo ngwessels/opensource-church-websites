@@ -10,6 +10,7 @@ import { MassTimesForm } from "@/components/mass-times/MassTimesForm";
 import { DonationsManager } from "@/components/donations/DonationsManager";
 import { AuditLogPanel } from "@/components/admin/AuditLogPanel";
 import { AdminDocumentation } from "@/components/admin/AdminDocumentation";
+import { EmailIntegrationPanel } from "@/components/admin/EmailIntegrationPanel";
 import { PrayerIntentionsPanel } from "@/components/admin/PrayerIntentionsPanel";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { SiteDataExport } from "@/components/admin/SiteDataExport";
@@ -251,6 +252,8 @@ export function AdminPanel({ siteConfig, pageCount = 0, sectionId = "overview" }
             siteName={config.name || config.seo?.title || "Donations Report"}
           />
         )}
+
+        {sectionId === "email" && <EmailIntegrationPanel />}
 
         {sectionId === "prayer" && <PrayerIntentionsPanel />}
 

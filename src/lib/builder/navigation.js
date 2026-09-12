@@ -99,6 +99,13 @@ export const ADMIN_SECTIONS = [
     group: "site",
   },
   {
+    id: "email",
+    slug: "email",
+    label: "Email",
+    description: "Mailgun delivery settings and webhook status",
+    group: "site",
+  },
+  {
     id: "mass",
     slug: "mass-times",
     label: "Sacraments & Mass Times",
