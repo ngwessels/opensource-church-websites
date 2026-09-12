@@ -32,11 +32,20 @@ const ALLOWED_TAGS = new Set([
   "div",
 ]);
 
-/** Attributes kept per tag; everything else (including `on*`) is dropped. */
+/**
+ * Attributes kept per tag; everything else (including `on*`) is dropped.
+ * `style` is allowed on every permitted tag because inline CSS is the only
+ * styling mail clients reliably honour.
+ */
 const ALLOWED_ATTRIBUTES = {
   a: ["href", "title"],
   img: ["src", "alt", "title", "width", "height"],
 };
+
+const GLOBAL_ALLOWED_ATTRIBUTES = ["style"];
+
+/** CSS that can execute or pull in remote rules. */
+const UNSAFE_CSS_RE = /(expression\s*\(|javascript:|vbscript:|behavior\s*:|@import|<)/i;
 
 const VOID_TAGS = new Set(["br", "hr", "img"]);
 
@@ -83,8 +92,10 @@ function isSafeUrl(url) {
  * @returns {string}
  */
 function sanitizeAttributes(tag, attrString) {
-  const allowed = ALLOWED_ATTRIBUTES[/** @type {keyof typeof ALLOWED_ATTRIBUTES} */ (tag)];
-  if (!allowed) return "";
+  const allowed = [
+    ...(ALLOWED_ATTRIBUTES[/** @type {keyof typeof ALLOWED_ATTRIBUTES} */ (tag)] ?? []),
+    ...GLOBAL_ALLOWED_ATTRIBUTES,
+  ];
 
   /** @type {string[]} */
   const kept = [];
@@ -97,6 +108,7 @@ function sanitizeAttributes(tag, attrString) {
 
     const value = match[3] ?? match[4] ?? "";
     if ((name === "href" || name === "src") && !isSafeUrl(value)) continue;
+    if (name === "style" && UNSAFE_CSS_RE.test(value)) continue;
 
     kept.push(`${name}="${value.replace(/"/g, "&quot;")}"`);
   }
@@ -206,7 +218,8 @@ export function renderCampaignEmail({
   footerNote = "",
 }) {
   const safeBody = sanitizeEmailHtml(bodyHtml);
-  const parish = escapeHtmlText(siteName || "Our Parish");
+  const parishName = siteName || "Our Parish";
+  const parish = escapeHtmlText(parishName);
   const note = footerNote ? `<p style="margin:0 0 8px;">${escapeHtmlText(footerNote)}</p>` : "";
   const siteLink = siteUrl
     ? `<p style="margin:0 0 8px;"><a href="${escapeHtmlText(siteUrl)}" style="color:#4b5563;">${escapeHtmlText(
@@ -249,7 +262,7 @@ export function renderCampaignEmail({
 </html>`;
 
   const text = [
-    parish.toUpperCase(),
+    parishName.toUpperCase(),
     subject,
     "",
     htmlToPlainText(safeBody),

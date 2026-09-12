@@ -39,6 +39,17 @@ test("sanitizeEmailHtml drops javascript: URLs", () => {
   assert.equal(sanitizeEmailHtml('<a href="javascript:alert(1)">Bad</a>'), "<a>Bad</a>");
 });
 
+test("sanitizeEmailHtml keeps inline styles but not executable CSS", () => {
+  assert.equal(
+    sanitizeEmailHtml('<p style="margin:0 0 8px;">Styled</p>'),
+    '<p style="margin:0 0 8px;">Styled</p>',
+  );
+  assert.equal(
+    sanitizeEmailHtml('<p style="width:expression(alert(1))">Bad</p>'),
+    "<p>Bad</p>",
+  );
+});
+
 test("htmlToPlainText keeps link targets and list markers", () => {
   const text = htmlToPlainText(
     '<p>Hello</p><ul><li>First</li><li><a href="https://parish.org/give">Give</a></li></ul>',
@@ -106,4 +117,29 @@ test("buildBulletinBodyHtml includes the intro, a button, and the raw link", () 
   assert.match(body, /Read the October 12, 2025 bulletin/);
   assert.match(body, /https:\/\/files\.parish\.org\/bulletin\.pdf/);
   assert.match(body, /also attached/);
+});
+
+test("the bulletin button keeps its styling through the email shell", () => {
+  const { html } = renderCampaignEmail({
+    siteName: "St Mary & All Saints",
+    subject: "Bulletin",
+    bodyHtml: buildBulletinBodyHtml({
+      bulletinLabel: "October 12, 2025",
+      bulletinUrl: "https://files.parish.org/bulletin.pdf",
+    }),
+    unsubscribeUrl: "https://parish.org/u",
+  });
+
+  assert.match(html, /background:#18181b;color:#ffffff/);
+});
+
+test("renderCampaignEmail leaves the parish name unescaped in the text part", () => {
+  const { text } = renderCampaignEmail({
+    siteName: "St Mary & All Saints",
+    subject: "Hello",
+    bodyHtml: "<p>Hi</p>",
+    unsubscribeUrl: "https://parish.org/u",
+  });
+
+  assert.match(text, /ST MARY & ALL SAINTS/);
 });

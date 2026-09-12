@@ -12,6 +12,9 @@
     "src/app/api/admin/export/**": {
       "maxDuration": 300
     },
+    "src/app/api/admin/email-list/campaigns/route.js": {
+      "maxDuration": 300
+    },
     "src/app/api/cron/prayer-intentions-digest/route.js": {
       "maxDuration": 60
     },
