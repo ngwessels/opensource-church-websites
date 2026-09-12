@@ -36,7 +36,7 @@ Copy [`.env.example`](.env.example) to `.env.local` and fill in values.
 | `FIREBASE_ADMIN_*` (3 vars) | Yes | Service account JSON; required for server routes and MCP |
 | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_APP_URL` | Yes | Use `http://localhost:3000` locally |
 | `STRIPE_*` | No | For testing `/give` |
-| `MAILGUN_*` | No | Form email notifications |
+| `MAILGUN_*` | No | Email fallback. Preferred setup is Builder → Admin → Email (stored in Firestore `integrations/mailgun`) |
 | `NEXT_PUBLIC_RECAPTCHA_*`, `RECAPTCHA_SECRET_KEY` | No | Bot protection |
 | `MCP_OAUTH_COOKIE_SECRET` | No | Cursor MCP OAuth login |
 | `CRON_SECRET` | No | Vercel cron auth for `/api/cron/*` routes |
@@ -82,6 +82,9 @@ Each deployment is a single parish. Data lives in one Firebase project.
 | `donations/{id}` | Stripe donation records |
 | `subscriptions/{id}` | Active recurring gift state (synced from Stripe webhooks) |
 | `formSubmissions/{id}` | CMS form responses |
+| `integrations/mailgun` | Mailgun alias, API key, and webhook state — server-only, closed to all clients in `firestore.rules` |
+| `emailMessages/{id}` | One record per sent email, keyed by Mailgun message id, with its latest delivery status |
+| `emailEvents/{id}` | Individual Mailgun events (delivered, opened, clicked, failed, …) |
 
 ## Donor accounts (My Giving)
 
@@ -120,6 +123,18 @@ Copy the webhook signing secret into `STRIPE_WEBHOOK_SECRET` in `.env.local`. Te
 Configure your Stripe webhook endpoint to listen for `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, and subscription lifecycle events (`customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`).
 
 Prefer a restricted API key (`rk_test_...`) for `STRIPE_SECRET_KEY` in development.
+
+## Mailgun (optional email)
+
+Mailgun is configured in the app at **Builder → Admin → Email** (alias + API key), stored in `integrations/mailgun`, and read server-side only. `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `MAILGUN_FROM` remain supported as a fallback when nothing is saved in the Builder.
+
+- `src/lib/mailgun/settings.js` — alias parsing, settings normalization, and config resolution (settings win over env). Pure and unit-tested.
+- `src/lib/mailgun/send.server.js` — the single outbound transport; records each send in `emailMessages`.
+- `src/lib/mailgun/events.js` — webhook payload normalization and the status fold (`delivered` → `opened` → `clicked`, failures win). Pure and unit-tested.
+- `src/lib/mailgun/webhooks.server.js` — registers the delivery webhooks with Mailgun over its API.
+- `POST /api/mailgun/webhook/[token]` — inbound events. The token is a per-site secret generated on save; supplying a signing key additionally verifies Mailgun's payload signature.
+
+Local webhook testing needs a public URL, e.g. `cloudflared tunnel --url http://localhost:3000`, with `NEXT_PUBLIC_SITE_URL` set to the tunnel origin before saving settings so the registered webhook points at it.
 
 ## reCAPTCHA v3 (local)
 
@@ -197,6 +212,7 @@ Key technical notes:
 - **Firebase App Hosting:** Secrets via [`apphosting.yaml`](apphosting.yaml) and Cloud Secret Manager. `FIREBASE_ADMIN_*` optional (ADC). **Do not** duplicate those variables as plaintext in the Firebase Console — Console overrides win, and the preparer step logs resolved values in Cloud Build (`Final app hosting schema`). Keep server secrets (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `MCP_OAUTH_COOKIE_SECRET`, `RECAPTCHA_SECRET_KEY`, Mailgun, etc.) on `RUNTIME` only in `apphosting.yaml`.
 - Set `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_APP_URL` to the canonical production domain.
 - Stripe webhook: `https://yourdomain.org/api/stripe/webhook`
+- Mailgun webhook: `https://yourdomain.org/api/mailgun/webhook/<secret>` — registered automatically when Mailgun is connected in Builder → Admin → Email. After a domain change, re-register from that tab.
 
 ## Contributing
 

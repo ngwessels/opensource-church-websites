@@ -11,6 +11,7 @@ import { MassTimesForm } from "@/components/mass-times/MassTimesForm";
 import { DonationsManager } from "@/components/donations/DonationsManager";
 import { AuditLogPanel } from "@/components/admin/AuditLogPanel";
 import { AdminDocumentation } from "@/components/admin/AdminDocumentation";
+import { EmailIntegrationPanel } from "@/components/admin/EmailIntegrationPanel";
 import { PrayerIntentionsPanel } from "@/components/admin/PrayerIntentionsPanel";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { SiteDataExport } from "@/components/admin/SiteDataExport";
@@ -43,6 +44,7 @@ const ADMIN_PANEL_TABS = [
   { id: "overview", label: "Overview" },
   { id: "settings", label: "Settings" },
   { id: "donations", label: "Donations" },
+  { id: "email", label: "Email" },
   { id: "prayer", label: "Prayer Intentions" },
   { id: "users", label: "Admin Users" },
   { id: "documentation", label: "Documentation" },
@@ -281,6 +283,8 @@ export function AdminPanel({ siteConfig, pageCount = 0 }) {
             siteName={config.name || config.seo?.title || "Donations Report"}
           />
         )}
+
+        {tab === "email" && <EmailIntegrationPanel />}
 
         {tab === "prayer" && <PrayerIntentionsPanel />}
 

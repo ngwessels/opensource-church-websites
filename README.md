@@ -219,7 +219,7 @@ Before deploying, open **Environment Variables** and add the following. Use **Pr
 | Variable | Purpose |
 |----------|---------|
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Online giving |
-| `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM` | Form email notifications |
+| `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM` | Email notifications — optional, and usually configured in Builder → Admin → Email instead |
 | `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY` | Bot protection |
 | `MCP_OAUTH_COOKIE_SECRET` | Cursor AI integration |
 | `CRON_SECRET` | Scheduled tasks |
@@ -362,19 +362,29 @@ For local Stripe testing, see [DEVELOPERS.md](DEVELOPERS.md).
 
 ---
 
-## Optional — Form email notifications (Mailgun)
+## Optional — Email notifications (Mailgun)
 
-Contact forms on your site work without Mailgun, but **will not send email notifications** until Mailgun is configured.
+Your site works without Mailgun. Contact form submissions are always saved and visible in the Builder; they are simply **not emailed to anyone** until Mailgun is connected. Mailgun also sends prayer intention digests, admin invitations, and test emails.
 
-Add these environment variables on your host (see [`.env.example`](.env.example)):
+You bring your own Mailgun account, and you configure it inside your website — no redeploy needed.
 
-| Variable | Purpose |
-|----------|---------|
-| `MAILGUN_API_KEY` | Mailgun API key |
-| `MAILGUN_DOMAIN` | Your Mailgun sending domain |
-| `MAILGUN_FROM` | From address, e.g. `noreply@mg.yourdomain.com` |
+1. Create an account at [mailgun.com](https://www.mailgun.com) (the free tier is enough for most parishes) and add your sending domain. Mailgun shows the DNS records to add at your registrar.
+2. Copy your **private API key** from **Mailgun → API keys**.
+3. In your site, open **Builder → Admin → Email** and enter:
+   - **Alias** — the address email is sent from, e.g. `Parish Office <parish@mg.yourparish.org>`. The sending domain is taken from this address.
+   - **Mailgun API key** — the key you copied.
+4. Click **Save and connect**. The site checks the key against Mailgun, then registers delivery webhooks for you.
+5. Use **Send test** to confirm everything works.
 
-On App Hosting, uncomment the Mailgun block in [`apphosting.yaml`](apphosting.yaml) and create the corresponding secrets.
+### Delivery tracking
+
+Once connected, every email the site sends is listed under **Admin → Email** with its status: queued, delivered, opened, clicked, failed, marked as spam, or unsubscribed. Mailgun reports these back to `/api/mailgun/webhook/<secret>`, which the site registers automatically. The secret in that URL authenticates the callbacks; for an extra check you can paste the **HTTP webhook signing key** from **Mailgun → Webhooks** under *Advanced*, and every payload signature will be verified too.
+
+If your site later moves to a different domain, open **Admin → Email** and click **Re-register webhooks**.
+
+### Environment variables instead (optional)
+
+`MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM` are still honoured for existing deployments, and are used when nothing is configured in the Builder. Settings saved in the Builder take precedence and are the only way to get delivery tracking. On App Hosting the env-var route uses the Mailgun block in [`apphosting.yaml`](apphosting.yaml).
 
 ---
 

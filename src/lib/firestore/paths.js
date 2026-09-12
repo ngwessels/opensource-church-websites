@@ -11,6 +11,9 @@ export const COLLECTIONS = {
   formSubmissions: "formSubmissions",
   prayerIntentions: "prayerIntentions",
   bulletins: "bulletins",
+  integrations: "integrations",
+  emailMessages: "emailMessages",
+  emailEvents: "emailEvents",
   mcpTokenLookup: "mcpTokenLookup",
   mcpOAuthClients: "mcpOAuthClients",
   mcpOAuthCodes: "mcpOAuthCodes",
@@ -29,3 +32,6 @@ export const MAX_MCP_CONNECTIONS = 10;
 
 export const SITE_CONFIG_ID = "config";
 export const ADMIN_DOCUMENTATION_ID = "adminDocumentation";
+
+/** Server-only integration secrets — `integrations/*` is closed to all clients. */
+export const MAILGUN_INTEGRATION_ID = "mailgun";

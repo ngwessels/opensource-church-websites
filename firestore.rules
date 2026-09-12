@@ -78,6 +78,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Integration secrets (Mailgun API key, webhook signing key). Server-only:
+    // read and written exclusively through the Admin SDK.
+    match /integrations/{integrationId} {
+      allow read, write: if false;
+    }
+
+    match /emailMessages/{messageId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /emailEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /donations/{donationId} {
       allow read: if canManageDonations() || isDonationOwner();
       allow write: if false;
