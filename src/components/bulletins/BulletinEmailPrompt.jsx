@@ -11,16 +11,21 @@ import { getBulletinLabel } from "@/lib/bulletins/schema";
 
 /**
  * Offered right after a bulletin upload: email it to the parish list with an
- * optional note. Rendered only when Mailgun is connected and somebody is
- * subscribed, so the sidebar stays quiet for sites that do not use email.
+ * optional note. Rendered in the upload sidebar so admins see it immediately.
  *
  * @param {{
  *   bulletin: { id: string, date?: string, title?: string },
+ *   mailgunConfigured: boolean,
  *   subscriberCount: number,
  *   onDismiss: () => void,
  * }} props
  */
-export function BulletinEmailPrompt({ bulletin, subscriberCount, onDismiss }) {
+export function BulletinEmailPrompt({
+  bulletin,
+  mailgunConfigured,
+  subscriberCount,
+  onDismiss,
+}) {
   const { user } = useAuth();
   const [introHtml, setIntroHtml] = useState("");
   const [attachPdf, setAttachPdf] = useState(true);
