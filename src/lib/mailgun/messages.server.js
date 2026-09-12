@@ -5,9 +5,14 @@ import { COLLECTIONS } from "@/lib/firestore/paths";
 
 import {
   applyEventToMessageStatus,
+  applyEventToRecipientStatuses,
+  buildInitialRecipientStatuses,
+  expandEmailMessagesForAdmin,
   messageDocId,
   normalizeMessageId,
   normalizeMessageKind,
+  normalizeRecipientEmail,
+  summarizeRecipientStatuses,
 } from "./events.js";
 
 /**
@@ -35,6 +40,10 @@ export async function recordSentMessage({ messageId, to, subject, kind, from, do
   const id = messageDocId(messageId);
   if (!db || !id) return;
 
+  const recipients = Array.isArray(to) ? to.map(normalizeRecipientEmail).filter(Boolean) : [];
+  const recipientStatuses =
+    recipients.length > 1 ? buildInitialRecipientStatuses(recipients) : undefined;
+
   try {
     await db
       .collection(COLLECTIONS.emailMessages)
@@ -42,7 +51,7 @@ export async function recordSentMessage({ messageId, to, subject, kind, from, do
       .set(
         {
           messageId: normalizeMessageId(messageId),
-          to,
+          to: recipients.length > 0 ? recipients : to,
           subject,
           kind: normalizeMessageKind(kind),
           from,
@@ -50,6 +59,7 @@ export async function recordSentMessage({ messageId, to, subject, kind, from, do
           status: "queued",
           statusRank: 0,
           sentAt: new Date().toISOString(),
+          ...(recipientStatuses ? { recipientStatuses } : {}),
           ...(context ? { context } : {}),
         },
         { merge: true },
@@ -99,7 +109,19 @@ export async function recordMailgunEvent(event) {
     });
 
     const message = messageSnap.exists ? messageSnap.data() : null;
-    const statusPatch = applyEventToMessageStatus(message, event);
+    const recipients = Array.isArray(message?.to) ? message.to.map(normalizeRecipientEmail).filter(Boolean) : [];
+    const trackPerRecipient = Boolean(event.recipient) && recipients.length > 1;
+    const recipientStatuses = trackPerRecipient
+      ? applyEventToRecipientStatuses(
+          message?.recipientStatuses && typeof message.recipientStatuses === "object"
+            ? message.recipientStatuses
+            : buildInitialRecipientStatuses(recipients),
+          event,
+        )
+      : undefined;
+    const statusPatch = trackPerRecipient
+      ? summarizeRecipientStatuses(recipientStatuses)
+      : applyEventToMessageStatus(message, event);
 
     tx.set(
       messageRef,
@@ -116,6 +138,7 @@ export async function recordMailgunEvent(event) {
               sentAt: event.timestamp,
             }),
         ...statusPatch,
+        ...(recipientStatuses ? { recipientStatuses } : {}),
       },
       { merge: true },
     );
@@ -147,9 +170,106 @@ export async function listRecentEmailMessages({ limit = 50, kind } = {}) {
 
   const snap = await query.get();
   const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return kind
+  const sorted = kind
     ? rows.sort((a, b) => String(b.sentAt || "").localeCompare(String(a.sentAt || "")))
     : rows;
+  const withStatuses = await backfillRecipientStatuses(sorted);
+  return expandEmailMessagesForAdmin(withStatuses);
+}
+
+/**
+ * Rebuild per-recipient status for older bulk sends that predate recipientStatuses.
+ *
+ * @param {Array<Record<string, any>>} messages
+ * @returns {Promise<Array<Record<string, any>>>}
+ */
+async function backfillRecipientStatuses(messages) {
+  const db = getFirebaseAdminFirestore();
+  if (!db) return messages;
+
+  const needsBackfill = messages.filter(
+    (message) =>
+      Array.isArray(message.to) &&
+      message.to.length > 1 &&
+      (!message.recipientStatuses || Object.keys(message.recipientStatuses).length === 0),
+  );
+  if (needsBackfill.length === 0) return messages;
+
+  const eventsByMessageId = await loadEventsGroupedByMessageId(
+    needsBackfill.map((message) => String(message.messageId || "")).filter(Boolean),
+  );
+
+  return messages.map((message) => {
+    if (
+      !Array.isArray(message.to) ||
+      message.to.length <= 1 ||
+      (message.recipientStatuses && Object.keys(message.recipientStatuses).length > 0)
+    ) {
+      return message;
+    }
+
+    const events = eventsByMessageId.get(normalizeMessageId(String(message.messageId || ""))) || [];
+    if (events.length === 0) return message;
+
+    let recipientStatuses = buildInitialRecipientStatuses(message.to);
+    for (const stored of events) {
+      recipientStatuses = applyEventToRecipientStatuses(recipientStatuses, storedEventToEmailEvent(stored));
+    }
+
+    return { ...message, recipientStatuses };
+  });
+}
+
+/**
+ * @param {string[]} messageIds
+ * @returns {Promise<Map<string, Array<Record<string, unknown>>>>}
+ */
+async function loadEventsGroupedByMessageId(messageIds) {
+  const db = getFirebaseAdminFirestore();
+  /** @type {Map<string, Array<Record<string, unknown>>>} */
+  const grouped = new Map();
+  if (!db || messageIds.length === 0) return grouped;
+
+  const uniqueIds = [...new Set(messageIds.map((id) => normalizeMessageId(id)).filter(Boolean))];
+  for (let index = 0; index < uniqueIds.length; index += 30) {
+    const chunk = uniqueIds.slice(index, index + 30);
+    const snap = await db.collection(COLLECTIONS.emailEvents).where("messageId", "in", chunk).get();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      const key = normalizeMessageId(String(data.messageId || ""));
+      if (!key) continue;
+      const list = grouped.get(key) || [];
+      list.push(data);
+      grouped.set(key, list);
+    }
+  }
+
+  for (const [key, events] of grouped) {
+    events.sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")));
+    grouped.set(key, events);
+  }
+
+  return grouped;
+}
+
+/**
+ * @param {Record<string, unknown>} stored
+ * @returns {import('./events.js').EmailEvent}
+ */
+function storedEventToEmailEvent(stored) {
+  return {
+    id: String(stored.eventId || stored.id || ""),
+    type: /** @type {import('./events.js').EmailEvent['type']} */ (stored.type),
+    messageId: normalizeMessageId(String(stored.messageId || "")),
+    recipient: normalizeRecipientEmail(String(stored.recipient || "")),
+    timestamp: String(stored.timestamp || ""),
+    reason: String(stored.reason || ""),
+    severity: String(stored.severity || ""),
+    description: String(stored.description || ""),
+    code: typeof stored.code === "number" ? stored.code : null,
+    url: String(stored.url || ""),
+    tags: Array.isArray(stored.tags) ? stored.tags.filter((tag) => typeof tag === "string") : [],
+  };
 }
 
 /**

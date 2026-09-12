@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 
 import {
   applyEventToMessageStatus,
+  applyEventToRecipientStatuses,
+  buildInitialRecipientStatuses,
   emailEventRank,
+  expandEmailMessagesForAdmin,
   isWebhookPermissionError,
   messageDocId,
   normalizeMailgunWebhookEvent,
@@ -162,6 +165,46 @@ describe("mailgun/events", () => {
     assert.equal(normalizeMessageKind("form_notification"), "form_notification");
     assert.equal(normalizeMessageKind("unknown-kind"), "other");
     assert.equal(normalizeMessageKind(undefined), "other");
+  });
+});
+
+describe("mailgun recipient tracking", () => {
+  it("tracks delivery status separately per recipient", () => {
+    let statuses = buildInitialRecipientStatuses(["a@example.org", "b@example.org"]);
+    statuses = applyEventToRecipientStatuses(
+      statuses,
+      normalizeMailgunWebhookEvent(webhookBody("opened", { recipient: "a@example.org" })).event,
+    );
+    statuses = applyEventToRecipientStatuses(
+      statuses,
+      normalizeMailgunWebhookEvent(webhookBody("delivered", { recipient: "b@example.org" })).event,
+    );
+
+    assert.equal(statuses["a@example.org"].status, "opened");
+    assert.equal(statuses["b@example.org"].status, "delivered");
+  });
+
+  it("expands bulk sends into one admin row per recipient", () => {
+    const rows = expandEmailMessagesForAdmin([
+      {
+        id: "msg-1",
+        messageId: "msg-1",
+        to: ["a@example.org", "b@example.org"],
+        subject: "Hello",
+        kind: "bulletin_campaign",
+        status: "opened",
+        recipientStatuses: {
+          "a@example.org": { status: "opened", statusRank: 30, lastEventAt: "2026-09-12T00:00:00.000Z" },
+          "b@example.org": { status: "delivered", statusRank: 20, lastEventAt: "2026-09-12T00:00:00.000Z" },
+        },
+      },
+    ]);
+
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows[0].to, ["a@example.org"]);
+    assert.equal(rows[0].status, "opened");
+    assert.deepEqual(rows[1].to, ["b@example.org"]);
+    assert.equal(rows[1].status, "delivered");
   });
 });
 

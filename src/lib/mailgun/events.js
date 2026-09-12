@@ -347,6 +347,117 @@ export function applyEventToMessageStatus(message, event) {
 }
 
 /**
+ * @param {string} email
+ * @returns {string}
+ */
+export function normalizeRecipientEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+/**
+ * Seed per-recipient tracking when one Mailgun message goes to many addresses.
+ *
+ * @param {string[]} recipients
+ * @returns {Record<string, EmailMessageStatus>}
+ */
+export function buildInitialRecipientStatuses(recipients) {
+  /** @type {Record<string, EmailMessageStatus>} */
+  const statuses = {};
+  for (const raw of recipients) {
+    const email = normalizeRecipientEmail(raw);
+    if (!email) continue;
+    statuses[email] = { status: "queued", statusRank: 0, lastEventAt: "" };
+  }
+  return statuses;
+}
+
+/**
+ * @param {Record<string, EmailMessageStatus>} recipientStatuses
+ * @param {EmailEvent} event
+ * @returns {Record<string, EmailMessageStatus>}
+ */
+export function applyEventToRecipientStatuses(recipientStatuses, event) {
+  const email = normalizeRecipientEmail(event.recipient);
+  if (!email) return recipientStatuses;
+  const current = recipientStatuses[email] || {};
+  return {
+    ...recipientStatuses,
+    [email]: applyEventToMessageStatus(current, event),
+  };
+}
+
+/**
+ * Pick the highest-ranked recipient status as the headline for a batch send.
+ *
+ * @param {Record<string, EmailMessageStatus>} recipientStatuses
+ * @returns {{ status: string, statusRank: number, lastEventAt: string }}
+ */
+export function summarizeRecipientStatuses(recipientStatuses) {
+  const entries = Object.values(recipientStatuses);
+  if (entries.length === 0) {
+    return { status: "queued", statusRank: 0, lastEventAt: "" };
+  }
+
+  /** @type {EmailMessageStatus} */
+  let best = entries[0];
+  for (const entry of entries) {
+    if (Number(entry.statusRank) > Number(best.statusRank)) {
+      best = entry;
+    }
+  }
+
+  return {
+    status: best.status,
+    statusRank: best.statusRank,
+    lastEventAt: best.lastEventAt || "",
+  };
+}
+
+/**
+ * One admin table row per recipient so bulk sends do not share a single status.
+ *
+ * @param {Array<Record<string, any>>} messages
+ * @returns {Array<Record<string, any>>}
+ */
+export function expandEmailMessagesForAdmin(messages) {
+  /** @type {Array<Record<string, any>>} */
+  const rows = [];
+
+  for (const message of messages) {
+    const recipients = Array.isArray(message.to)
+      ? message.to.map(normalizeRecipientEmail).filter(Boolean)
+      : [];
+    const statuses =
+      message.recipientStatuses && typeof message.recipientStatuses === "object"
+        ? /** @type {Record<string, EmailMessageStatus>} */ (message.recipientStatuses)
+        : {};
+
+    if (recipients.length <= 1) {
+      rows.push(message);
+      continue;
+    }
+
+    for (const email of recipients) {
+      const recipientStatus = statuses[email] || {};
+      rows.push({
+        ...message,
+        id: `${message.id}__${email.replace(/[@.+]/g, "_")}`,
+        to: [email],
+        status: recipientStatus.status || message.status || "queued",
+        statusRank: recipientStatus.statusRank ?? message.statusRank ?? 0,
+        failureReason: recipientStatus.failureReason || "",
+        openedAt: recipientStatus.openedAt,
+        deliveredAt: recipientStatus.deliveredAt,
+        clickedAt: recipientStatus.clickedAt,
+        lastEventAt: recipientStatus.lastEventAt || message.lastEventAt,
+      });
+    }
+  }
+
+  return rows;
+}
+
+/**
  * @param {unknown} value
  * @returns {number}
  */
