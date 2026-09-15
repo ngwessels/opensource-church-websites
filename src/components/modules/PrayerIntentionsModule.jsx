@@ -93,7 +93,9 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
         </h2>
       )}
       {config.description && (
-        <p className="mb-4 text-sm leading-relaxed text-zinc-600">{config.description}</p>
+        <p className="mb-4 whitespace-pre-line text-sm leading-relaxed text-zinc-600">
+          {config.description}
+        </p>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -108,7 +110,7 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
 
         <div className="space-y-1.5">
           <Label htmlFor="prayer-name" className="text-zinc-800">
-            Name
+            Name <span className="font-normal text-zinc-500">(optional)</span>
           </Label>
           <Input
             id="prayer-name"
@@ -122,7 +124,7 @@ export function PrayerIntentionsModule({ module, editing = false, preview = fals
 
         <div className="space-y-1.5">
           <Label htmlFor="prayer-email" className="text-zinc-800">
-            Email
+            Email <span className="font-normal text-zinc-500">(optional)</span>
           </Label>
           <Input
             id="prayer-email"
